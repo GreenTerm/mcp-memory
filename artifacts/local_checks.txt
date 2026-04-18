@@ -1,0 +1,204 @@
+﻿Running checks with python
+== Python ==
+3.10.6 (tags/v3.10.6:9c7b4bd, Aug  1 2022, 21:53:49) [MSC v.1932 64 bit (AMD64)]
+executable=C:\Users\GreenZadora\AppData\Local\Programs\Python\Python310\python.exe
+
+== SQLite ==
+sqlite_version=3.37.2
+fts5=enabled
+
+== Imports ==
+imports=ok
+
+== Smoke Check ==
+cli_init_app={
+  "status": "initialized",
+  "app_home": "F:\\dev\\mcp-memory\\artifacts\\smoke_run_1776534428640_30912\\smoke_app",
+  "registry_path": "F:\\dev\\mcp-memory\\artifacts\\smoke_run_1776534428640_30912\\smoke_app\\app_config.json",
+  "project_count": 0
+}
+cli_create_project={
+  "project_id": "smoke-project",
+  "display_name": "Smoke Project",
+  "project_root": "F:\\dev\\mcp-memory\\artifacts\\smoke_run_1776534428640_30912\\smoke_project",
+  "database_path": "F:\\dev\\mcp-memory\\artifacts\\smoke_run_1776534428640_30912\\smoke_project\\project.db",
+  "attachments_dir": "F:\\dev\\mcp-memory\\artifacts\\smoke_run_1776534428640_30912\\smoke_project\\attachments",
+  "exports_dir": "F:\\dev\\mcp-memory\\artifacts\\smoke_run_1776534428640_30912\\smoke_project\\exports",
+  "backups_dir": "F:\\dev\\mcp-memory\\artifacts\\smoke_run_1776534428640_30912\\smoke_project\\backups",
+  "logs_dir": "F:\\dev\\mcp-memory\\artifacts\\smoke_run_1776534428640_30912\\smoke_project\\logs",
+  "http_host": "127.0.0.1",
+  "http_port": 55566,
+  "mcp_host": "127.0.0.1",
+  "mcp_port": 55567,
+  "write_mode": "confirm"
+}
+cli_list_projects=[
+  {
+    "project_id": "smoke-project",
+    "display_name": "Smoke Project",
+    "project_root": "F:\\dev\\mcp-memory\\artifacts\\smoke_run_1776534428640_30912\\smoke_project",
+    "database_path": "F:\\dev\\mcp-memory\\artifacts\\smoke_run_1776534428640_30912\\smoke_project\\project.db",
+    "attachments_dir": "F:\\dev\\mcp-memory\\artifacts\\smoke_run_1776534428640_30912\\smoke_project\\attachments",
+    "exports_dir": "F:\\dev\\mcp-memory\\artifacts\\smoke_run_1776534428640_30912\\smoke_project\\exports",
+    "backups_dir": "F:\\dev\\mcp-memory\\artifacts\\smoke_run_1776534428640_30912\\smoke_project\\backups",
+    "logs_dir": "F:\\dev\\mcp-memory\\artifacts\\smoke_run_1776534428640_30912\\smoke_project\\logs",
+    "http_host": "127.0.0.1",
+    "http_port": 55566,
+    "mcp_host": "127.0.0.1",
+    "mcp_port": 55567,
+    "write_mode": "confirm"
+  }
+]
+project_db=F:\dev\mcp-memory\artifacts\smoke_run_1776534428640_30912\smoke_project\project.db
+project_logs_dir=F:\dev\mcp-memory\artifacts\smoke_run_1776534428640_30912\smoke_project\logs
+{
+  "upserted_function_id": "fn_main",
+  "loaded_current_name": "main_handler",
+  "list_count": 1,
+  "structure_id": "struct_parser_ctx",
+  "structure_count": 1,
+  "global_hypothesis_id": "gh_parser_bootstrap",
+  "global_hypothesis_count": 1,
+  "evidence_id": "evidence_fn_main_block0",
+  "evidence_count": 1,
+  "relation_id": "24c612d8-d4ce-4f41-89a3-36c55c586fa0",
+  "relation_count": 1,
+  "related_count": 1,
+  "search_service_count": 1,
+  "version_rows": 1,
+  "audit_rows": 2,
+  "fts_match_rows": 2
+}
+
+== HTTP API ==
+{
+  "health_status": "ok",
+  "config_project_id": "smoke-project",
+  "functions_count": 1,
+  "function_detail_name": "main_handler",
+  "structures_count": 1,
+  "global_hypotheses_count": 1,
+  "evidence_count": 1,
+  "relations_count": 1,
+  "related_count": 1,
+  "pending_count": 1,
+  "created_helper_id": "fn_helper",
+  "search_count": 1
+}
+
+== Web UI ==
+{
+  "home_has_project": true,
+  "home_ru_language": true,
+  "home_running_badge": false,
+  "create_project_form_loaded": true,
+  "created_project_flash_seen": true,
+  "created_project_visible": true,
+  "created_project_start_visible": true,
+  "created_project_root_exists": true,
+  "dashboard_has_title": true,
+  "dashboard_ru_title": true,
+  "function_form_loaded": true,
+  "structure_form_loaded": true,
+  "search_has_result": true,
+  "function_has_summary": true,
+  "history_page_loaded": true,
+  "hypothesis_form_loaded": true,
+  "pending_page_loaded": true,
+  "audit_page_loaded": true,
+  "structure_queue_flash_seen": true,
+  "queue_flash_seen": true,
+  "confirm_flash_seen": true
+}
+
+== MCP API ==
+{
+  "health_status": "ok",
+  "initialize_server_name": "mcp-memory",
+  "tool_count": 18,
+  "search_count": 1,
+  "related_count": 1,
+  "pending_count": 3,
+  "confirmed_structure_id": "struct_pending"
+}
+
+== GUI Launch ==
+{
+  "home_start_button_visible": true,
+  "start_flash_seen": true,
+  "restart_flash_seen": true,
+  "stop_flash_seen": true
+}
+
+== Transfer And Backup ==
+{
+  "export": {
+    "output_path": "F:\\dev\\mcp-memory\\artifacts\\smoke_export.json",
+    "counts": {
+      "functions": 3,
+      "structures": 2,
+      "global_hypotheses": 1,
+      "evidence": 1,
+      "relations": 1
+    }
+  },
+  "import": {
+    "input_path": "F:\\dev\\mcp-memory\\artifacts\\smoke_export.json",
+    "replace_existing": true,
+    "counts": {
+      "functions": 3,
+      "structures": 2,
+      "global_hypotheses": 1,
+      "evidence": 1,
+      "relations": 1
+    }
+  },
+  "backup": {
+    "output_path": "F:\\dev\\mcp-memory\\artifacts\\smoke_backup.zip",
+    "file_count": 6
+  },
+  "restore": {
+    "project_id": "restored-smoke-project",
+    "display_name": "Restored Smoke Project",
+    "project_root": "F:\\dev\\mcp-memory\\artifacts\\smoke_restored_project",
+    "database_path": "F:\\dev\\mcp-memory\\artifacts\\smoke_restored_project\\project.db",
+    "attachments_dir": "F:\\dev\\mcp-memory\\artifacts\\smoke_restored_project\\attachments",
+    "exports_dir": "F:\\dev\\mcp-memory\\artifacts\\smoke_restored_project\\exports",
+    "backups_dir": "F:\\dev\\mcp-memory\\artifacts\\smoke_restored_project\\backups",
+    "logs_dir": "F:\\dev\\mcp-memory\\artifacts\\smoke_restored_project\\logs",
+    "http_host": "127.0.0.1",
+    "http_port": 55570,
+    "mcp_host": "127.0.0.1",
+    "mcp_port": 55571,
+    "write_mode": "confirm"
+  }
+}
+
+== Runtime Logs ==
+{
+  "cli_log_exists": true,
+  "http_log_exists": true,
+  "mcp_log_exists": true,
+  "ui_home_log_exists": true,
+  "cli_has_command_finish": true,
+  "http_has_request_complete": true,
+  "http_has_function_upserted": true,
+  "mcp_has_tool_call": true,
+  "ui_home_has_project_probe": true,
+  "ui_home_has_project_start": true,
+  "ui_home_has_project_stop": true
+}
+
+== Done ==
+
+
+== STDERR ==
+
+
+smoke_process_exit_code=0
+
+== COVERAGE ==
+coverage_report=F:\dev\mcp-memory\artifacts\coverage.txt
+coverage_process_exit_code=0
+
+process_exit_code=0

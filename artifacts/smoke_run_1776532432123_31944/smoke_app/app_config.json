@@ -1,0 +1,36 @@
+{
+  "app_home": "F:\\dev\\mcp-memory\\artifacts\\smoke_run_1776532432123_31944\\smoke_app",
+  "registry_path": "F:\\dev\\mcp-memory\\artifacts\\smoke_run_1776532432123_31944\\smoke_app\\app_config.json",
+  "projects": [
+    {
+      "project_id": "restored-smoke-project",
+      "display_name": "Restored Smoke Project",
+      "project_root": "F:\\dev\\mcp-memory\\artifacts\\smoke_restored_project",
+      "database_path": "F:\\dev\\mcp-memory\\artifacts\\smoke_restored_project\\project.db",
+      "attachments_dir": "F:\\dev\\mcp-memory\\artifacts\\smoke_restored_project\\attachments",
+      "exports_dir": "F:\\dev\\mcp-memory\\artifacts\\smoke_restored_project\\exports",
+      "backups_dir": "F:\\dev\\mcp-memory\\artifacts\\smoke_restored_project\\backups",
+      "logs_dir": "F:\\dev\\mcp-memory\\artifacts\\smoke_restored_project\\logs",
+      "http_host": "127.0.0.1",
+      "http_port": 56524,
+      "mcp_host": "127.0.0.1",
+      "mcp_port": 56525,
+      "write_mode": "confirm"
+    },
+    {
+      "project_id": "smoke-project",
+      "display_name": "Smoke Project",
+      "project_root": "F:\\dev\\mcp-memory\\artifacts\\smoke_run_1776532432123_31944\\smoke_project",
+      "database_path": "F:\\dev\\mcp-memory\\artifacts\\smoke_run_1776532432123_31944\\smoke_project\\project.db",
+      "attachments_dir": "F:\\dev\\mcp-memory\\artifacts\\smoke_run_1776532432123_31944\\smoke_project\\attachments",
+      "exports_dir": "F:\\dev\\mcp-memory\\artifacts\\smoke_run_1776532432123_31944\\smoke_project\\exports",
+      "backups_dir": "F:\\dev\\mcp-memory\\artifacts\\smoke_run_1776532432123_31944\\smoke_project\\backups",
+      "logs_dir": "F:\\dev\\mcp-memory\\artifacts\\smoke_run_1776532432123_31944\\smoke_project\\logs",
+      "http_host": "127.0.0.1",
+      "http_port": 56520,
+      "mcp_host": "127.0.0.1",
+      "mcp_port": 56521,
+      "write_mode": "confirm"
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+2026-04-18 20:47:10 INFO cli command_start command=run-ui-home
+2026-04-18 20:47:10 INFO cli server_dispatch command=run-ui-home host=127.0.0.1 port=55568
+2026-04-18 20:47:10 INFO ui_home server_start app_home=F:\dev\mcp-memory\artifacts\smoke_run_1776534428640_30912\smoke_app host=127.0.0.1 port=55568
+2026-04-18 20:47:11 INFO ui_home project_probe http_running=True mcp_running=False project_id=smoke-project
+2026-04-18 20:47:11 INFO ui_home server_message message="GET / HTTP/1.1" 200 -
+2026-04-18 20:47:11 INFO ui_home request_complete duration_ms=359 method=GET page=/ path=/ status=200
+2026-04-18 20:47:11 INFO ui_home project_probe http_running=True mcp_running=False project_id=smoke-project
+2026-04-18 20:47:11 INFO ui_home server_message message="GET / HTTP/1.1" 200 -
+2026-04-18 20:47:11 INFO ui_home request_complete duration_ms=373 method=GET page=/ path=/ status=200
+2026-04-18 20:47:11 INFO ui_home project_probe http_running=True mcp_running=False project_id=smoke-project
+2026-04-18 20:47:11 INFO ui_home server_message message="GET /?lang=ru HTTP/1.1" 200 -
+2026-04-18 20:47:11 INFO ui_home request_complete duration_ms=373 method=GET page=/ path=/?lang=ru status=200
+2026-04-18 20:47:11 INFO ui_home project_create_form_opened
+2026-04-18 20:47:11 INFO ui_home server_message message="GET /projects/new?lang=en HTTP/1.1" 200 -
+2026-04-18 20:47:11 INFO ui_home request_complete duration_ms=0 method=GET page=/projects/new path=/projects/new?lang=en status=200
+2026-04-18 20:47:11 INFO ui_home project_create_submitted http_port=53111 mcp_port=53112 project_id=gui-created-project project_root=F:\dev\mcp-memory\artifacts\smoke_run_1776534428640_30912\gui_created_project write_mode=auto
+2026-04-18 20:47:12 INFO services project_created http_port=53111 mcp_port=53112 project_id=gui-created-project project_root=F:\dev\mcp-memory\artifacts\smoke_run_1776534428640_30912\gui_created_project write_mode=auto
+2026-04-18 20:47:12 INFO ui_home project_created_from_home http_port=53111 mcp_port=53112 project_id=gui-created-project project_root=F:\dev\mcp-memory\artifacts\smoke_run_1776534428640_30912\gui_created_project write_mode=auto
+2026-04-18 20:47:12 INFO ui_home server_message message="POST /projects/new?lang=en HTTP/1.1" 303 -
+2026-04-18 20:47:12 INFO ui_home request_complete duration_ms=134 method=POST page=/projects/new path=/projects/new?lang=en status=303
+2026-04-18 20:47:12 INFO ui_home project_probe http_running=False mcp_running=False project_id=gui-created-project
+2026-04-18 20:47:13 INFO ui_home project_probe http_running=True mcp_running=False project_id=smoke-project
+2026-04-18 20:47:13 INFO ui_home server_message message="GET /?flash=created&project_id=gui-created-project&lang=en HTTP/1.1" 200 -
+2026-04-18 20:47:13 INFO ui_home request_complete duration_ms=1081 method=GET page=/ path=/?flash=created&project_id=gui-created-project&lang=en status=200

@@ -1,0 +1,436 @@
+Metadata-Version: 2.4
+Name: mcp-memory
+Version: 0.1.0
+Summary: Offline-first RE knowledge base with SQLite-backed storage.
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Provides-Extra: dev
+Requires-Dist: coverage<8,>=7; extra == "dev"
+
+# mcp-memory
+
+Offline-first RE knowledge base on Python with:
+
+- local SQLite storage
+- local JSON HTTP API
+- local MCP HTTP server
+- local web UI
+- per-project isolated workspaces
+
+Проект ориентирован на простой запуск на Windows без внешних сервисов.
+
+## Что это такое
+
+`mcp-memory` хранит заметки по reverse engineering в структурированном виде:
+
+- `functions`
+- `structures`
+- `global hypotheses`
+- `evidence`
+- `relations`
+- `pending changes`
+- `audit` и `version history`
+
+Каждый проект хранится в своей папке со своей SQLite-базой, вложениями, экспортами, бэкапами и логами.
+
+## Требования
+
+- Windows
+- Python `3.10+`
+
+Runtime-зависимостей у проекта нет. Для coverage используется только optional dependency `coverage`.
+
+## Установка
+
+Из корня репозитория:
+
+```powershell
+python -m pip install -e .
+```
+
+Для dev/coverage:
+
+```powershell
+python -m pip install -e .[dev]
+```
+
+Если не хочется editable install, можно запускать и так:
+
+```powershell
+$env:PYTHONPATH = (Resolve-Path .\src)
+python -m mcp_memory.cli --help
+```
+
+## Быстрый старт
+
+### 1. Инициализировать app home
+
+```powershell
+mcp-memory init-app
+```
+
+По умолчанию app home берётся так:
+
+1. `MCP_MEMORY_HOME`
+2. `%LOCALAPPDATA%\mcp-memory`
+3. `.\.mcp-memory`
+
+Можно указать явно:
+
+```powershell
+mcp-memory --app-home F:\work\mcp-memory-data init-app
+```
+
+### 2. Создать проект
+
+```powershell
+mcp-memory create-project sample --name "Sample Project"
+```
+
+С явными путями и портами:
+
+```powershell
+mcp-memory create-project sample `
+  --name "Sample Project" `
+  --project-root F:\work\sample-project `
+  --http-port 8765 `
+  --mcp-port 9876 `
+  --write-mode confirm
+```
+
+### 3. Посмотреть зарегистрированные проекты
+
+```powershell
+mcp-memory list-projects
+```
+
+### 4. Поднять HTTP API
+
+```powershell
+mcp-memory run-http-api sample
+```
+
+### 5. Поднять MCP server
+
+```powershell
+mcp-memory run-mcp sample
+```
+
+### 6. Поднять home UI
+
+```powershell
+mcp-memory run-ui-home
+```
+
+После этого:
+
+- home UI: `http://127.0.0.1:8764/`
+- project workspace UI: `http://127.0.0.1:8765/ui/`
+- HTTP API health: `http://127.0.0.1:8765/health`
+- MCP health: `http://127.0.0.1:9876/health`
+
+## Основные CLI-команды
+
+### Registry и project lifecycle
+
+```powershell
+mcp-memory init-app
+mcp-memory create-project <project_id> --name "<display_name>"
+mcp-memory list-projects
+```
+
+### Servers
+
+```powershell
+mcp-memory run-http-api <project_id> [--host 127.0.0.1] [--port 8765]
+mcp-memory run-mcp <project_id> [--host 127.0.0.1] [--port 9876]
+mcp-memory run-ui-home [--host 127.0.0.1] [--port 8764]
+```
+
+### Import / export / backup
+
+```powershell
+mcp-memory export-json <project_id> [--output bundle.json]
+mcp-memory import-json <project_id> --input bundle.json [--replace-existing]
+mcp-memory backup-project <project_id> [--output backup.zip]
+mcp-memory restore-project --input backup.zip --project-root F:\restored
+```
+
+### Pending changes
+
+```powershell
+mcp-memory list-pending <project_id> [--status pending|all]
+mcp-memory confirm-change <project_id> <pending_change_id>
+mcp-memory reject-change <project_id> <pending_change_id>
+```
+
+### Логирование
+
+У long-running entrypoints есть `--log-level`:
+
+```powershell
+mcp-memory --log-level DEBUG run-http-api sample
+mcp-memory --log-level INFO run-mcp sample
+mcp-memory --log-level INFO run-ui-home
+```
+
+## Как пользоваться системой
+
+### JSON HTTP API
+
+HTTP API предназначен для локальной автоматизации и интеграции.
+
+Основные маршруты:
+
+- `GET /health`
+- `GET /project/config`
+- `GET /functions?binary_id=...`
+- `GET /functions/{binary_id}/{function_id}`
+- `POST /functions`
+- `GET /structures`
+- `GET /structures/{structure_id}`
+- `POST /structures`
+- `GET /global-hypotheses`
+- `GET /global-hypotheses/{hypothesis_id}`
+- `POST /global-hypotheses`
+- `GET /evidence?entity_type=...&entity_id=...`
+- `POST /evidence`
+- `GET /relations?entity_type=...&entity_id=...`
+- `POST /relations`
+- `GET /related?entity_type=...&entity_id=...&hops=1`
+- `POST /search`
+- `GET /pending-changes`
+- `POST /pending-changes/{id}/confirm`
+- `POST /pending-changes/{id}/reject`
+- `POST /export/json`
+- `POST /import/json`
+- `POST /backup`
+- `POST /restore`
+
+Пример:
+
+```powershell
+Invoke-RestMethod `
+  -Method Post `
+  -Uri http://127.0.0.1:8765/search `
+  -ContentType "application/json" `
+  -Body '{"q":"main_handler","entity_types":["function"],"limit":10}'
+```
+
+### Web UI
+
+Home UI:
+
+- показывает зарегистрированные проекты
+- показывает `running/offline`
+- даёт прямую ссылку в workspace
+
+Workspace UI:
+
+- dashboard
+- search
+- entity cards
+- pending changes
+- audit trail
+- version history
+- HTML forms для `functions`, `structures`, `global hypotheses`
+
+Основные страницы:
+
+- `/ui/`
+- `/ui/search`
+- `/ui/pending`
+- `/ui/audit`
+- `/ui/functions/...`
+- `/ui/structures/...`
+- `/ui/global-hypotheses/...`
+
+### Confirm mode vs auto mode
+
+`write_mode` задаётся на проекте:
+
+- `confirm`: новые записи и обновления сначала попадают в `pending_changes`
+- `auto`: write-операции применяются сразу
+
+Это влияет и на:
+
+- HTTP API
+- MCP tools
+- HTML forms
+
+## Подключение MCP
+
+`mcp-memory` поднимает MCP-over-HTTP endpoint на:
+
+```text
+http://127.0.0.1:<mcp-port>/mcp
+```
+
+По умолчанию:
+
+```text
+http://127.0.0.1:9876/mcp
+```
+
+### Что нужно сделать
+
+1. Поднять MCP server:
+
+```powershell
+mcp-memory run-mcp sample
+```
+
+2. В MCP-клиенте указать HTTP endpoint проекта:
+
+```text
+http://127.0.0.1:9876/mcp
+```
+
+3. Проверить health:
+
+```text
+http://127.0.0.1:9876/health
+```
+
+### MCP tools
+
+Текущий MCP server поддерживает:
+
+- `get_project_config`
+- `search_records`
+- `get_record`
+- `get_related`
+- `create_function`
+- `update_function`
+- `create_structure`
+- `update_structure`
+- `create_hypothesis`
+- `add_evidence`
+- `create_relation`
+- `list_pending_changes`
+- `confirm_change`
+- `reject_change`
+- `export_json`
+- `import_json`
+- `backup_project`
+- `restore_project`
+
+### Пример MCP client config
+
+Точный формат зависит от клиента, но суть всегда одна: нужен HTTP endpoint проекта.
+
+Пример в духе generic MCP client:
+
+```json
+{
+  "servers": {
+    "mcp-memory-sample": {
+      "transport": "http",
+      "url": "http://127.0.0.1:9876/mcp"
+    }
+  }
+}
+```
+
+Если твой MCP-клиент ожидает другой формат конфига, используй те же значения:
+
+- transport: `http`
+- url: `http://127.0.0.1:<mcp-port>/mcp`
+
+## Структура данных проекта
+
+Каждый project workspace выглядит примерно так:
+
+```text
+<project-root>/
+  project.db
+  attachments/
+  exports/
+  backups/
+  logs/
+```
+
+Глобальный registry живёт в app home:
+
+```text
+<app-home>/
+  app_config.json
+  logs/
+```
+
+## Runtime logs
+
+Логи пишутся в plain text формате:
+
+```text
+timestamp level component event key=value ...
+```
+
+Основные файлы:
+
+- project-local:
+  - `logs/cli.log`
+  - `logs/http-api.log`
+  - `logs/mcp.log`
+- app-home:
+  - `logs/ui-home.log`
+
+## Локальная проверка
+
+Основной скрипт проверки:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_local_checks.ps1
+```
+
+Он:
+
+- запускает smoke-check
+- проверяет HTTP/MCP/UI
+- проверяет runtime logs
+- запускает coverage
+- сохраняет результаты в `artifacts/`
+
+Основные файлы:
+
+- `artifacts/local_checks.txt`
+- `artifacts/coverage.txt`
+
+## Документация по модулям
+
+Подробная developer-документация по модулям:
+
+- [docs/modules.md](docs/modules.md)
+
+## Текущее состояние проекта
+
+Сейчас в проекте уже есть:
+
+- SQLite-backed storage
+- CLI
+- HTTP API
+- MCP server
+- Web UI
+- pending changes / confirm flow
+- audit and history
+- import/export
+- backup/restore
+- runtime logging
+
+## Ограничения
+
+- проект локальный, без multi-user auth
+- storage только SQLite
+- без облачной синхронизации
+- без external services
+- UI не SPA и не heavy frontend app
+
+## Советы по запуску
+
+- Для первого знакомства подними сразу:
+  - `run-http-api`
+  - `run-mcp`
+  - `run-ui-home`
+- Для безопасной работы агентов лучше использовать `write_mode=confirm`
+- Для ручной работы через UI тоже удобно начинать с `confirm`
+

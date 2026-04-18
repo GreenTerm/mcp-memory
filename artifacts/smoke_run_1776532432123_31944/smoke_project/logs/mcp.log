@@ -1,0 +1,37 @@
+2026-04-18 20:13:55 INFO mcp server_start host=127.0.0.1 port=56523 project_id=smoke-project
+2026-04-18 20:13:56 INFO mcp server_message message="GET /health HTTP/1.1" 200 - project_id=smoke-project
+2026-04-18 20:13:56 INFO mcp request_complete duration_ms=0 method=GET path=/health project_id=smoke-project status=200
+2026-04-18 20:13:56 INFO mcp server_message message="POST /mcp HTTP/1.1" 200 - project_id=smoke-project
+2026-04-18 20:13:56 INFO mcp request_complete duration_ms=0 method=POST path=/mcp project_id=smoke-project status=200
+2026-04-18 20:13:56 INFO mcp server_message message="POST /mcp HTTP/1.1" 200 - project_id=smoke-project
+2026-04-18 20:13:56 INFO mcp request_complete duration_ms=0 method=POST path=/mcp project_id=smoke-project status=200
+2026-04-18 20:13:56 INFO mcp tool_call project_id=smoke-project tool_name=search_records
+2026-04-18 20:13:56 INFO mcp server_message message="POST /mcp HTTP/1.1" 200 - project_id=smoke-project
+2026-04-18 20:13:56 INFO mcp request_complete duration_ms=1 method=POST path=/mcp project_id=smoke-project status=200
+2026-04-18 20:13:56 INFO mcp tool_call project_id=smoke-project tool_name=get_related
+2026-04-18 20:13:56 INFO mcp server_message message="POST /mcp HTTP/1.1" 200 - project_id=smoke-project
+2026-04-18 20:13:56 INFO mcp request_complete duration_ms=1 method=POST path=/mcp project_id=smoke-project status=200
+2026-04-18 20:13:56 INFO mcp tool_call project_id=smoke-project tool_name=create_structure
+2026-04-18 20:13:56 INFO services pending_created entity_id=struct_pending entity_type=structure operation=upsert_structure pending_change_id=d87a16d5-26cf-46e9-940f-6ad3f49bd655 project_id=smoke-project
+2026-04-18 20:13:56 INFO mcp server_message message="POST /mcp HTTP/1.1" 200 - project_id=smoke-project
+2026-04-18 20:13:56 INFO mcp request_complete duration_ms=4 method=POST path=/mcp project_id=smoke-project status=200
+2026-04-18 20:13:56 INFO mcp tool_call project_id=smoke-project tool_name=list_pending_changes
+2026-04-18 20:13:56 INFO mcp server_message message="POST /mcp HTTP/1.1" 200 - project_id=smoke-project
+2026-04-18 20:13:56 INFO mcp request_complete duration_ms=6 method=POST path=/mcp project_id=smoke-project status=200
+2026-04-18 20:13:56 INFO mcp tool_call project_id=smoke-project tool_name=confirm_change
+2026-04-18 20:13:56 INFO services structure_upserted actor_type=agent binary_id=sample-binary field_count=0 project_id=smoke-project structure_id=struct_pending
+2026-04-18 20:13:56 INFO services pending_confirmed actor_type=agent operation=upsert_structure pending_change_id=d87a16d5-26cf-46e9-940f-6ad3f49bd655 project_id=smoke-project
+2026-04-18 20:13:56 INFO mcp server_message message="POST /mcp HTTP/1.1" 200 - project_id=smoke-project
+2026-04-18 20:13:56 INFO mcp request_complete duration_ms=8 method=POST path=/mcp project_id=smoke-project status=200
+2026-04-18 20:13:56 INFO mcp server_message message="GET /health HTTP/1.1" 200 - project_id=smoke-project
+2026-04-18 20:13:56 INFO mcp request_complete duration_ms=0 method=GET path=/health project_id=smoke-project status=200
+2026-04-18 20:13:58 INFO mcp server_start host=127.0.0.1 port=56521 project_id=smoke-project
+2026-04-18 20:13:58 INFO mcp server_message message="GET /health HTTP/1.1" 200 - project_id=smoke-project
+2026-04-18 20:13:58 INFO mcp request_complete duration_ms=0 method=GET path=/health project_id=smoke-project status=200
+2026-04-18 20:13:58 INFO mcp server_message message="GET /health HTTP/1.1" 200 - project_id=smoke-project
+2026-04-18 20:13:58 INFO mcp request_complete duration_ms=0 method=GET path=/health project_id=smoke-project status=200
+2026-04-18 20:13:59 INFO mcp server_start host=127.0.0.1 port=56521 project_id=smoke-project
+2026-04-18 20:13:59 INFO mcp server_message message="GET /health HTTP/1.1" 200 - project_id=smoke-project
+2026-04-18 20:13:59 INFO mcp request_complete duration_ms=0 method=GET path=/health project_id=smoke-project status=200
+2026-04-18 20:13:59 INFO mcp server_message message="GET /health HTTP/1.1" 200 - project_id=smoke-project
+2026-04-18 20:13:59 INFO mcp request_complete duration_ms=0 method=GET path=/health project_id=smoke-project status=200

@@ -1,0 +1,2 @@
+﻿Wrote XML report to F:\dev\mcp-memory\artifacts\coverage.xml
+

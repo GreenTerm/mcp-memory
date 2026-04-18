@@ -1,0 +1,86 @@
+2026-04-18 20:47:09 INFO cli command_start command=run-http-api
+2026-04-18 20:47:09 INFO cli server_dispatch command=run-http-api host=127.0.0.1 port=55566 project_id=smoke-project
+2026-04-18 20:47:09 INFO api server_start host=127.0.0.1 port=55566 project_id=smoke-project
+2026-04-18 20:47:10 INFO api server_message message="GET /health HTTP/1.1" 200 - project_id=smoke-project
+2026-04-18 20:47:10 INFO api request_complete duration_ms=0 method=GET path=/health project_id=smoke-project status=200
+2026-04-18 20:47:10 INFO api server_message message="GET /project/config HTTP/1.1" 200 - project_id=smoke-project
+2026-04-18 20:47:10 INFO api request_complete duration_ms=0 method=GET path=/project/config project_id=smoke-project status=200
+2026-04-18 20:47:10 INFO api server_message message="GET /functions?binary_id=sample-binary HTTP/1.1" 200 - project_id=smoke-project
+2026-04-18 20:47:10 INFO api request_complete duration_ms=13 method=GET path=/functions?binary_id=sample-binary project_id=smoke-project status=200
+2026-04-18 20:47:10 INFO api server_message message="GET /functions/sample-binary/fn_main HTTP/1.1" 200 - project_id=smoke-project
+2026-04-18 20:47:10 INFO api request_complete duration_ms=1 method=GET path=/functions/sample-binary/fn_main project_id=smoke-project status=200
+2026-04-18 20:47:10 INFO api server_message message="GET /structures?binary_id=sample-binary HTTP/1.1" 200 - project_id=smoke-project
+2026-04-18 20:47:10 INFO api request_complete duration_ms=1 method=GET path=/structures?binary_id=sample-binary project_id=smoke-project status=200
+2026-04-18 20:47:10 INFO api server_message message="GET /global-hypotheses HTTP/1.1" 200 - project_id=smoke-project
+2026-04-18 20:47:10 INFO api request_complete duration_ms=1 method=GET path=/global-hypotheses project_id=smoke-project status=200
+2026-04-18 20:47:10 INFO api server_message message="GET /evidence?entity_type=function&entity_id=fn_main HTTP/1.1" 200 - project_id=smoke-project
+2026-04-18 20:47:10 INFO api request_complete duration_ms=1 method=GET path=/evidence?entity_type=function&entity_id=fn_main project_id=smoke-project status=200
+2026-04-18 20:47:10 INFO api server_message message="GET /relations?entity_type=function&entity_id=fn_main&direction=both HTTP/1.1" 200 - project_id=smoke-project
+2026-04-18 20:47:10 INFO api request_complete duration_ms=1 method=GET path=/relations?entity_type=function&entity_id=fn_main&direction=both project_id=smoke-project status=200
+2026-04-18 20:47:10 INFO api server_message message="GET /related?entity_type=function&entity_id=fn_main&hops=1 HTTP/1.1" 200 - project_id=smoke-project
+2026-04-18 20:47:10 INFO api request_complete duration_ms=1 method=GET path=/related?entity_type=function&entity_id=fn_main&hops=1 project_id=smoke-project status=200
+2026-04-18 20:47:10 INFO services pending_created entity_id=fn_helper entity_type=function operation=upsert_function pending_change_id=6db83c6b-dcc6-4210-87fe-0ca22652726a project_id=smoke-project
+2026-04-18 20:47:10 INFO api server_message message="POST /functions HTTP/1.1" 202 - project_id=smoke-project
+2026-04-18 20:47:10 INFO api request_complete duration_ms=8 method=POST path=/functions project_id=smoke-project status=202
+2026-04-18 20:47:10 INFO api server_message message="GET /pending-changes HTTP/1.1" 200 - project_id=smoke-project
+2026-04-18 20:47:10 INFO api request_complete duration_ms=7 method=GET path=/pending-changes project_id=smoke-project status=200
+2026-04-18 20:47:10 INFO services function_upserted actor_type=user address=0x401100 binary_id=sample-binary function_id=fn_helper mode=clean project_id=smoke-project
+2026-04-18 20:47:10 INFO services pending_confirmed actor_type=user operation=upsert_function pending_change_id=6db83c6b-dcc6-4210-87fe-0ca22652726a project_id=smoke-project
+2026-04-18 20:47:10 INFO api server_message message="POST /pending-changes/6db83c6b-dcc6-4210-87fe-0ca22652726a/confirm HTTP/1.1" 201 - project_id=smoke-project
+2026-04-18 20:47:10 INFO api request_complete duration_ms=8 method=POST path=/pending-changes/6db83c6b-dcc6-4210-87fe-0ca22652726a/confirm project_id=smoke-project status=201
+2026-04-18 20:47:10 INFO api server_message message="POST /search HTTP/1.1" 200 - project_id=smoke-project
+2026-04-18 20:47:10 INFO api request_complete duration_ms=11 method=POST path=/search project_id=smoke-project status=200
+2026-04-18 20:47:10 INFO api server_message message="GET /health HTTP/1.1" 200 - project_id=smoke-project
+2026-04-18 20:47:10 INFO api request_complete duration_ms=0 method=GET path=/health project_id=smoke-project status=200
+2026-04-18 20:47:10 INFO api server_message message="GET /health HTTP/1.1" 200 - project_id=smoke-project
+2026-04-18 20:47:10 INFO api request_complete duration_ms=0 method=GET path=/health project_id=smoke-project status=200
+2026-04-18 20:47:11 INFO api server_message message="GET /health HTTP/1.1" 200 - project_id=smoke-project
+2026-04-18 20:47:11 INFO api request_complete duration_ms=0 method=GET path=/health project_id=smoke-project status=200
+2026-04-18 20:47:11 INFO api server_message message="GET /health HTTP/1.1" 200 - project_id=smoke-project
+2026-04-18 20:47:11 INFO api request_complete duration_ms=0 method=GET path=/health project_id=smoke-project status=200
+2026-04-18 20:47:12 INFO api server_message message="GET /health HTTP/1.1" 200 - project_id=smoke-project
+2026-04-18 20:47:12 INFO api request_complete duration_ms=0 method=GET path=/health project_id=smoke-project status=200
+2026-04-18 20:47:13 INFO api server_message message="GET /ui/ HTTP/1.1" 200 - project_id=smoke-project
+2026-04-18 20:47:13 INFO api request_complete duration_ms=3 method=GET path=/ui/ project_id=smoke-project status=200
+2026-04-18 20:47:13 INFO api server_message message="GET /ui/?lang=ru HTTP/1.1" 200 - project_id=smoke-project
+2026-04-18 20:47:13 INFO api request_complete duration_ms=3 method=GET path=/ui/?lang=ru project_id=smoke-project status=200
+2026-04-18 20:47:13 INFO api server_message message="GET /ui/functions/new HTTP/1.1" 200 - project_id=smoke-project
+2026-04-18 20:47:13 INFO api request_complete duration_ms=0 method=GET path=/ui/functions/new project_id=smoke-project status=200
+2026-04-18 20:47:13 INFO api server_message message="GET /ui/structures/new HTTP/1.1" 200 - project_id=smoke-project
+2026-04-18 20:47:13 INFO api request_complete duration_ms=0 method=GET path=/ui/structures/new project_id=smoke-project status=200
+2026-04-18 20:47:13 INFO api server_message message="GET /ui/search?q=main_handler&entity_type=function HTTP/1.1" 200 - project_id=smoke-project
+2026-04-18 20:47:13 INFO api request_complete duration_ms=3 method=GET path=/ui/search?q=main_handler&entity_type=function project_id=smoke-project status=200
+2026-04-18 20:47:13 INFO api server_message message="GET /ui/functions/sample-binary/fn_main HTTP/1.1" 200 - project_id=smoke-project
+2026-04-18 20:47:13 INFO api request_complete duration_ms=2 method=GET path=/ui/functions/sample-binary/fn_main project_id=smoke-project status=200
+2026-04-18 20:47:13 INFO api server_message message="GET /ui/functions/sample-binary/fn_main/history HTTP/1.1" 200 - project_id=smoke-project
+2026-04-18 20:47:13 INFO api request_complete duration_ms=2 method=GET path=/ui/functions/sample-binary/fn_main/history project_id=smoke-project status=200
+2026-04-18 20:47:13 INFO api server_message message="GET /ui/global-hypotheses/new HTTP/1.1" 200 - project_id=smoke-project
+2026-04-18 20:47:13 INFO api request_complete duration_ms=0 method=GET path=/ui/global-hypotheses/new project_id=smoke-project status=200
+2026-04-18 20:47:13 INFO api server_message message="GET /ui/pending HTTP/1.1" 200 - project_id=smoke-project
+2026-04-18 20:47:13 INFO api request_complete duration_ms=1 method=GET path=/ui/pending project_id=smoke-project status=200
+2026-04-18 20:47:13 INFO api server_message message="GET /ui/audit HTTP/1.1" 200 - project_id=smoke-project
+2026-04-18 20:47:13 INFO api request_complete duration_ms=5 method=GET path=/ui/audit project_id=smoke-project status=200
+2026-04-18 20:47:13 INFO ui structure_form_submit mode=new project_id=smoke-project structure_id=struct_form_pending write_mode=confirm
+2026-04-18 20:47:13 INFO services pending_created entity_id=struct_form_pending entity_type=structure operation=upsert_structure pending_change_id=59afec8f-a2a3-43d6-b033-a39b88a317e5 project_id=smoke-project
+2026-04-18 20:47:13 INFO ui structure_form_queued project_id=smoke-project structure_id=struct_form_pending
+2026-04-18 20:47:13 INFO api server_message message="POST /ui/structures/new HTTP/1.1" 303 - project_id=smoke-project
+2026-04-18 20:47:13 INFO api request_complete duration_ms=9 method=POST path=/ui/structures/new project_id=smoke-project status=303
+2026-04-18 20:47:13 INFO api server_message message="GET /ui/pending?flash=queued&lang=en HTTP/1.1" 200 - project_id=smoke-project
+2026-04-18 20:47:13 INFO api request_complete duration_ms=7 method=GET path=/ui/pending?flash=queued&lang=en project_id=smoke-project status=200
+2026-04-18 20:47:13 INFO ui global_hypothesis_form_submit hypothesis_id=gh_form_pending mode=new project_id=smoke-project write_mode=confirm
+2026-04-18 20:47:13 INFO services pending_created entity_id=gh_form_pending entity_type=global_hypothesis operation=upsert_global_hypothesis pending_change_id=54b83f3f-5994-4bc2-9c35-b01788266676 project_id=smoke-project
+2026-04-18 20:47:13 INFO ui global_hypothesis_form_queued hypothesis_id=gh_form_pending project_id=smoke-project
+2026-04-18 20:47:13 INFO api server_message message="POST /ui/global-hypotheses/new HTTP/1.1" 303 - project_id=smoke-project
+2026-04-18 20:47:13 INFO api request_complete duration_ms=5 method=POST path=/ui/global-hypotheses/new project_id=smoke-project status=303
+2026-04-18 20:47:13 INFO api server_message message="GET /ui/pending?flash=queued&lang=en HTTP/1.1" 200 - project_id=smoke-project
+2026-04-18 20:47:13 INFO api request_complete duration_ms=5 method=GET path=/ui/pending?flash=queued&lang=en project_id=smoke-project status=200
+2026-04-18 20:47:13 INFO services pending_created entity_id=fn_html_helper entity_type=function operation=upsert_function pending_change_id=0cedbd9a-3c3b-4de7-9f17-a381a0d07084 project_id=smoke-project
+2026-04-18 20:47:13 INFO api server_message message="POST /functions HTTP/1.1" 202 - project_id=smoke-project
+2026-04-18 20:47:13 INFO api request_complete duration_ms=5 method=POST path=/functions project_id=smoke-project status=202
+2026-04-18 20:47:13 INFO services function_upserted actor_type=user address=0x401180 binary_id=sample-binary function_id=fn_html_helper mode=clean project_id=smoke-project
+2026-04-18 20:47:13 INFO services pending_confirmed actor_type=user operation=upsert_function pending_change_id=0cedbd9a-3c3b-4de7-9f17-a381a0d07084 project_id=smoke-project
+2026-04-18 20:47:13 INFO ui pending_confirmed pending_change_id=0cedbd9a-3c3b-4de7-9f17-a381a0d07084 project_id=smoke-project
+2026-04-18 20:47:13 INFO api server_message message="POST /ui/pending/0cedbd9a-3c3b-4de7-9f17-a381a0d07084/confirm HTTP/1.1" 303 - project_id=smoke-project
+2026-04-18 20:47:13 INFO api request_complete duration_ms=32 method=POST path=/ui/pending/0cedbd9a-3c3b-4de7-9f17-a381a0d07084/confirm project_id=smoke-project status=303
+2026-04-18 20:47:13 INFO api server_message message="GET /ui/pending?flash=confirmed&lang=en HTTP/1.1" 200 - project_id=smoke-project
+2026-04-18 20:47:13 INFO api request_complete duration_ms=9 method=GET path=/ui/pending?flash=confirmed&lang=en project_id=smoke-project status=200

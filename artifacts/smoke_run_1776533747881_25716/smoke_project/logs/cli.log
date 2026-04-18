@@ -1,0 +1,29 @@
+2026-04-18 20:35:48 INFO cli command_start command=run-http-api
+2026-04-18 20:35:48 INFO cli server_dispatch command=run-http-api host=127.0.0.1 port=60451 project_id=smoke-project
+2026-04-18 20:35:52 INFO cli command_start command=run-mcp
+2026-04-18 20:35:52 INFO cli server_dispatch command=run-mcp host=127.0.0.1 port=60454 project_id=smoke-project
+2026-04-18 20:35:56 INFO cli command_start command=run-http-api
+2026-04-18 20:35:56 INFO cli server_dispatch command=run-http-api host=127.0.0.1 port=60451 project_id=smoke-project
+2026-04-18 20:35:57 INFO cli command_start command=run-mcp
+2026-04-18 20:35:57 INFO cli server_dispatch command=run-mcp host=127.0.0.1 port=60452 project_id=smoke-project
+2026-04-18 20:35:58 INFO cli command_start command=run-mcp
+2026-04-18 20:35:58 INFO cli server_dispatch command=run-mcp host=127.0.0.1 port=60452 project_id=smoke-project
+2026-04-18 20:35:58 INFO cli command_start command=run-http-api
+2026-04-18 20:35:58 INFO cli server_dispatch command=run-http-api host=127.0.0.1 port=60451 project_id=smoke-project
+2026-04-18 20:36:01 INFO cli command_start command=export-json
+2026-04-18 20:36:01 INFO services project_exported function_count=3 output_path=F:\dev\mcp-memory\artifacts\smoke_export.json project_id=smoke-project structure_count=2
+2026-04-18 20:36:01 INFO cli command_finish command=export-json output_path=F:\dev\mcp-memory\artifacts\smoke_export.json project_id=smoke-project status=ok
+2026-04-18 20:36:01 INFO cli command_start command=import-json
+2026-04-18 20:36:01 INFO services function_upserted actor_type=system address=0x401100 binary_id=sample-binary function_id=fn_helper mode=clean project_id=smoke-project
+2026-04-18 20:36:01 INFO services function_upserted actor_type=system address=0x401180 binary_id=sample-binary function_id=fn_html_helper mode=clean project_id=smoke-project
+2026-04-18 20:36:01 INFO services function_upserted actor_type=system address=0x401000 binary_id=sample-binary function_id=fn_main mode=clean project_id=smoke-project
+2026-04-18 20:36:01 INFO services structure_upserted actor_type=system binary_id=sample-binary field_count=2 project_id=smoke-project structure_id=struct_parser_ctx
+2026-04-18 20:36:01 INFO services structure_upserted actor_type=system binary_id=sample-binary field_count=0 project_id=smoke-project structure_id=struct_pending
+2026-04-18 20:36:01 INFO services global_hypothesis_upserted actor_type=system hypothesis_id=gh_parser_bootstrap project_id=smoke-project status=new
+2026-04-18 20:36:01 INFO services evidence_created actor_type=system attachment=False entity_id=fn_main entity_type=function evidence_id=evidence_fn_main_block0 project_id=smoke-project
+2026-04-18 20:36:01 INFO services relation_created actor_type=system from_entity_id=fn_main from_entity_type=function project_id=smoke-project relation_id=ef9c0e52-d6a1-489e-b8a1-2b64d95092b5 relation_type=uses_structure to_entity_id=struct_parser_ctx to_entity_type=structure
+2026-04-18 20:36:01 INFO services project_imported function_count=3 input_path=F:\dev\mcp-memory\artifacts\smoke_export.json project_id=smoke-project replace_existing=True structure_count=2
+2026-04-18 20:36:01 INFO cli command_finish command=import-json input_path=F:\dev\mcp-memory\artifacts\smoke_export.json project_id=smoke-project replace_existing=True status=ok
+2026-04-18 20:36:01 INFO cli command_start command=backup-project
+2026-04-18 20:36:01 INFO services project_backed_up file_count=6 output_path=F:\dev\mcp-memory\artifacts\smoke_backup.zip project_id=smoke-project
+2026-04-18 20:36:01 INFO cli command_finish command=backup-project output_path=F:\dev\mcp-memory\artifacts\smoke_backup.zip project_id=smoke-project status=ok

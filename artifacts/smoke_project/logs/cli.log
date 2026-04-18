@@ -1,0 +1,8 @@
+2026-04-18 20:10:48 INFO cli command_start command=run-http-api
+2026-04-18 20:10:48 INFO cli server_dispatch command=run-http-api host=127.0.0.1 port=18765 project_id=smoke-project
+2026-04-18 20:10:51 INFO cli command_start command=run-mcp
+2026-04-18 20:10:51 INFO cli server_dispatch command=run-mcp host=127.0.0.1 port=19876 project_id=smoke-project
+2026-04-18 20:10:54 INFO cli command_start command=run-http-api
+2026-04-18 20:10:54 INFO cli server_dispatch command=run-http-api host=127.0.0.1 port=18765 project_id=smoke-project
+2026-04-18 20:10:54 INFO cli command_start command=run-mcp
+2026-04-18 20:10:54 INFO cli server_dispatch command=run-mcp host=127.0.0.1 port=9876 project_id=smoke-project

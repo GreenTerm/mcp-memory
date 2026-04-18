@@ -1,0 +1,3 @@
+
+[dev]
+coverage<8,>=7

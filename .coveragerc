@@ -1,0 +1,9 @@
+[run]
+source = src/mcp_memory
+branch = true
+
+[report]
+fail_under = 95
+show_missing = true
+skip_covered = false
+
