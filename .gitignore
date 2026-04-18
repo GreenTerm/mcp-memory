@@ -1,0 +1,58 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+*.egg
+*.whl
+
+# PyTest / coverage / logs
+.pytest_cache/
+.coverage
+.coverage.*
+coverage.xml
+coverage.json
+htmlcov/
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv/
+env.bak/
+ENV.bak/
+
+# IDEs / editors
+.vscode/
+.idea/
+.DS_Store
+.swp
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Misc
+*.log
+*.tmp
+*.bak
+*.backup
+*.zip
+*.tar.gz
+*.gz
+*.7z
+*.rar
+
+# Operating system files
+Thumbs.db
+ehthumbs.db
+
+# Artifacts and large generated content
+artifacts/
