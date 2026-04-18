@@ -1,1 +1,626 @@
-﻿
+﻿test_confirm_mode_queues_and_applies_pending_changes (test_api_server.ApiServerTests) ... 2026-04-18 23:09:45 INFO services function_upserted actor_type=system address=0x401000 binary_id=bin-main function_id=fn_main mode=clean project_id=test-project
+2026-04-18 23:09:45 INFO services pending_created entity_id=fn_pending entity_type=function operation=upsert_function pending_change_id=0487fd3d-d70e-4f65-bce1-371c86b944e6 project_id=test-project
+2026-04-18 23:09:45 INFO api server_message message="POST /functions HTTP/1.1" 202 - project_id=test-project
+2026-04-18 23:09:45 INFO api request_complete duration_ms=6 method=POST path=/functions project_id=test-project status=202
+2026-04-18 23:09:45 INFO api server_message message="GET /pending-changes HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:45 INFO api request_complete duration_ms=3 method=GET path=/pending-changes project_id=test-project status=200
+2026-04-18 23:09:45 INFO services function_upserted actor_type=user address=0x401250 binary_id=bin-main function_id=fn_pending mode=clean project_id=test-project
+2026-04-18 23:09:45 INFO services pending_confirmed actor_type=user operation=upsert_function pending_change_id=0487fd3d-d70e-4f65-bce1-371c86b944e6 project_id=test-project
+2026-04-18 23:09:45 INFO api server_message message="POST /pending-changes/0487fd3d-d70e-4f65-bce1-371c86b944e6/confirm HTTP/1.1" 201 - project_id=test-project
+2026-04-18 23:09:45 INFO api request_complete duration_ms=7 method=POST path=/pending-changes/0487fd3d-d70e-4f65-bce1-371c86b944e6/confirm project_id=test-project status=201
+2026-04-18 23:09:45 INFO api server_message message="GET /functions/bin-main/fn_pending HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:45 INFO api request_complete duration_ms=2 method=GET path=/functions/bin-main/fn_pending project_id=test-project status=200
+2026-04-18 23:09:45 INFO services pending_created entity_id=struct_pending entity_type=structure operation=upsert_structure pending_change_id=7aecdacb-130d-4588-a7bc-5a53422ce5f2 project_id=test-project
+2026-04-18 23:09:45 INFO api server_message message="POST /structures HTTP/1.1" 202 - project_id=test-project
+2026-04-18 23:09:45 INFO api request_complete duration_ms=5 method=POST path=/structures project_id=test-project status=202
+2026-04-18 23:09:45 WARNING services pending_rejected operation=upsert_structure pending_change_id=7aecdacb-130d-4588-a7bc-5a53422ce5f2 project_id=test-project
+2026-04-18 23:09:45 INFO api server_message message="POST /pending-changes/7aecdacb-130d-4588-a7bc-5a53422ce5f2/reject HTTP/1.1" 201 - project_id=test-project
+2026-04-18 23:09:45 INFO api request_complete duration_ms=6 method=POST path=/pending-changes/7aecdacb-130d-4588-a7bc-5a53422ce5f2/reject project_id=test-project status=201
+2026-04-18 23:09:45 INFO api server_message message="GET /pending-changes?status=all HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:45 INFO api request_complete duration_ms=3 method=GET path=/pending-changes?status=all project_id=test-project status=200
+ok
+test_confirm_mode_queues_global_hypothesis_and_evidence (test_api_server.ApiServerTests) ... 2026-04-18 23:09:45 INFO services function_upserted actor_type=system address=0x401000 binary_id=bin-main function_id=fn_main mode=clean project_id=test-project
+2026-04-18 23:09:45 INFO services pending_created entity_id=gh_pending entity_type=global_hypothesis operation=upsert_global_hypothesis pending_change_id=3a45606f-c98a-4df4-b93d-241d993e3382 project_id=test-project
+2026-04-18 23:09:45 INFO api server_message message="POST /global-hypotheses HTTP/1.1" 202 - project_id=test-project
+2026-04-18 23:09:45 INFO api request_complete duration_ms=6 method=POST path=/global-hypotheses project_id=test-project status=202
+2026-04-18 23:09:45 INFO services pending_created entity_id=e_pending entity_type=evidence operation=create_evidence pending_change_id=f8b311d0-49ca-454c-a7ec-7dcf0016a950 project_id=test-project
+2026-04-18 23:09:45 INFO api server_message message="POST /evidence HTTP/1.1" 202 - project_id=test-project
+2026-04-18 23:09:45 INFO api request_complete duration_ms=6 method=POST path=/evidence project_id=test-project status=202
+ok
+test_export_import_backup_and_restore_endpoints (test_api_server.ApiServerTests) ... 2026-04-18 23:09:45 INFO services function_upserted actor_type=system address=0x401000 binary_id=bin-main function_id=fn_main mode=clean project_id=test-project
+2026-04-18 23:09:45 INFO services project_exported function_count=1 output_path=C:\Users\GreenZadora\AppData\Local\Temp\tmpitk_fulx\bundle.json project_id=test-project structure_count=0
+2026-04-18 23:09:45 INFO api server_message message="POST /export/json HTTP/1.1" 201 - project_id=test-project
+2026-04-18 23:09:45 INFO api request_complete duration_ms=4 method=POST path=/export/json project_id=test-project status=201
+2026-04-18 23:09:45 INFO services function_upserted actor_type=system address=0x401000 binary_id=bin-main function_id=fn_main mode=clean project_id=test-project
+2026-04-18 23:09:45 INFO services project_imported function_count=1 input_path=C:\Users\GreenZadora\AppData\Local\Temp\tmpitk_fulx\bundle.json project_id=test-project replace_existing=True structure_count=0
+2026-04-18 23:09:45 INFO api server_message message="POST /import/json HTTP/1.1" 201 - project_id=test-project
+2026-04-18 23:09:45 INFO api request_complete duration_ms=16 method=POST path=/import/json project_id=test-project status=201
+2026-04-18 23:09:45 INFO services project_backed_up file_count=2 output_path=C:\Users\GreenZadora\AppData\Local\Temp\tmpitk_fulx\backup.zip project_id=test-project
+2026-04-18 23:09:45 INFO api server_message message="POST /backup HTTP/1.1" 201 - project_id=test-project
+2026-04-18 23:09:45 INFO api request_complete duration_ms=13 method=POST path=/backup project_id=test-project status=201
+2026-04-18 23:09:45 INFO services project_restored input_path=C:\Users\GreenZadora\AppData\Local\Temp\tmpitk_fulx\backup.zip project_id=restored-project project_root=C:\Users\GreenZadora\AppData\Local\Temp\tmpitk_fulx\restored_project
+2026-04-18 23:09:45 INFO api server_message message="POST /restore HTTP/1.1" 201 - project_id=test-project
+2026-04-18 23:09:45 INFO api request_complete duration_ms=21 method=POST path=/restore project_id=test-project status=201
+ok
+test_get_endpoints_and_not_found (test_api_server.ApiServerTests) ... 2026-04-18 23:09:45 INFO services function_upserted actor_type=system address=0x401000 binary_id=bin-main function_id=fn_main mode=clean project_id=test-project
+2026-04-18 23:09:45 INFO api server_message message="GET /health HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:45 INFO api request_complete duration_ms=0 method=GET path=/health project_id=test-project status=200
+2026-04-18 23:09:45 INFO api server_message message="GET /project/config HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:45 INFO api request_complete duration_ms=0 method=GET path=/project/config project_id=test-project status=200
+2026-04-18 23:09:45 INFO api server_message message="GET /functions?binary_id=bin-main HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:45 INFO api request_complete duration_ms=3 method=GET path=/functions?binary_id=bin-main project_id=test-project status=200
+2026-04-18 23:09:45 INFO api server_message message="GET /functions/bin-main/fn_main HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:45 INFO api request_complete duration_ms=2 method=GET path=/functions/bin-main/fn_main project_id=test-project status=200
+2026-04-18 23:09:45 INFO api server_message message="GET /functions/bin-main HTTP/1.1" 404 - project_id=test-project
+2026-04-18 23:09:45 WARNING api request_complete duration_ms=0 method=GET path=/functions/bin-main project_id=test-project status=404
+2026-04-18 23:09:45 INFO api server_message message="GET /functions/bin-main/missing HTTP/1.1" 404 - project_id=test-project
+2026-04-18 23:09:45 WARNING api request_complete duration_ms=2 method=GET path=/functions/bin-main/missing project_id=test-project status=404
+2026-04-18 23:09:45 INFO api server_message message="GET /structures?binary_id=bin-main HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:45 INFO api request_complete duration_ms=2 method=GET path=/structures?binary_id=bin-main project_id=test-project status=200
+2026-04-18 23:09:45 INFO api server_message message="GET /structures/missing-structure HTTP/1.1" 404 - project_id=test-project
+2026-04-18 23:09:45 WARNING api request_complete duration_ms=2 method=GET path=/structures/missing-structure project_id=test-project status=404
+2026-04-18 23:09:45 INFO api server_message message="GET /global-hypotheses HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:45 INFO api request_complete duration_ms=2 method=GET path=/global-hypotheses project_id=test-project status=200
+2026-04-18 23:09:45 INFO api server_message message="GET /global-hypotheses/missing-gh HTTP/1.1" 404 - project_id=test-project
+2026-04-18 23:09:45 WARNING api request_complete duration_ms=2 method=GET path=/global-hypotheses/missing-gh project_id=test-project status=404
+2026-04-18 23:09:45 INFO api server_message message="GET /evidence?entity_type=function&entity_id=fn_main HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:45 INFO api request_complete duration_ms=2 method=GET path=/evidence?entity_type=function&entity_id=fn_main project_id=test-project status=200
+2026-04-18 23:09:45 WARNING api request_validation_error error=Missing required query parameter: binary_id method=GET path=/functions project_id=test-project
+2026-04-18 23:09:45 INFO api server_message message="GET /functions HTTP/1.1" 400 - project_id=test-project
+2026-04-18 23:09:45 WARNING api request_complete duration_ms=0 method=GET path=/functions project_id=test-project status=400
+2026-04-18 23:09:45 WARNING api request_validation_error error=Missing required query parameter: entity_id method=GET path=/evidence project_id=test-project
+2026-04-18 23:09:45 INFO api server_message message="GET /evidence?entity_type=function HTTP/1.1" 400 - project_id=test-project
+2026-04-18 23:09:45 WARNING api request_complete duration_ms=0 method=GET path=/evidence?entity_type=function project_id=test-project status=400
+2026-04-18 23:09:45 WARNING api request_validation_error error=direction must be one of: in, out, both method=GET path=/relations project_id=test-project
+2026-04-18 23:09:45 INFO api server_message message="GET /relations?entity_type=function&entity_id=fn_main&direction=sideways HTTP/1.1" 400 - project_id=test-project
+2026-04-18 23:09:45 WARNING api request_complete duration_ms=2 method=GET path=/relations?entity_type=function&entity_id=fn_main&direction=sideways project_id=test-project status=400
+2026-04-18 23:09:45 WARNING api request_validation_error error=hops must be 1 or 2 method=GET path=/related project_id=test-project
+2026-04-18 23:09:45 INFO api server_message message="GET /related?entity_type=function&entity_id=fn_main&hops=3 HTTP/1.1" 400 - project_id=test-project
+2026-04-18 23:09:45 WARNING api request_complete duration_ms=2 method=GET path=/related?entity_type=function&entity_id=fn_main&hops=3 project_id=test-project status=400
+2026-04-18 23:09:45 INFO api server_message message="GET /unknown HTTP/1.1" 404 - project_id=test-project
+2026-04-18 23:09:45 WARNING api request_complete duration_ms=0 method=GET path=/unknown project_id=test-project status=404
+ok
+test_invalid_json_and_validation_errors (test_api_server.ApiServerTests) ... 2026-04-18 23:09:45 INFO services function_upserted actor_type=system address=0x401000 binary_id=bin-main function_id=fn_main mode=clean project_id=test-project
+2026-04-18 23:09:45 INFO api server_message message="POST /functions HTTP/1.1" 400 - project_id=test-project
+2026-04-18 23:09:45 WARNING api request_complete duration_ms=0 method=POST path=/functions project_id=test-project status=400
+2026-04-18 23:09:45 WARNING api request_validation_error error='function_id' method=POST path=/functions project_id=test-project
+2026-04-18 23:09:45 INFO api server_message message="POST /functions HTTP/1.1" 400 - project_id=test-project
+2026-04-18 23:09:45 WARNING api request_complete duration_ms=3 method=POST path=/functions project_id=test-project status=400
+2026-04-18 23:09:45 WARNING api request_validation_error error='from_entity_id' method=POST path=/relations project_id=test-project
+2026-04-18 23:09:45 INFO api server_message message="POST /relations HTTP/1.1" 400 - project_id=test-project
+2026-04-18 23:09:45 WARNING api request_complete duration_ms=2 method=POST path=/relations project_id=test-project status=400
+2026-04-18 23:09:45 WARNING api request_validation_error error=invalid literal for int() with base 10: 'bad' method=POST path=/search project_id=test-project
+2026-04-18 23:09:45 INFO api server_message message="POST /search HTTP/1.1" 400 - project_id=test-project
+2026-04-18 23:09:45 WARNING api request_complete duration_ms=2 method=POST path=/search project_id=test-project status=400
+2026-04-18 23:09:45 WARNING api request_validation_error error=Missing pending change id method=POST path=/pending-changes//confirm project_id=test-project
+2026-04-18 23:09:45 INFO api server_message message="POST /pending-changes//confirm HTTP/1.1" 400 - project_id=test-project
+2026-04-18 23:09:45 WARNING api request_complete duration_ms=0 method=POST path=/pending-changes//confirm project_id=test-project status=400
+ok
+test_payload_builders (test_api_server.ApiServerTests) ... 2026-04-18 23:09:45 INFO services function_upserted actor_type=system address=0x401000 binary_id=bin-main function_id=fn_main mode=clean project_id=test-project
+ok
+test_post_entity_endpoints (test_api_server.ApiServerTests) ... 2026-04-18 23:09:46 INFO services function_upserted actor_type=system address=0x401000 binary_id=bin-main function_id=fn_main mode=clean project_id=test-project
+2026-04-18 23:09:46 INFO services function_upserted actor_type=system address=0x401100 binary_id=bin-main function_id=fn_helper mode=clean project_id=test-project
+2026-04-18 23:09:46 INFO api server_message message="POST /functions HTTP/1.1" 201 - project_id=test-project
+2026-04-18 23:09:46 INFO api request_complete duration_ms=7 method=POST path=/functions project_id=test-project status=201
+2026-04-18 23:09:46 INFO services structure_upserted actor_type=system binary_id=bin-main field_count=0 project_id=test-project structure_id=struct_ctx
+2026-04-18 23:09:46 INFO api server_message message="POST /structures HTTP/1.1" 201 - project_id=test-project
+2026-04-18 23:09:46 INFO api request_complete duration_ms=6 method=POST path=/structures project_id=test-project status=201
+2026-04-18 23:09:46 INFO services global_hypothesis_upserted actor_type=system hypothesis_id=gh1 project_id=test-project status=new
+2026-04-18 23:09:46 INFO api server_message message="POST /global-hypotheses HTTP/1.1" 201 - project_id=test-project
+2026-04-18 23:09:46 INFO api request_complete duration_ms=6 method=POST path=/global-hypotheses project_id=test-project status=201
+2026-04-18 23:09:46 INFO services evidence_created actor_type=system attachment=False entity_id=fn_main entity_type=function evidence_id=e1 project_id=test-project
+2026-04-18 23:09:46 INFO api server_message message="POST /evidence HTTP/1.1" 201 - project_id=test-project
+2026-04-18 23:09:46 INFO api request_complete duration_ms=5 method=POST path=/evidence project_id=test-project status=201
+2026-04-18 23:09:46 INFO services relation_created actor_type=system from_entity_id=fn_main from_entity_type=function project_id=test-project relation_id=c99d127c-6e87-4558-a3f8-851a8ce3c8c0 relation_type=uses_structure to_entity_id=struct_ctx to_entity_type=structure
+2026-04-18 23:09:46 INFO api server_message message="POST /relations HTTP/1.1" 201 - project_id=test-project
+2026-04-18 23:09:46 INFO api request_complete duration_ms=5 method=POST path=/relations project_id=test-project status=201
+2026-04-18 23:09:46 INFO api server_message message="POST /search HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:46 INFO api request_complete duration_ms=2 method=POST path=/search project_id=test-project status=200
+2026-04-18 23:09:46 INFO api server_message message="GET /relations?entity_type=function&entity_id=fn_main HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:46 INFO api request_complete duration_ms=2 method=GET path=/relations?entity_type=function&entity_id=fn_main project_id=test-project status=200
+2026-04-18 23:09:46 INFO api server_message message="GET /related?entity_type=function&entity_id=fn_main&hops=1 HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:46 INFO api request_complete duration_ms=2 method=GET path=/related?entity_type=function&entity_id=fn_main&hops=1 project_id=test-project status=200
+2026-04-18 23:09:46 INFO api server_message message="GET /structures/struct_ctx HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:46 INFO api request_complete duration_ms=2 method=GET path=/structures/struct_ctx project_id=test-project status=200
+2026-04-18 23:09:46 INFO api server_message message="GET /global-hypotheses/gh1 HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:46 INFO api request_complete duration_ms=2 method=GET path=/global-hypotheses/gh1 project_id=test-project status=200
+2026-04-18 23:09:46 INFO api server_message message="GET /evidence?entity_type=function&entity_id=fn_main HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:46 INFO api request_complete duration_ms=2 method=GET path=/evidence?entity_type=function&entity_id=fn_main project_id=test-project status=200
+ok
+test_post_unknown_route_returns_not_found (test_api_server.ApiServerTests) ... 2026-04-18 23:09:46 INFO services function_upserted actor_type=system address=0x401000 binary_id=bin-main function_id=fn_main mode=clean project_id=test-project
+2026-04-18 23:09:46 INFO api server_message message="POST /unknown-post HTTP/1.1" 404 - project_id=test-project
+2026-04-18 23:09:46 WARNING api request_complete duration_ms=0 method=POST path=/unknown-post project_id=test-project status=404
+ok
+test_runtime_logs_are_written_for_http_and_ui_activity (test_api_server.ApiServerTests) ... 2026-04-18 23:09:46 INFO services function_upserted actor_type=system address=0x401000 binary_id=bin-main function_id=fn_main mode=clean project_id=test-project
+2026-04-18 23:09:46 INFO api server_message message="GET /health HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:46 INFO api request_complete duration_ms=0 method=GET path=/health project_id=test-project status=200
+2026-04-18 23:09:46 INFO api server_message message="GET /ui/ HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:46 INFO api request_complete duration_ms=4 method=GET path=/ui/ project_id=test-project status=200
+2026-04-18 23:09:46 INFO services function_upserted actor_type=system address=0x401190 binary_id=bin-main function_id=fn_logged mode=clean project_id=test-project
+2026-04-18 23:09:46 INFO api server_message message="POST /functions HTTP/1.1" 201 - project_id=test-project
+2026-04-18 23:09:46 INFO api request_complete duration_ms=7 method=POST path=/functions project_id=test-project status=201
+ok
+test_serialize_handles_common_shapes (test_api_server.ApiServerTests) ... 2026-04-18 23:09:47 INFO services function_upserted actor_type=system address=0x401000 binary_id=bin-main function_id=fn_main mode=clean project_id=test-project
+ok
+test_serve_project_http_api_constructs_server (test_api_server.ApiServerTests) ... 2026-04-18 23:09:47 INFO services function_upserted actor_type=system address=0x401000 binary_id=bin-main function_id=fn_main mode=clean project_id=test-project
+2026-04-18 23:09:47 INFO api server_start host=127.0.0.1 port=9999 project_id=test-project
+ok
+test_ui_audit_filter_form (test_api_server.ApiServerTests) ... 2026-04-18 23:09:48 INFO services function_upserted actor_type=system address=0x401000 binary_id=bin-main function_id=fn_main mode=clean project_id=test-project
+2026-04-18 23:09:48 INFO api server_message message="GET /ui/audit?entity_type=function&entity_id=fn_main HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:48 INFO api request_complete duration_ms=5 method=GET path=/ui/audit?entity_type=function&entity_id=fn_main project_id=test-project status=200
+ok
+test_ui_form_validation_and_confirm_queue (test_api_server.ApiServerTests) ... 2026-04-18 23:09:48 INFO services function_upserted actor_type=system address=0x401000 binary_id=bin-main function_id=fn_main mode=clean project_id=test-project
+2026-04-18 23:09:48 INFO ui function_form_submit function_id= mode=new project_id=test-project write_mode=auto
+2026-04-18 23:09:48 WARNING ui function_form_validation_error error=function_id must not be empty function_id= project_id=test-project
+2026-04-18 23:09:48 INFO api server_message message="POST /ui/functions/new HTTP/1.1" 400 - project_id=test-project
+2026-04-18 23:09:48 WARNING api request_complete duration_ms=3 method=POST path=/ui/functions/new project_id=test-project status=400
+2026-04-18 23:09:48 INFO ui structure_form_submit mode=new project_id=test-project structure_id= write_mode=auto
+2026-04-18 23:09:48 WARNING ui structure_form_validation_error error=structure_id must not be empty project_id=test-project structure_id=
+2026-04-18 23:09:48 INFO api server_message message="POST /ui/structures/new HTTP/1.1" 400 - project_id=test-project
+2026-04-18 23:09:48 WARNING api request_complete duration_ms=2 method=POST path=/ui/structures/new project_id=test-project status=400
+2026-04-18 23:09:48 INFO ui structure_form_submit mode=new project_id=test-project structure_id=struct_pending_form write_mode=confirm
+2026-04-18 23:09:48 INFO services pending_created entity_id=struct_pending_form entity_type=structure operation=upsert_structure pending_change_id=06bb2792-b9f9-4771-adc4-312abb3fbe0e project_id=test-project
+2026-04-18 23:09:48 INFO ui structure_form_queued project_id=test-project structure_id=struct_pending_form
+2026-04-18 23:09:48 INFO api server_message message="POST /ui/structures/new HTTP/1.1" 303 - project_id=test-project
+2026-04-18 23:09:48 INFO api request_complete duration_ms=5 method=POST path=/ui/structures/new project_id=test-project status=303
+2026-04-18 23:09:48 INFO api server_message message="GET /ui/pending?flash=queued&lang=en HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:48 INFO api request_complete duration_ms=3 method=GET path=/ui/pending?flash=queued&lang=en project_id=test-project status=200
+2026-04-18 23:09:48 INFO ui global_hypothesis_form_submit hypothesis_id=gh_pending_form mode=new project_id=test-project write_mode=confirm
+2026-04-18 23:09:48 INFO services pending_created entity_id=gh_pending_form entity_type=global_hypothesis operation=upsert_global_hypothesis pending_change_id=b309b92c-efcf-4e6f-a4ab-49f7620d278f project_id=test-project
+2026-04-18 23:09:48 INFO ui global_hypothesis_form_queued hypothesis_id=gh_pending_form project_id=test-project
+2026-04-18 23:09:48 INFO api server_message message="POST /ui/global-hypotheses/new HTTP/1.1" 303 - project_id=test-project
+2026-04-18 23:09:48 INFO api request_complete duration_ms=5 method=POST path=/ui/global-hypotheses/new project_id=test-project status=303
+2026-04-18 23:09:48 INFO api server_message message="GET /ui/pending?flash=queued&lang=en HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:48 INFO api request_complete duration_ms=3 method=GET path=/ui/pending?flash=queued&lang=en project_id=test-project status=200
+2026-04-18 23:09:48 INFO api server_message message="GET /pending-changes HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:48 INFO api request_complete duration_ms=2 method=GET path=/pending-changes project_id=test-project status=200
+ok
+test_ui_function_form_create_and_edit_in_auto_mode (test_api_server.ApiServerTests) ... 2026-04-18 23:09:48 INFO services function_upserted actor_type=system address=0x401000 binary_id=bin-main function_id=fn_main mode=clean project_id=test-project
+2026-04-18 23:09:48 INFO ui function_form_submit function_id=fn_form mode=new project_id=test-project write_mode=auto
+2026-04-18 23:09:48 INFO services function_upserted actor_type=system address=0x401555 binary_id=bin-main function_id=fn_form mode=clean project_id=test-project
+2026-04-18 23:09:48 INFO ui function_form_saved function_id=fn_form project_id=test-project
+2026-04-18 23:09:48 INFO api server_message message="POST /ui/functions/new HTTP/1.1" 303 - project_id=test-project
+2026-04-18 23:09:48 INFO api request_complete duration_ms=8 method=POST path=/ui/functions/new project_id=test-project status=303
+2026-04-18 23:09:48 INFO api server_message message="GET /ui/functions/bin-main/fn_form?lang=en HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:48 INFO api request_complete duration_ms=4 method=GET path=/ui/functions/bin-main/fn_form?lang=en project_id=test-project status=200
+2026-04-18 23:09:48 INFO ui function_form_submit function_id=fn_form mode=edit project_id=test-project write_mode=auto
+2026-04-18 23:09:48 INFO services function_upserted actor_type=system address=0x401556 binary_id=bin-main function_id=fn_form mode=clean project_id=test-project
+2026-04-18 23:09:48 INFO ui function_form_saved function_id=fn_form project_id=test-project
+2026-04-18 23:09:48 INFO api server_message message="POST /ui/functions/bin-main/fn_form/edit HTTP/1.1" 303 - project_id=test-project
+2026-04-18 23:09:48 INFO api request_complete duration_ms=7 method=POST path=/ui/functions/bin-main/fn_form/edit project_id=test-project status=303
+2026-04-18 23:09:48 INFO api server_message message="GET /ui/functions/bin-main/fn_form?lang=en HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:48 INFO api request_complete duration_ms=3 method=GET path=/ui/functions/bin-main/fn_form?lang=en project_id=test-project status=200
+2026-04-18 23:09:48 INFO api server_message message="GET /functions/bin-main/fn_form HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:48 INFO api request_complete duration_ms=2 method=GET path=/functions/bin-main/fn_form project_id=test-project status=200
+ok
+test_ui_get_endpoints (test_api_server.ApiServerTests) ... 2026-04-18 23:09:48 INFO services function_upserted actor_type=system address=0x401000 binary_id=bin-main function_id=fn_main mode=clean project_id=test-project
+2026-04-18 23:09:48 INFO services structure_upserted actor_type=system binary_id=bin-main field_count=1 project_id=test-project structure_id=struct_ctx
+2026-04-18 23:09:48 INFO services global_hypothesis_upserted actor_type=system hypothesis_id=gh_ui project_id=test-project status=new
+2026-04-18 23:09:48 INFO services evidence_created actor_type=system attachment=False entity_id=fn_main entity_type=function evidence_id=e_ui project_id=test-project
+2026-04-18 23:09:48 INFO services relation_created actor_type=system from_entity_id=fn_main from_entity_type=function project_id=test-project relation_id=a86d2b21-0f00-492c-a606-14d3748fa317 relation_type=uses_structure to_entity_id=struct_ctx to_entity_type=structure
+2026-04-18 23:09:48 INFO api server_message message="GET /ui/ HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:48 INFO api request_complete duration_ms=3 method=GET path=/ui/ project_id=test-project status=200
+2026-04-18 23:09:48 INFO api server_message message="GET /ui/?lang=ru HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:48 INFO api request_complete duration_ms=3 method=GET path=/ui/?lang=ru project_id=test-project status=200
+2026-04-18 23:09:48 INFO api server_message message="GET /ui/functions/new HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:48 INFO api request_complete duration_ms=0 method=GET path=/ui/functions/new project_id=test-project status=200
+2026-04-18 23:09:48 INFO api server_message message="GET /ui/search?q=main_handler&entity_type=function HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:48 INFO api request_complete duration_ms=5 method=GET path=/ui/search?q=main_handler&entity_type=function project_id=test-project status=200
+2026-04-18 23:09:48 INFO api server_message message="GET /ui/search?q=main_handler&entity_type=function&lang=ru HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:48 INFO api request_complete duration_ms=5 method=GET path=/ui/search?q=main_handler&entity_type=function&lang=ru project_id=test-project status=200
+2026-04-18 23:09:48 INFO api server_message message="GET /ui/functions/bin-main/fn_main HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:48 INFO api request_complete duration_ms=3 method=GET path=/ui/functions/bin-main/fn_main project_id=test-project status=200
+2026-04-18 23:09:48 INFO api server_message message="GET /ui/functions/bin-main/fn_main/history HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:48 INFO api request_complete duration_ms=2 method=GET path=/ui/functions/bin-main/fn_main/history project_id=test-project status=200
+2026-04-18 23:09:48 INFO api server_message message="GET /ui/functions/bin-main/fn_main/edit HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:48 INFO api request_complete duration_ms=2 method=GET path=/ui/functions/bin-main/fn_main/edit project_id=test-project status=200
+2026-04-18 23:09:48 INFO api server_message message="GET /ui/structures/new HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:48 INFO api request_complete duration_ms=0 method=GET path=/ui/structures/new project_id=test-project status=200
+2026-04-18 23:09:48 INFO api server_message message="GET /ui/structures/struct_ctx HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:48 INFO api request_complete duration_ms=4 method=GET path=/ui/structures/struct_ctx project_id=test-project status=200
+2026-04-18 23:09:48 INFO api server_message message="GET /ui/structures/struct_ctx/history HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:48 INFO api request_complete duration_ms=2 method=GET path=/ui/structures/struct_ctx/history project_id=test-project status=200
+2026-04-18 23:09:48 INFO api server_message message="GET /ui/structures/struct_ctx/edit HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:48 INFO api request_complete duration_ms=2 method=GET path=/ui/structures/struct_ctx/edit project_id=test-project status=200
+2026-04-18 23:09:48 INFO api server_message message="GET /ui/global-hypotheses/new HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:48 INFO api request_complete duration_ms=0 method=GET path=/ui/global-hypotheses/new project_id=test-project status=200
+2026-04-18 23:09:48 INFO api server_message message="GET /ui/global-hypotheses/gh_ui HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:48 INFO api request_complete duration_ms=2 method=GET path=/ui/global-hypotheses/gh_ui project_id=test-project status=200
+2026-04-18 23:09:48 INFO api server_message message="GET /ui/global-hypotheses/gh_ui/history HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:48 INFO api request_complete duration_ms=2 method=GET path=/ui/global-hypotheses/gh_ui/history project_id=test-project status=200
+2026-04-18 23:09:48 INFO api server_message message="GET /ui/global-hypotheses/gh_ui/edit HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:48 INFO api request_complete duration_ms=2 method=GET path=/ui/global-hypotheses/gh_ui/edit project_id=test-project status=200
+2026-04-18 23:09:48 INFO api server_message message="GET /ui/settings HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:48 INFO api request_complete duration_ms=0 method=GET path=/ui/settings project_id=test-project status=200
+2026-04-18 23:09:48 INFO api server_message message="GET /ui/pending HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:48 INFO api request_complete duration_ms=2 method=GET path=/ui/pending project_id=test-project status=200
+2026-04-18 23:09:48 INFO api server_message message="GET /ui/audit HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:48 INFO api request_complete duration_ms=6 method=GET path=/ui/audit project_id=test-project status=200
+2026-04-18 23:09:48 INFO api server_message message="GET /ui/assets/app.css HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:48 INFO api request_complete duration_ms=6 method=GET path=/ui/assets/app.css project_id=test-project status=200
+FAIL
+test_ui_global_hypothesis_form_create_and_edit_in_auto_mode (test_api_server.ApiServerTests) ... 2026-04-18 23:09:48 INFO services function_upserted actor_type=system address=0x401000 binary_id=bin-main function_id=fn_main mode=clean project_id=test-project
+2026-04-18 23:09:48 INFO ui global_hypothesis_form_submit hypothesis_id=gh_form mode=new project_id=test-project write_mode=auto
+2026-04-18 23:09:48 INFO services global_hypothesis_upserted actor_type=system hypothesis_id=gh_form project_id=test-project status=probable
+2026-04-18 23:09:48 INFO ui global_hypothesis_form_saved hypothesis_id=gh_form project_id=test-project
+2026-04-18 23:09:48 INFO api server_message message="POST /ui/global-hypotheses/new HTTP/1.1" 303 - project_id=test-project
+2026-04-18 23:09:48 INFO api request_complete duration_ms=8 method=POST path=/ui/global-hypotheses/new project_id=test-project status=303
+2026-04-18 23:09:48 INFO api server_message message="GET /ui/global-hypotheses/gh_form?lang=en HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:48 INFO api request_complete duration_ms=3 method=GET path=/ui/global-hypotheses/gh_form?lang=en project_id=test-project status=200
+2026-04-18 23:09:48 INFO ui global_hypothesis_form_submit hypothesis_id=gh_form mode=edit project_id=test-project write_mode=auto
+2026-04-18 23:09:48 INFO services global_hypothesis_upserted actor_type=system hypothesis_id=gh_form project_id=test-project status=confirmed
+2026-04-18 23:09:48 INFO ui global_hypothesis_form_saved hypothesis_id=gh_form project_id=test-project
+2026-04-18 23:09:48 INFO api server_message message="POST /ui/global-hypotheses/gh_form/edit HTTP/1.1" 303 - project_id=test-project
+2026-04-18 23:09:48 INFO api request_complete duration_ms=6 method=POST path=/ui/global-hypotheses/gh_form/edit project_id=test-project status=303
+2026-04-18 23:09:48 INFO api server_message message="GET /ui/global-hypotheses/gh_form?lang=en HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:48 INFO api request_complete duration_ms=3 method=GET path=/ui/global-hypotheses/gh_form?lang=en project_id=test-project status=200
+2026-04-18 23:09:48 INFO api server_message message="GET /global-hypotheses/gh_form HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:48 INFO api request_complete duration_ms=2 method=GET path=/global-hypotheses/gh_form project_id=test-project status=200
+ok
+test_ui_not_found_routes_return_404 (test_api_server.ApiServerTests) ... 2026-04-18 23:09:48 INFO services function_upserted actor_type=system address=0x401000 binary_id=bin-main function_id=fn_main mode=clean project_id=test-project
+2026-04-18 23:09:48 INFO api server_message message="GET /ui/unknown HTTP/1.1" 404 - project_id=test-project
+2026-04-18 23:09:48 WARNING api request_complete duration_ms=0 method=GET path=/ui/unknown project_id=test-project status=404
+2026-04-18 23:09:48 INFO api server_message message="GET /ui/functions/bin-main/missing/edit HTTP/1.1" 404 - project_id=test-project
+2026-04-18 23:09:48 WARNING api request_complete duration_ms=2 method=GET path=/ui/functions/bin-main/missing/edit project_id=test-project status=404
+2026-04-18 23:09:48 INFO api server_message message="GET /ui/functions/bin-main/missing HTTP/1.1" 404 - project_id=test-project
+2026-04-18 23:09:48 WARNING api request_complete duration_ms=2 method=GET path=/ui/functions/bin-main/missing project_id=test-project status=404
+2026-04-18 23:09:48 INFO api server_message message="GET /ui/functions/bin-main/missing/history HTTP/1.1" 404 - project_id=test-project
+2026-04-18 23:09:48 WARNING api request_complete duration_ms=2 method=GET path=/ui/functions/bin-main/missing/history project_id=test-project status=404
+2026-04-18 23:09:48 INFO api server_message message="GET /ui/structures/missing/edit HTTP/1.1" 404 - project_id=test-project
+2026-04-18 23:09:48 WARNING api request_complete duration_ms=2 method=GET path=/ui/structures/missing/edit project_id=test-project status=404
+2026-04-18 23:09:48 INFO api server_message message="GET /ui/structures/missing HTTP/1.1" 404 - project_id=test-project
+2026-04-18 23:09:48 WARNING api request_complete duration_ms=2 method=GET path=/ui/structures/missing project_id=test-project status=404
+2026-04-18 23:09:48 INFO api server_message message="GET /ui/structures/missing/history HTTP/1.1" 404 - project_id=test-project
+2026-04-18 23:09:48 WARNING api request_complete duration_ms=2 method=GET path=/ui/structures/missing/history project_id=test-project status=404
+2026-04-18 23:09:48 INFO api server_message message="GET /ui/global-hypotheses/missing/edit HTTP/1.1" 404 - project_id=test-project
+2026-04-18 23:09:48 WARNING api request_complete duration_ms=2 method=GET path=/ui/global-hypotheses/missing/edit project_id=test-project status=404
+2026-04-18 23:09:48 INFO api server_message message="GET /ui/global-hypotheses/missing HTTP/1.1" 404 - project_id=test-project
+2026-04-18 23:09:48 WARNING api request_complete duration_ms=2 method=GET path=/ui/global-hypotheses/missing project_id=test-project status=404
+2026-04-18 23:09:48 INFO api server_message message="GET /ui/global-hypotheses/missing/history HTTP/1.1" 404 - project_id=test-project
+2026-04-18 23:09:48 WARNING api request_complete duration_ms=2 method=GET path=/ui/global-hypotheses/missing/history project_id=test-project status=404
+ok
+test_ui_pending_confirm_and_reject_flow (test_api_server.ApiServerTests) ... 2026-04-18 23:09:48 INFO services function_upserted actor_type=system address=0x401000 binary_id=bin-main function_id=fn_main mode=clean project_id=test-project
+2026-04-18 23:09:48 INFO services pending_created entity_id=fn_html_pending entity_type=function operation=upsert_function pending_change_id=d62a046e-abae-46b9-9934-8b649c4334c4 project_id=test-project
+2026-04-18 23:09:48 INFO api server_message message="POST /functions HTTP/1.1" 202 - project_id=test-project
+2026-04-18 23:09:48 INFO api request_complete duration_ms=6 method=POST path=/functions project_id=test-project status=202
+2026-04-18 23:09:48 INFO services function_upserted actor_type=user address=0x401280 binary_id=bin-main function_id=fn_html_pending mode=clean project_id=test-project
+2026-04-18 23:09:48 INFO services pending_confirmed actor_type=user operation=upsert_function pending_change_id=d62a046e-abae-46b9-9934-8b649c4334c4 project_id=test-project
+2026-04-18 23:09:48 INFO ui pending_confirmed pending_change_id=d62a046e-abae-46b9-9934-8b649c4334c4 project_id=test-project
+2026-04-18 23:09:48 INFO api server_message message="POST /ui/pending/d62a046e-abae-46b9-9934-8b649c4334c4/confirm?lang=ru HTTP/1.1" 303 - project_id=test-project
+2026-04-18 23:09:48 INFO api request_complete duration_ms=9 method=POST path=/ui/pending/d62a046e-abae-46b9-9934-8b649c4334c4/confirm?lang=ru project_id=test-project status=303
+2026-04-18 23:09:48 INFO api server_message message="GET /ui/pending?flash=confirmed&lang=ru HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:48 INFO api request_complete duration_ms=3 method=GET path=/ui/pending?flash=confirmed&lang=ru project_id=test-project status=200
+2026-04-18 23:09:48 INFO api server_message message="GET /functions/bin-main/fn_html_pending HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:48 INFO api request_complete duration_ms=2 method=GET path=/functions/bin-main/fn_html_pending project_id=test-project status=200
+2026-04-18 23:09:48 INFO services pending_created entity_id=struct_html_pending entity_type=structure operation=upsert_structure pending_change_id=f128dc85-72dd-4cbc-9d5a-8a6c09fab619 project_id=test-project
+2026-04-18 23:09:48 INFO api server_message message="POST /structures HTTP/1.1" 202 - project_id=test-project
+2026-04-18 23:09:48 INFO api request_complete duration_ms=5 method=POST path=/structures project_id=test-project status=202
+2026-04-18 23:09:48 WARNING services pending_rejected operation=upsert_structure pending_change_id=f128dc85-72dd-4cbc-9d5a-8a6c09fab619 project_id=test-project
+2026-04-18 23:09:48 WARNING ui pending_rejected pending_change_id=f128dc85-72dd-4cbc-9d5a-8a6c09fab619 project_id=test-project
+2026-04-18 23:09:48 INFO api server_message message="POST /ui/pending/f128dc85-72dd-4cbc-9d5a-8a6c09fab619/reject?lang=ru HTTP/1.1" 303 - project_id=test-project
+2026-04-18 23:09:48 INFO api request_complete duration_ms=4 method=POST path=/ui/pending/f128dc85-72dd-4cbc-9d5a-8a6c09fab619/reject?lang=ru project_id=test-project status=303
+2026-04-18 23:09:48 INFO api server_message message="GET /ui/pending?flash=rejected&lang=ru HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:48 INFO api request_complete duration_ms=3 method=GET path=/ui/pending?flash=rejected&lang=ru project_id=test-project status=200
+ok
+test_ui_settings_submit_updates_project_and_preserves_validation_errors (test_api_server.ApiServerTests) ... 2026-04-18 23:09:48 INFO services function_upserted actor_type=system address=0x401000 binary_id=bin-main function_id=fn_main mode=clean project_id=test-project
+2026-04-18 23:09:48 INFO ui project_settings_submit display_name=Renamed Project http_host=127.0.0.2 http_port=28765 mcp_host=127.0.0.3 mcp_port=29876 project_id=test-project write_mode=auto
+2026-04-18 23:09:48 INFO services project_updated display_name=Renamed Project http_host=127.0.0.2 http_port=28765 mcp_host=127.0.0.3 mcp_port=29876 project_id=test-project write_mode=auto
+2026-04-18 23:09:48 INFO ui project_settings_saved project_id=test-project restart_needed=True
+2026-04-18 23:09:48 INFO api server_message message="POST /ui/settings?lang=en HTTP/1.1" 303 - project_id=test-project
+2026-04-18 23:09:48 INFO api request_complete duration_ms=8 method=POST path=/ui/settings?lang=en project_id=test-project status=303
+2026-04-18 23:09:48 INFO api server_message message="GET /ui/settings?flash=saved_restart&lang=en HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:48 INFO api request_complete duration_ms=0 method=GET path=/ui/settings?flash=saved_restart&lang=en project_id=test-project status=200
+2026-04-18 23:09:48 INFO ui project_settings_submit display_name=Renamed Project http_host=127.0.0.2 http_port=broken mcp_host=127.0.0.3 mcp_port=29876 project_id=test-project write_mode=auto
+2026-04-18 23:09:48 WARNING ui project_settings_validation_error error=HTTP Port must be a valid integer. project_id=test-project
+2026-04-18 23:09:48 INFO api server_message message="POST /ui/settings?lang=ru HTTP/1.1" 400 - project_id=test-project
+2026-04-18 23:09:48 WARNING api request_complete duration_ms=1 method=POST path=/ui/settings?lang=ru project_id=test-project status=400
+ok
+test_ui_structure_form_create_and_edit_in_auto_mode (test_api_server.ApiServerTests) ... 2026-04-18 23:09:48 INFO services function_upserted actor_type=system address=0x401000 binary_id=bin-main function_id=fn_main mode=clean project_id=test-project
+2026-04-18 23:09:48 INFO ui structure_form_submit mode=new project_id=test-project structure_id=struct_form write_mode=auto
+2026-04-18 23:09:48 INFO services structure_upserted actor_type=system binary_id=bin-main field_count=2 project_id=test-project structure_id=struct_form
+2026-04-18 23:09:48 INFO ui structure_form_saved project_id=test-project structure_id=struct_form
+2026-04-18 23:09:48 INFO api server_message message="POST /ui/structures/new HTTP/1.1" 303 - project_id=test-project
+2026-04-18 23:09:48 INFO api request_complete duration_ms=7 method=POST path=/ui/structures/new project_id=test-project status=303
+2026-04-18 23:09:48 INFO api server_message message="GET /ui/structures/struct_form?lang=en HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:48 INFO api request_complete duration_ms=3 method=GET path=/ui/structures/struct_form?lang=en project_id=test-project status=200
+2026-04-18 23:09:48 INFO ui structure_form_submit mode=edit project_id=test-project structure_id=struct_form write_mode=auto
+2026-04-18 23:09:48 INFO services structure_upserted actor_type=system binary_id=bin-main field_count=1 project_id=test-project structure_id=struct_form
+2026-04-18 23:09:48 INFO ui structure_form_saved project_id=test-project structure_id=struct_form
+2026-04-18 23:09:48 INFO api server_message message="POST /ui/structures/struct_form/edit HTTP/1.1" 303 - project_id=test-project
+2026-04-18 23:09:48 INFO api request_complete duration_ms=6 method=POST path=/ui/structures/struct_form/edit project_id=test-project status=303
+2026-04-18 23:09:48 INFO api server_message message="GET /ui/structures/struct_form?lang=en HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:48 INFO api request_complete duration_ms=3 method=GET path=/ui/structures/struct_form?lang=en project_id=test-project status=200
+2026-04-18 23:09:48 INFO api server_message message="GET /structures/struct_form HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:48 INFO api request_complete duration_ms=2 method=GET path=/structures/struct_form project_id=test-project status=200
+ok
+test_app_config_round_trip (test_config_cli.ConfigAndCliTests) ... ok
+test_cli_additional_unknown_project_branches (test_config_cli.ConfigAndCliTests) ... 2026-04-18 23:09:49 INFO cli command_start command=export-json
+usage: mcp-memory [-h] [--app-home APP_HOME] [--log-level LOG_LEVEL]
+                  {init-app,create-project,list-projects,export-json,import-json,backup-project,restore-project,list-pending,confirm-change,reject-change,run-http-api,run-mcp,run-ui-home}
+                  ...
+mcp-memory: error: Unknown project_id: missing-project
+2026-04-18 23:09:49 INFO cli command_start command=import-json
+usage: mcp-memory [-h] [--app-home APP_HOME] [--log-level LOG_LEVEL]
+                  {init-app,create-project,list-projects,export-json,import-json,backup-project,restore-project,list-pending,confirm-change,reject-change,run-http-api,run-mcp,run-ui-home}
+                  ...
+mcp-memory: error: Unknown project_id: missing-project
+2026-04-18 23:09:49 INFO cli command_start command=backup-project
+usage: mcp-memory [-h] [--app-home APP_HOME] [--log-level LOG_LEVEL]
+                  {init-app,create-project,list-projects,export-json,import-json,backup-project,restore-project,list-pending,confirm-change,reject-change,run-http-api,run-mcp,run-ui-home}
+                  ...
+mcp-memory: error: Unknown project_id: missing-project
+2026-04-18 23:09:49 INFO cli command_start command=list-pending
+usage: mcp-memory [-h] [--app-home APP_HOME] [--log-level LOG_LEVEL]
+                  {init-app,create-project,list-projects,export-json,import-json,backup-project,restore-project,list-pending,confirm-change,reject-change,run-http-api,run-mcp,run-ui-home}
+                  ...
+mcp-memory: error: Unknown project_id: missing-project
+2026-04-18 23:09:49 INFO cli command_start command=confirm-change
+usage: mcp-memory [-h] [--app-home APP_HOME] [--log-level LOG_LEVEL]
+                  {init-app,create-project,list-projects,export-json,import-json,backup-project,restore-project,list-pending,confirm-change,reject-change,run-http-api,run-mcp,run-ui-home}
+                  ...
+mcp-memory: error: Unknown project_id: missing-project
+2026-04-18 23:09:49 INFO cli command_start command=reject-change
+usage: mcp-memory [-h] [--app-home APP_HOME] [--log-level LOG_LEVEL]
+                  {init-app,create-project,list-projects,export-json,import-json,backup-project,restore-project,list-pending,confirm-change,reject-change,run-http-api,run-mcp,run-ui-home}
+                  ...
+mcp-memory: error: Unknown project_id: missing-project
+2026-04-18 23:09:49 INFO cli command_start command=run-mcp
+usage: mcp-memory [-h] [--app-home APP_HOME] [--log-level LOG_LEVEL]
+                  {init-app,create-project,list-projects,export-json,import-json,backup-project,restore-project,list-pending,confirm-change,reject-change,run-http-api,run-mcp,run-ui-home}
+                  ...
+mcp-memory: error: Unknown project_id: missing-project
+ok
+test_cli_commands_write_runtime_log_file (test_config_cli.ConfigAndCliTests) ... 2026-04-18 23:09:49 INFO cli command_start command=init-app
+2026-04-18 23:09:49 INFO services app_initialized app_home=C:\Users\GreenZadora\AppData\Local\Temp\tmpts2tre9t\app project_count=0
+2026-04-18 23:09:49 INFO cli command_finish command=init-app project_count=0 status=ok
+ok
+test_cli_export_import_backup_and_restore_commands (test_config_cli.ConfigAndCliTests) ... 2026-04-18 23:09:49 INFO cli command_start command=export-json
+2026-04-18 23:09:49 INFO cli command_finish command=export-json output_path=C:\Users\GREENZ~1\AppData\Local\Temp\tmp9xlxksv6\bundle.json project_id=p1 status=ok
+2026-04-18 23:09:49 INFO cli command_start command=import-json
+2026-04-18 23:09:49 INFO cli command_finish command=import-json input_path=C:\Users\GREENZ~1\AppData\Local\Temp\tmp9xlxksv6\bundle.json project_id=p1 replace_existing=False status=ok
+2026-04-18 23:09:49 INFO cli command_start command=backup-project
+2026-04-18 23:09:49 INFO cli command_finish command=backup-project output_path=C:\Users\GREENZ~1\AppData\Local\Temp\tmp9xlxksv6\backup.zip project_id=p1 status=ok
+2026-04-18 23:09:49 INFO cli command_start command=restore-project
+2026-04-18 23:09:49 INFO cli command_finish command=restore-project project_id=p1 project_root=C:\Users\GREENZ~1\AppData\Local\Temp\tmp9xlxksv6\project status=ok
+ok
+test_cli_init_create_and_list (test_config_cli.ConfigAndCliTests) ... 2026-04-18 23:09:49 INFO cli command_start command=init-app
+2026-04-18 23:09:49 INFO services app_initialized app_home=C:\Users\GreenZadora\AppData\Local\Temp\tmp6ox1n07l\app project_count=0
+2026-04-18 23:09:49 INFO cli command_finish command=init-app project_count=0 status=ok
+2026-04-18 23:09:49 INFO cli command_start command=create-project
+2026-04-18 23:09:49 INFO services project_created http_port=12000 mcp_port=12001 project_id=p1 project_root=C:\Users\GreenZadora\AppData\Local\Temp\tmp6ox1n07l\project write_mode=confirm
+2026-04-18 23:09:49 INFO cli command_finish command=create-project project_id=p1 status=ok write_mode=confirm
+2026-04-18 23:09:49 INFO cli command_start command=list-projects
+2026-04-18 23:09:49 INFO cli command_finish command=list-projects project_count=1 status=ok
+ok
+test_cli_main_module_invokes_run (test_config_cli.ConfigAndCliTests) ... ok
+test_cli_pending_change_commands (test_config_cli.ConfigAndCliTests) ... 2026-04-18 23:09:49 INFO cli command_start command=list-pending
+2026-04-18 23:09:49 INFO cli command_finish command=list-pending pending_count=0 project_id=p1 status=ok
+2026-04-18 23:09:49 INFO cli command_start command=confirm-change
+2026-04-18 23:09:49 INFO cli command_finish command=confirm-change pending_change_id=pc1 project_id=p1 status=ok
+2026-04-18 23:09:49 INFO cli command_start command=reject-change
+2026-04-18 23:09:49 INFO cli command_finish command=reject-change pending_change_id=pc2 project_id=p1 status=ok
+ok
+test_cli_run_http_api_unknown_project_raises_system_exit (test_config_cli.ConfigAndCliTests) ... 2026-04-18 23:09:49 INFO cli command_start command=run-http-api
+usage: mcp-memory [-h] [--app-home APP_HOME] [--log-level LOG_LEVEL]
+                  {init-app,create-project,list-projects,export-json,import-json,backup-project,restore-project,list-pending,confirm-change,reject-change,run-http-api,run-mcp,run-ui-home}
+                  ...
+mcp-memory: error: Unknown project_id: missing-project
+ok
+test_cli_run_http_api_uses_project_defaults (test_config_cli.ConfigAndCliTests) ... ok
+test_cli_run_mcp_uses_project_defaults (test_config_cli.ConfigAndCliTests) ... ok
+test_cli_run_ui_home_uses_defaults (test_config_cli.ConfigAndCliTests) ... 2026-04-18 23:09:49 INFO cli command_start command=run-ui-home
+2026-04-18 23:09:49 INFO cli server_dispatch command=run-ui-home host=127.0.0.1 port=8764
+ok
+test_cli_unknown_command_reaches_parser_error_branch (test_config_cli.ConfigAndCliTests) ... 2026-04-18 23:09:49 INFO cli command_start command=unexpected
+ok
+test_project_config_round_trip (test_config_cli.ConfigAndCliTests) ... ok
+test_project_service_duplicate_project_id_raises (test_config_cli.ConfigAndCliTests) ... ok
+test_project_service_rejects_non_empty_project_root (test_config_cli.ConfigAndCliTests) ... ok
+test_project_service_rejects_other_invalid_inputs (test_config_cli.ConfigAndCliTests) ... ok
+test_registry_load_save_upsert_and_list (test_config_cli.ConfigAndCliTests) ... ok
+test_resolve_app_home_priority (test_config_cli.ConfigAndCliTests) ... ok
+test_resolve_registry_path (test_config_cli.ConfigAndCliTests) ... ok
+test_home_handler_creates_project_from_form (test_gui_home.GuiHomeTests) ... ok
+test_home_handler_post_actions (test_gui_home.GuiHomeTests) ... ok
+test_home_handler_rejects_invalid_project_form (test_gui_home.GuiHomeTests) ... ok
+test_home_handler_renders_create_project_form (test_gui_home.GuiHomeTests) ... ok
+test_home_http_handler_renders_project_and_assets (test_gui_home.GuiHomeTests) ... FAIL
+test_parse_project_create_form_rejects_invalid_root_and_ports (test_gui_home.GuiHomeTests) ... ok
+test_probe_project_http_health_running_and_offline (test_gui_home.GuiHomeTests) ... 2026-04-18 23:09:52 INFO ui_home project_probe project_id=test-project state=offline url=http://127.0.0.1:59356/health
+2026-04-18 23:09:52 INFO ui_home project_probe project_id=test-project state=running url=http://127.0.0.1:59356/health
+ok
+test_project_form_helpers_cover_defaults_and_rendering (test_gui_home.GuiHomeTests) ... ok
+test_render_home_page_empty_registry (test_gui_home.GuiHomeTests) ... ok
+test_render_home_page_russian_language (test_gui_home.GuiHomeTests) ... ok
+test_render_home_page_shows_start_for_stopped_project (test_gui_home.GuiHomeTests) ... ok
+test_render_project_actions_and_hints_cover_runtime_variants (test_gui_home.GuiHomeTests) ... ok
+test_serve_ui_home_constructs_server (test_gui_home.GuiHomeTests) ... 2026-04-18 23:09:53 INFO ui_home server_start app_home=C:\Users\GREENZ~1\AppData\Local\Temp\tmpd_ls9bg_\app host=127.0.0.1 port=8764
+ok
+test_configure_logging_replaces_handlers_instead_of_duplicating (test_logging_runtime.LoggingRuntimeTests) ... 2026-04-18 23:09:53 INFO services project_created project_id=p1
+ok
+test_configure_logging_writes_to_expected_file (test_logging_runtime.LoggingRuntimeTests) ... 2026-04-18 23:09:53 INFO api server_start host=127.0.0.1 port=8765
+ok
+test_formatter_emits_plain_text_fields (test_logging_runtime.LoggingRuntimeTests) ... ok
+test_additional_tool_handlers (test_mcp_server.McpServerTests) ... 2026-04-18 23:09:53 INFO services function_upserted actor_type=system address=0x401000 binary_id=bin-main function_id=fn_main mode=clean project_id=test-project
+2026-04-18 23:09:53 INFO mcp tool_call project_id=test-project tool_name=create_structure
+2026-04-18 23:09:53 INFO services structure_upserted actor_type=system binary_id=bin-main field_count=0 project_id=test-project structure_id=struct_extra
+2026-04-18 23:09:53 INFO mcp server_message message="POST /mcp HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:53 INFO mcp request_complete duration_ms=7 method=POST path=/mcp project_id=test-project status=200
+2026-04-18 23:09:53 INFO mcp tool_call project_id=test-project tool_name=create_hypothesis
+2026-04-18 23:09:53 INFO services global_hypothesis_upserted actor_type=system hypothesis_id=gh_extra project_id=test-project status=new
+2026-04-18 23:09:53 INFO mcp server_message message="POST /mcp HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:53 INFO mcp request_complete duration_ms=7 method=POST path=/mcp project_id=test-project status=200
+2026-04-18 23:09:53 INFO mcp tool_call project_id=test-project tool_name=add_evidence
+2026-04-18 23:09:53 INFO services evidence_created actor_type=system attachment=False entity_id=fn_main entity_type=function evidence_id=e_extra project_id=test-project
+2026-04-18 23:09:53 INFO mcp server_message message="POST /mcp HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:53 INFO mcp request_complete duration_ms=6 method=POST path=/mcp project_id=test-project status=200
+2026-04-18 23:09:53 INFO mcp tool_call project_id=test-project tool_name=list_pending_changes
+2026-04-18 23:09:53 INFO mcp server_message message="POST /mcp HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:53 INFO mcp request_complete duration_ms=2 method=POST path=/mcp project_id=test-project status=200
+ok
+test_confirm_mode_tools_queue_and_apply_pending_changes (test_mcp_server.McpServerTests) ... 2026-04-18 23:09:53 INFO services function_upserted actor_type=system address=0x401000 binary_id=bin-main function_id=fn_main mode=clean project_id=test-project
+2026-04-18 23:09:53 INFO mcp tool_call project_id=test-project tool_name=create_function
+2026-04-18 23:09:53 INFO services pending_created entity_id=fn_pending entity_type=function operation=upsert_function pending_change_id=b7950b69-230b-4521-ba73-ecea5f270933 project_id=test-project
+2026-04-18 23:09:53 INFO mcp server_message message="POST /mcp HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:53 INFO mcp request_complete duration_ms=6 method=POST path=/mcp project_id=test-project status=200
+2026-04-18 23:09:53 INFO mcp tool_call project_id=test-project tool_name=list_pending_changes
+2026-04-18 23:09:53 INFO mcp server_message message="POST /mcp HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:53 INFO mcp request_complete duration_ms=4 method=POST path=/mcp project_id=test-project status=200
+2026-04-18 23:09:53 INFO mcp tool_call project_id=test-project tool_name=confirm_change
+2026-04-18 23:09:53 INFO services function_upserted actor_type=agent address=0x401300 binary_id=bin-main function_id=fn_pending mode=clean project_id=test-project
+2026-04-18 23:09:53 INFO services pending_confirmed actor_type=agent operation=upsert_function pending_change_id=b7950b69-230b-4521-ba73-ecea5f270933 project_id=test-project
+2026-04-18 23:09:53 INFO mcp server_message message="POST /mcp HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:53 INFO mcp request_complete duration_ms=8 method=POST path=/mcp project_id=test-project status=200
+2026-04-18 23:09:53 INFO mcp tool_call project_id=test-project tool_name=get_record
+2026-04-18 23:09:53 INFO mcp server_message message="POST /mcp HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:53 INFO mcp request_complete duration_ms=3 method=POST path=/mcp project_id=test-project status=200
+2026-04-18 23:09:53 INFO mcp tool_call project_id=test-project tool_name=create_relation
+2026-04-18 23:09:53 INFO services pending_created entity_id=function:fn_main->function:fn_pending entity_type=relation operation=create_relation pending_change_id=c57345a2-54bf-43d6-b810-3f7df00531e6 project_id=test-project
+2026-04-18 23:09:53 INFO mcp server_message message="POST /mcp HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:53 INFO mcp request_complete duration_ms=5 method=POST path=/mcp project_id=test-project status=200
+2026-04-18 23:09:53 INFO mcp tool_call project_id=test-project tool_name=reject_change
+2026-04-18 23:09:53 WARNING services pending_rejected operation=create_relation pending_change_id=c57345a2-54bf-43d6-b810-3f7df00531e6 project_id=test-project
+2026-04-18 23:09:53 INFO mcp server_message message="POST /mcp HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:53 INFO mcp request_complete duration_ms=6 method=POST path=/mcp project_id=test-project status=200
+ok
+test_health_and_initialize (test_mcp_server.McpServerTests) ... 2026-04-18 23:09:53 INFO services function_upserted actor_type=system address=0x401000 binary_id=bin-main function_id=fn_main mode=clean project_id=test-project
+2026-04-18 23:09:53 INFO mcp server_message message="GET /health HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:53 INFO mcp request_complete duration_ms=0 method=GET path=/health project_id=test-project status=200
+2026-04-18 23:09:53 INFO mcp server_message message="POST /mcp HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:53 INFO mcp request_complete duration_ms=0 method=POST path=/mcp project_id=test-project status=200
+ok
+test_invalid_requests_return_rpc_errors (test_mcp_server.McpServerTests) ... 2026-04-18 23:09:53 INFO services function_upserted actor_type=system address=0x401000 binary_id=bin-main function_id=fn_main mode=clean project_id=test-project
+2026-04-18 23:09:53 INFO mcp server_message message="POST /mcp HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:53 INFO mcp request_complete duration_ms=0 method=POST path=/mcp project_id=test-project status=200
+2026-04-18 23:09:53 INFO mcp server_message message="POST /mcp HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:53 INFO mcp request_complete duration_ms=0 method=POST path=/mcp project_id=test-project status=200
+2026-04-18 23:09:53 WARNING mcp request_validation_error error=Unknown tool: missing_tool method=POST path=/mcp project_id=test-project
+2026-04-18 23:09:53 INFO mcp server_message message="POST /mcp HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:53 INFO mcp request_complete duration_ms=0 method=POST path=/mcp project_id=test-project status=200
+2026-04-18 23:09:53 INFO mcp tool_call project_id=test-project tool_name=get_record
+2026-04-18 23:09:53 WARNING mcp request_validation_error error=Record not found method=POST path=/mcp project_id=test-project
+2026-04-18 23:09:53 INFO mcp server_message message="POST /mcp HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:53 INFO mcp request_complete duration_ms=2 method=POST path=/mcp project_id=test-project status=200
+2026-04-18 23:09:53 INFO mcp server_message message="GET /missing HTTP/1.1" 404 - project_id=test-project
+2026-04-18 23:09:53 WARNING mcp request_complete duration_ms=0 method=GET path=/missing project_id=test-project status=404
+2026-04-18 23:09:53 INFO mcp server_message message="POST /wrong HTTP/1.1" 404 - project_id=test-project
+2026-04-18 23:09:53 WARNING mcp request_complete duration_ms=0 method=POST path=/wrong project_id=test-project status=404
+2026-04-18 23:09:53 INFO mcp server_message message="POST /mcp HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:53 INFO mcp request_complete duration_ms=0 method=POST path=/mcp project_id=test-project status=200
+2026-04-18 23:09:53 WARNING mcp request_validation_error error=params must be an object method=POST path=/mcp project_id=test-project
+2026-04-18 23:09:53 INFO mcp server_message message="POST /mcp HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:53 INFO mcp request_complete duration_ms=0 method=POST path=/mcp project_id=test-project status=200
+2026-04-18 23:09:53 WARNING mcp request_validation_error error=tool arguments must be an object method=POST path=/mcp project_id=test-project
+2026-04-18 23:09:53 INFO mcp server_message message="POST /mcp HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:53 INFO mcp request_complete duration_ms=0 method=POST path=/mcp project_id=test-project status=200
+2026-04-18 23:09:53 INFO mcp tool_call project_id=test-project tool_name=get_record
+2026-04-18 23:09:53 WARNING mcp request_validation_error error=Unsupported entity_type: unknown method=POST path=/mcp project_id=test-project
+2026-04-18 23:09:53 INFO mcp server_message message="POST /mcp HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:53 INFO mcp request_complete duration_ms=2 method=POST path=/mcp project_id=test-project status=200
+2026-04-18 23:09:53 INFO mcp server_message message="POST /mcp HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:53 INFO mcp request_complete duration_ms=0 method=POST path=/mcp project_id=test-project status=200
+ok
+test_runtime_logs_are_written_for_mcp_activity (test_mcp_server.McpServerTests) ... 2026-04-18 23:09:53 INFO services function_upserted actor_type=system address=0x401000 binary_id=bin-main function_id=fn_main mode=clean project_id=test-project
+2026-04-18 23:09:53 INFO mcp server_message message="POST /mcp HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:53 INFO mcp request_complete duration_ms=0 method=POST path=/mcp project_id=test-project status=200
+2026-04-18 23:09:53 INFO mcp tool_call project_id=test-project tool_name=search_records
+2026-04-18 23:09:53 INFO mcp server_message message="POST /mcp HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:53 INFO mcp request_complete duration_ms=3 method=POST path=/mcp project_id=test-project status=200
+ok
+test_serve_project_mcp_api_constructs_server (test_mcp_server.McpServerTests) ... 2026-04-18 23:09:54 INFO services function_upserted actor_type=system address=0x401000 binary_id=bin-main function_id=fn_main mode=clean project_id=test-project
+2026-04-18 23:09:54 INFO mcp server_start host=127.0.0.1 port=9998 project_id=test-project
+ok
+test_tools_list_and_calls (test_mcp_server.McpServerTests) ... 2026-04-18 23:09:54 INFO services function_upserted actor_type=system address=0x401000 binary_id=bin-main function_id=fn_main mode=clean project_id=test-project
+2026-04-18 23:09:54 INFO mcp server_message message="POST /mcp HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:54 INFO mcp request_complete duration_ms=2 method=POST path=/mcp project_id=test-project status=200
+2026-04-18 23:09:54 INFO mcp tool_call project_id=test-project tool_name=get_project_config
+2026-04-18 23:09:54 INFO mcp server_message message="POST /mcp HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:54 INFO mcp request_complete duration_ms=1 method=POST path=/mcp project_id=test-project status=200
+2026-04-18 23:09:54 INFO mcp tool_call project_id=test-project tool_name=search_records
+2026-04-18 23:09:54 INFO mcp server_message message="POST /mcp HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:54 INFO mcp request_complete duration_ms=3 method=POST path=/mcp project_id=test-project status=200
+2026-04-18 23:09:54 INFO mcp tool_call project_id=test-project tool_name=get_record
+2026-04-18 23:09:54 INFO mcp server_message message="POST /mcp HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:54 INFO mcp request_complete duration_ms=2 method=POST path=/mcp project_id=test-project status=200
+2026-04-18 23:09:54 INFO mcp tool_call project_id=test-project tool_name=create_function
+2026-04-18 23:09:54 INFO services function_upserted actor_type=system address=0x401100 binary_id=bin-main function_id=fn_helper mode=clean project_id=test-project
+2026-04-18 23:09:54 INFO mcp server_message message="POST /mcp HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:54 INFO mcp request_complete duration_ms=6 method=POST path=/mcp project_id=test-project status=200
+2026-04-18 23:09:54 INFO mcp tool_call project_id=test-project tool_name=create_relation
+2026-04-18 23:09:54 INFO services relation_created actor_type=system from_entity_id=fn_main from_entity_type=function project_id=test-project relation_id=c6bafa43-a753-4ab4-859a-4c6e2851eaab relation_type=calls to_entity_id=fn_helper to_entity_type=function
+2026-04-18 23:09:54 INFO mcp server_message message="POST /mcp HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:54 INFO mcp request_complete duration_ms=5 method=POST path=/mcp project_id=test-project status=200
+2026-04-18 23:09:54 INFO mcp tool_call project_id=test-project tool_name=get_related
+2026-04-18 23:09:54 INFO mcp server_message message="POST /mcp HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:54 INFO mcp request_complete duration_ms=2 method=POST path=/mcp project_id=test-project status=200
+2026-04-18 23:09:54 INFO mcp tool_call project_id=test-project tool_name=export_json
+2026-04-18 23:09:54 INFO services project_exported function_count=2 output_path=C:\Users\GreenZadora\AppData\Local\Temp\tmpo1wqvr01\bundle.json project_id=test-project structure_count=0
+2026-04-18 23:09:54 INFO mcp server_message message="POST /mcp HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:54 INFO mcp request_complete duration_ms=4 method=POST path=/mcp project_id=test-project status=200
+2026-04-18 23:09:54 INFO mcp tool_call project_id=test-project tool_name=import_json
+2026-04-18 23:09:54 INFO services function_upserted actor_type=system address=0x401100 binary_id=bin-main function_id=fn_helper mode=clean project_id=test-project
+2026-04-18 23:09:54 INFO services function_upserted actor_type=system address=0x401000 binary_id=bin-main function_id=fn_main mode=clean project_id=test-project
+2026-04-18 23:09:54 INFO services relation_created actor_type=system from_entity_id=fn_main from_entity_type=function project_id=test-project relation_id=0cdebd54-14f7-4997-9351-714c2cd77ae7 relation_type=calls to_entity_id=fn_helper to_entity_type=function
+2026-04-18 23:09:54 INFO services project_imported function_count=2 input_path=C:\Users\GreenZadora\AppData\Local\Temp\tmpo1wqvr01\bundle.json project_id=test-project replace_existing=True structure_count=0
+2026-04-18 23:09:54 INFO mcp server_message message="POST /mcp HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:54 INFO mcp request_complete duration_ms=16 method=POST path=/mcp project_id=test-project status=200
+2026-04-18 23:09:54 INFO mcp tool_call project_id=test-project tool_name=backup_project
+2026-04-18 23:09:54 INFO services project_backed_up file_count=2 output_path=C:\Users\GreenZadora\AppData\Local\Temp\tmpo1wqvr01\backup.zip project_id=test-project
+2026-04-18 23:09:54 INFO mcp server_message message="POST /mcp HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:54 INFO mcp request_complete duration_ms=17 method=POST path=/mcp project_id=test-project status=200
+2026-04-18 23:09:54 INFO mcp tool_call project_id=test-project tool_name=restore_project
+2026-04-18 23:09:54 INFO services project_restored input_path=C:\Users\GreenZadora\AppData\Local\Temp\tmpo1wqvr01\backup.zip project_id=restored-project project_root=C:\Users\GreenZadora\AppData\Local\Temp\tmpo1wqvr01\restored_project
+2026-04-18 23:09:54 INFO mcp server_message message="POST /mcp HTTP/1.1" 200 - project_id=test-project
+2026-04-18 23:09:54 INFO mcp request_complete duration_ms=19 method=POST path=/mcp project_id=test-project status=200
+ok
+test_get_project_runtime_marks_failed_when_managed_processes_exit (test_runtime_manager.RuntimeManagerTests) ... ok
+test_get_project_runtime_reports_external_running (test_runtime_manager.RuntimeManagerTests) ... ok
+test_restart_project_restarts_managed_processes (test_runtime_manager.RuntimeManagerTests) ... ok
+test_shutdown_all_stops_managed_projects (test_runtime_manager.RuntimeManagerTests) ... ok
+test_start_project_marks_failed_when_health_never_comes_up (test_runtime_manager.RuntimeManagerTests) ... ok
+test_start_project_marks_running (test_runtime_manager.RuntimeManagerTests) ... ok
+test_start_project_returns_existing_running_managed_project (test_runtime_manager.RuntimeManagerTests) ... ok
+test_stop_managed_kills_process_after_timeout (test_runtime_manager.RuntimeManagerTests) ... ok
+test_stop_project_for_unmanaged_project_returns_stopped (test_runtime_manager.RuntimeManagerTests) ... ok
+test_stop_project_terminates_managed_processes (test_runtime_manager.RuntimeManagerTests) ... ok
+test_evidence_service_create_list_and_validation (test_services.ServiceTests) ... ok
+test_evidence_service_without_attachment_and_validation_edges (test_services.ServiceTests) ... ok
+test_function_service_rejects_invalid_and_conflicting_data (test_services.ServiceTests) ... ok
+test_function_service_update_and_validation_branches (test_services.ServiceTests) ... ok
+test_function_service_upsert_get_list (test_services.ServiceTests) ... ok
+test_global_hypothesis_service_update_missing_and_validation_edges (test_services.ServiceTests) ... ok
+test_global_hypothesis_service_upsert_and_validation (test_services.ServiceTests) ... ok
+test_pending_change_service_create_confirm_and_reject (test_services.ServiceTests) ... ok
+test_pending_change_service_other_operations_and_errors (test_services.ServiceTests) ... ok
+test_project_service_update_project_and_validation (test_services.ServiceTests) ... ok
+test_relation_service_create_list_traverse_and_validation (test_services.ServiceTests) ... ok
+test_relation_service_rejects_blank_fields (test_services.ServiceTests) ... ok
+test_search_service_filters_by_query_type_tag_binary_and_address (test_services.ServiceTests) ... ok
+test_storage_bootstrap_is_idempotent_and_database_context_manager_closes (test_services.ServiceTests) ... ok
+test_structure_service_lists_all_and_rejects_validation_edges (test_services.ServiceTests) ... ok
+test_structure_service_upsert_and_validation (test_services.ServiceTests) ... ok
+test_backup_and_restore_roundtrip (test_transfer_archive.TransferAndArchiveTests) ... ok
+test_export_import_roundtrip (test_transfer_archive.TransferAndArchiveTests) ... ok
+test_transfer_and_archive_edge_cases (test_transfer_archive.TransferAndArchiveTests) ... ok
+
+======================================================================
+FAIL: test_ui_get_endpoints (test_api_server.ApiServerTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "F:\dev\mcp-memory\tests\test_api_server.py", line 263, in test_ui_get_endpoints
+    self.assertIn("--paper", css)
+AssertionError: '--paper' not found in ':root {\n  /* ========================================\n     PHASE 1: DESIGN SYSTEM - DARK THEME\n     ======================================== */\n\n  /* ----- Backgrounds ----- */\n  --bg-primary: #1e1f29;\n  --bg-secondary: #282a36;\n  --bg-tertiary: #31343c;\n  --bg-hover: #3a3d4a;\n  --bg-active: #44475a;\n\n  /* ----- Text ----- */\n  --text-primary: #f8f8f2;\n  --text-secondary: #b8bcc8;\n  --text-muted: #6272a4;\n  --text-link: #8be9fd;\n\n  /* ----- Accent Colors (Dracula) ----- */\n  --accent-cyan: #8be9fd;\n  --accent-green: #50fa7b;\n  --accent-orange: #ffb86c;\n  --accent-pink: #ff79c6;\n  --accent-purple: #bd93f9;\n  --accent-red: #ff5555;\n  --accent-yellow: #f1fa8c;\n\n  /* ----- Semantic Colors ----- */\n  --color-function: #8be9fd;\n  --color-structure: #50fa7b;\n  --color-hypothesis: #ffb86c;\n  --color-evidence: #ff79c6;\n  --color-relation: #bd93f9;\n\n  /* ----- Confidence Colors ----- */\n  --confidence-high: #50fa7b;\n  --confidence-medium: #ffb86c;\n  --confidence-low: #ff5555;\n\n  /* ----- Status Colors ----- */\n  --status-new: #8be9fd;\n  --status-confirmed: #50fa7b;\n  --status-rejected: #ff5555;\n  --status-pending: #f1fa8c;\n\n  /* ----- Typography ----- */\n  --font-sans: system-ui, -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, sans-serif;\n  --font-mono: \'Cascadia Code\', \'Fira Code\', Consolas, monospace;\n\n  --text-xs: 12px;\n  --text-sm: 14px;\n  --text-base: 16px;\n  --text-lg: 18px;\n  --text-xl: 24px;\n  --text-2xl: 32px;\n\n  --leading-tight: 1.3;\n  --leading-normal: 1.5;\n  --leading-relaxed: 1.7;\n\n  /* ----- Spacing ----- */\n  --space-1: 4px;\n  --space-2: 8px;\n  --space-3: 12px;\n  --space-4: 16px;\n  --space-5: 24px;\n  --space-6: 32px;\n  --space-8: 48px;\n\n  /* ----- Border Radius ----- */\n  --radius-sm: 4px;\n  --radius-md: 8px;\n  --radius-lg: 12px;\n  --radius-xl: 16px;\n  --radius-full: 9999px;\n\n  /* ----- Shadows ----- */\n  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);\n  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);\n  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);\n  --shadow-glow: 0 0 20px rgba(139, 233, 253, 0.15);\n\n  /* ----- Layout ----- */\n  --sidebar-width: 240px;\n  --sidebar-collapsed: 64px;\n  --topbar-height: 56px;\n  --content-max-width: 1200px;\n}\n\n/* ========================================\n     BASE STYLES\n     ======================================== */\n\n* {\n  box-sizing: border-box;\n}\n\nhtml, body {\n  margin: 0;\n  padding: 0;\n  min-height: 100vh;\n  background: var(--bg-primary);\n  color: var(--text-primary);\n  font-family: var(--font-sans);\n  font-size: var(--text-base);\n  line-height: var(--leading-normal);\n}\n\n[data-theme="light"] {\n  --bg-primary: #f7f1e8;\n  --bg-secondary: rgba(255, 250, 244, 0.88);\n  --bg-tertiary: #ebe4da;\n  --bg-hover: #e0d9ce;\n  --bg-active: #dccfbe;\n  --text-primary: #22313a;\n  --text-secondary: #54656d;\n  --text-muted: #9aa0a8;\n  --text-link: #3a7d76;\n  --accent-cyan: #3a7d76;\n  --accent-green: #7f9a76;\n  --accent-orange: #b88934;\n  --accent-pink: #cf7b62;\n  --accent-purple: #8b7dbd;\n  --accent-red: #c75d4a;\n  --accent-yellow: #b8a034;\n}\n\na {\n  color: var(--text-link);\n  text-decoration: none;\n  transition: opacity 0.15s ease;\n}\n\na:hover {\n  opacity: 0.8;\n  text-decoration: none;\n}\n\nh1, h2, h3, h4, h5, h6 {\n  margin: 0 0 var(--space-3);\n  font-weight: 600;\n  line-height: var(--leading-tight);\n}\n\nh1 { font-size: var(--text-2xl); }\nh2 { font-size: var(--text-xl); }\nh3 { font-size: var(--text-lg); }\n\np {\n  margin: 0 0 var(--space-3);\n}\n\ncode, pre {\n  font-family: var(--font-mono);\n}\n\npre {\n  background: var(--bg-primary);\n  padding: var(--space-4);\n  border-radius: var(--radius-md);\n  overflow-x: auto;\n}\n\n/* ========================================\n     APP SHELL - LAYOUT\n     ======================================== */\n\n.app-shell {\n  display: flex;\n  min-height: 100vh;\n}\n\n/* ----- Sidebar ----- */\n.sidebar {\n  position: fixed;\n  left: 0;\n  top: 0;\n  bottom: 0;\n  width: var(--sidebar-width);\n  background: var(--bg-secondary);\n  border-right: 1px solid var(--bg-tertiary);\n  display: flex;\n  flex-direction: column;\n  transition: width 0.2s ease, transform 0.2s ease;\n  z-index: 100;\n  overflow: hidden;\n}\n\n.sidebar.collapsed {\n  width: var(--sidebar-collapsed);\n}\n\n.sidebar-header {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: var(--space-4);\n  border-bottom: 1px solid var(--bg-tertiary);\n  min-height: var(--topbar-height);\n}\n\n.sidebar-brand {\n  font-size: var(--text-lg);\n  font-weight: 700;\n  color: var(--text-primary);\n  white-space: nowrap;\n  overflow: hidden;\n}\n\n.sidebar.collapsed .sidebar-brand {\n  display: none;\n}\n\n.sidebar-toggle {\n  background: none;\n  border: none;\n  color: var(--text-secondary);\n  cursor: pointer;\n  padding: var(--space-2);\n  border-radius: var(--radius-sm);\n  transition: background 0.15s ease;\n}\n\n.sidebar-toggle:hover {\n  background: var(--bg-tertiary);\n}\n\n.sidebar-nav {\n  flex: 1;\n  overflow-y: auto;\n  padding: var(--space-2) 0;\n}\n\n.sidebar-group {\n  margin-bottom: var(--space-4);\n}\n\n.sidebar-group-title {\n  padding: var(--space-2) var(--space-4);\n  font-size: var(--text-xs);\n  font-weight: 600;\n  color: var(--text-muted);\n  text-transform: uppercase;\n  letter-spacing: 0.08em;\n  white-space: nowrap;\n  overflow: hidden;\n}\n\n.sidebar.collapsed .sidebar-group-title {\n  display: none;\n}\n\n.sidebar-link {\n  display: flex;\n  align-items: center;\n  gap: var(--space-3);\n  padding: var(--space-3) var(--space-4);\n  color: var(--text-secondary);\n  transition: all 0.15s ease;\n  border-left: 3px solid transparent;\n}\n\n.sidebar-link:hover {\n  background: var(--bg-hover);\n  color: var(--text-primary);\n}\n\n.sidebar-link.active {\n  background: var(--bg-active);\n  color: var(--text-primary);\n  border-left-color: var(--accent-cyan);\n}\n\n.sidebar-icon {\n  width: 20px;\n  height: 20px;\n  flex-shrink: 0;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n}\n\n.sidebar-label {\n  white-space: nowrap;\n  overflow: hidden;\n}\n\n.sidebar.collapsed .sidebar-label {\n  display: none;\n}\n\n/* ----- Main Area ----- */\n.main-area {\n  flex: 1;\n  margin-left: var(--sidebar-width);\n  display: flex;\n  flex-direction: column;\n  min-height: 100vh;\n  transition: margin-left 0.2s ease;\n}\n\n.sidebar.collapsed ~ .main-area {\n  margin-left: var(--sidebar-collapsed);\n}\n\n/* ----- Top Bar ----- */\n.top-bar {\n  position: sticky;\n  top: 0;\n  height: var(--topbar-height);\n  background: var(--bg-secondary);\n  border-bottom: 1px solid var(--bg-tertiary);\n  display: flex;\n  align-items: center;\n  padding: 0 var(--space-5);\n  gap: var(--space-4);\n  z-index: 50;\n}\n\n.top-bar-search {\n  flex: 1;\n  max-width: 480px;\n}\n\n.search-input {\n  width: 100%;\n  padding: var(--space-2) var(--space-4);\n  background: var(--bg-tertiary);\n  border: 1px solid transparent;\n  border-radius: var(--radius-full);\n  color: var(--text-primary);\n  font-size: var(--text-sm);\n  transition: all 0.15s ease;\n}\n\n.search-input::placeholder {\n  color: var(--text-muted);\n}\n\n.search-input:focus {\n  outline: none;\n  background: var(--bg-hover);\n  border-color: var(--accent-cyan);\n  box-shadow: var(--shadow-glow);\n}\n\n.top-bar-actions {\n  display: flex;\n  align-items: center;\n  gap: var(--space-3);\n}\n\n.theme-toggle {\n  background: none;\n  border: none;\n  color: var(--text-secondary);\n  cursor: pointer;\n  padding: var(--space-2);\n  border-radius: var(--radius-sm);\n}\n\n.theme-toggle:hover {\n  background: var(--bg-tertiary);\n}\n\n/* ----- Breadcrumbs ----- */\n.breadcrumbs {\n  display: flex;\n  align-items: center;\n  gap: var(--space-2);\n  padding: var(--space-3) var(--space-5);\n  font-size: var(--text-sm);\n  color: var(--text-muted);\n}\n\n.breadcrumb {\n  display: flex;\n  align-items: center;\n  gap: var(--space-2);\n}\n\n.breadcrumb-link {\n  color: var(--text-secondary);\n}\n\n.breadcrumb-link:hover {\n  color: var(--text-primary);\n}\n\n.breadcrumb-separator {\n  color: var(--text-muted);\n}\n\n.breadcrumb-current {\n  color: var(--text-primary);\n  font-weight: 500;\n}\n\n/* ----- Content ----- */\n.content {\n  flex: 1;\n  padding: var(--space-5);\n  max-width: var(--content-max-width);\n  width: 100%;\n  margin: 0 auto;\n}\n\n/* ========================================\n     COMPONENTS\n     ======================================== */\n\n/* ----- Cards ----- */\n.card {\n  background: var(--bg-secondary);\n  border: 1px solid var(--bg-tertiary);\n  border-radius: var(--radius-lg);\n  padding: var(--space-5);\n}\n\n.card-header {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  margin-bottom: var(--space-4);\n}\n\n.card-title {\n  font-size: var(--text-lg);\n  font-weight: 600;\n}\n\n/* ----- Buttons ----- */\n.btn {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  min-height: 40px;\n  padding: 0 var(--space-4);\n  border-radius: var(--radius-full);\n  border: none;\n  font-size: var(--text-sm);\n  font-weight: 600;\n  cursor: pointer;\n  transition: all 0.15s ease;\n  gap: var(--space-2);\n}\n\n.btn-primary {\n  background: var(--accent-cyan);\n  color: var(--bg-primary);\n}\n\n.btn-primary:hover {\n  background: #9ef0ff;\n  box-shadow: var(--shadow-glow);\n}\n\n.btn-secondary {\n  background: var(--bg-tertiary);\n  color: var(--text-secondary);\n}\n\n.btn-secondary:hover {\n  background: var(--bg-hover);\n  color: var(--text-primary);\n}\n\n.btn-ghost {\n  background: transparent;\n  color: var(--text-secondary);\n}\n\n.btn-ghost:hover {\n  background: var(--bg-tertiary);\n  color: var(--text-primary);\n}\n\n/* ----- Badges ----- */\n.badge {\n  display: inline-flex;\n  align-items: center;\n  padding: var(--space-1) var(--space-3);\n  border-radius: var(--radius-full);\n  font-size: var(--text-xs);\n  font-weight: 600;\n}\n\n.badge-function { background: rgba(139, 233, 253, 0.15); color: var(--color-function); }\n.badge-structure { background: rgba(80, 250, 123, 0.15); color: var(--color-structure); }\n.badge-hypothesis { background: rgba(255, 184, 108, 0.15); color: var(--color-hypothesis); }\n.badge-evidence { background: rgba(255, 121, 198, 0.15); color: var(--color-evidence); }\n.badge-relation { background: rgba(189, 147, 249, 0.15); color: var(--color-relation); }\n\n.badge-success { background: rgba(80, 250, 123, 0.15); color: var(--confidence-high); }\n.badge-warning { background: rgba(255, 184, 108, 0.15); color: var(--confidence-medium); }\n.badge-danger { background: rgba(255, 85, 85, 0.15); color: var(--confidence-low); }\n.badge-neutral { background: var(--bg-tertiary); color: var(--text-secondary); }\n\n.badge-new { background: rgba(139, 233, 253, 0.15); color: var(--status-new); }\n.badge-confirmed { background: rgba(80, 250, 123, 0.15); color: var(--status-confirmed); }\n.badge-rejected { background: rgba(255, 85, 85, 0.15); color: var(--status-rejected); }\n.badge-pending { background: rgba(241, 250, 140, 0.15); color: var(--status-pending); }\n\n/* ----- Form Elements ----- */\n.form-group {\n  margin-bottom: var(--space-4);\n}\n\n.form-label {\n  display: block;\n  margin-bottom: var(--space-2);\n  font-size: var(--text-sm);\n  font-weight: 500;\n  color: var(--text-secondary);\n}\n\n.form-input,\n.form-select,\n.form-textarea {\n  width: 100%;\n  padding: var(--space-3) var(--space-4);\n  background: var(--bg-tertiary);\n  border: 1px solid transparent;\n  border-radius: var(--radius-md);\n  color: var(--text-primary);\n  font-size: var(--text-base);\n  font-family: inherit;\n  transition: all 0.15s ease;\n}\n\n.form-input:focus,\n.form-select:focus,\n.form-textarea:focus {\n  outline: none;\n  border-color: var(--accent-cyan);\n  box-shadow: var(--shadow-glow);\n}\n\n.form-textarea {\n  min-height: 100px;\n  resize: vertical;\n}\n\n/* ----- Tables ----- */\n.table-wrap {\n  overflow-x: auto;\n}\n\ntable {\n  width: 100%;\n  border-collapse: collapse;\n}\n\nth, td {\n  padding: var(--space-3) var(--space-4);\n  text-align: left;\n  border-bottom: 1px solid var(--bg-tertiary);\n}\n\nth {\n  font-size: var(--text-xs);\n  font-weight: 600;\n  color: var(--text-muted);\n  text-transform: uppercase;\n  letter-spacing: 0.05em;\n}\n\ntr:hover td {\n  background: var(--bg-hover);\n}\n\n/* ----- List Items ----- */\n.list-item {\n  display: flex;\n  align-items: flex-start;\n  gap: var(--space-4);\n  padding: var(--space-4);\n  border-radius: var(--radius-md);\n  border: 1px solid var(--bg-tertiary);\n  background: var(--bg-secondary);\n  margin-bottom: var(--space-3);\n  transition: all 0.15s ease;\n}\n\n.list-item:hover {\n  border-color: var(--accent-cyan);\n  box-shadow: var(--shadow-sm);\n}\n\n.list-item-content {\n  flex: 1;\n  min-width: 0;\n}\n\n.list-item-title {\n  font-weight: 600;\n  margin-bottom: var(--space-1);\n}\n\n.list-item-meta {\n  font-size: var(--text-sm);\n  color: var(--text-muted);\n}\n\n.list-item-actions {\n  display: flex;\n  gap: var(--space-2);\n}\n\n/* ----- Empty State ----- */\n.empty-state {\n  text-align: center;\n  padding: var(--space-8) var(--space-4);\n  color: var(--text-muted);\n}\n\n.empty-state h3 {\n  color: var(--text-secondary);\n  margin-bottom: var(--space-2);\n}\n\n/* ----- Flash Messages ----- */\n.flash {\n  padding: var(--space-3) var(--space-4);\n  border-radius: var(--radius-md);\n  margin-bottom: var(--space-4);\n}\n\n.flash-success { background: rgba(80, 250, 123, 0.15); color: var(--confidence-high); }\n.flash-warning { background: rgba(255, 184, 108, 0.15); color: var(--confidence-medium); }\n.flash-danger { background: rgba(255, 85, 85, 0.15); color: var(--confidence-low); }\n.flash-info { background: rgba(139, 233, 253, 0.15); color: var(--accent-cyan); }\n\n/* ----- Grid Layouts ----- */\n.grid {\n  display: grid;\n  gap: var(--space-4);\n}\n\n.grid-2 { grid-template-columns: repeat(2, 1fr); }\n.grid-3 { grid-template-columns: repeat(3, 1fr); }\n.grid-4 { grid-template-columns: repeat(4, 1fr); }\n\n.grid-auto {\n  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));\n}\n\n/* ========================================\n     RESPONSIVE\n     ======================================== */\n\n@media (max-width: 1024px) {\n  .sidebar {\n    transform: translateX(-100%);\n  }\n\n  .sidebar.open {\n    transform: translateX(0);\n  }\n\n  .main-area {\n    margin-left: 0;\n  }\n}\n\n@media (max-width: 768px) {\n  :root {\n    --text-base: 15px;\n  }\n\n  .content {\n    padding: var(--space-4);\n  }\n\n  .grid-2, .grid-3, .grid-4 {\n    grid-template-columns: 1fr;\n  }\n}'
+
+======================================================================
+FAIL: test_home_http_handler_renders_project_and_assets (test_gui_home.GuiHomeTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "F:\dev\mcp-memory\tests\test_gui_home.py", line 153, in test_home_http_handler_renders_project_and_assets
+    self.assertIn("--paper", css)
+AssertionError: '--paper' not found in ':root {\n  /* ========================================\n     PHASE 1: DESIGN SYSTEM - DARK THEME\n     ======================================== */\n\n  /* ----- Backgrounds ----- */\n  --bg-primary: #1e1f29;\n  --bg-secondary: #282a36;\n  --bg-tertiary: #31343c;\n  --bg-hover: #3a3d4a;\n  --bg-active: #44475a;\n\n  /* ----- Text ----- */\n  --text-primary: #f8f8f2;\n  --text-secondary: #b8bcc8;\n  --text-muted: #6272a4;\n  --text-link: #8be9fd;\n\n  /* ----- Accent Colors (Dracula) ----- */\n  --accent-cyan: #8be9fd;\n  --accent-green: #50fa7b;\n  --accent-orange: #ffb86c;\n  --accent-pink: #ff79c6;\n  --accent-purple: #bd93f9;\n  --accent-red: #ff5555;\n  --accent-yellow: #f1fa8c;\n\n  /* ----- Semantic Colors ----- */\n  --color-function: #8be9fd;\n  --color-structure: #50fa7b;\n  --color-hypothesis: #ffb86c;\n  --color-evidence: #ff79c6;\n  --color-relation: #bd93f9;\n\n  /* ----- Confidence Colors ----- */\n  --confidence-high: #50fa7b;\n  --confidence-medium: #ffb86c;\n  --confidence-low: #ff5555;\n\n  /* ----- Status Colors ----- */\n  --status-new: #8be9fd;\n  --status-confirmed: #50fa7b;\n  --status-rejected: #ff5555;\n  --status-pending: #f1fa8c;\n\n  /* ----- Typography ----- */\n  --font-sans: system-ui, -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, sans-serif;\n  --font-mono: \'Cascadia Code\', \'Fira Code\', Consolas, monospace;\n\n  --text-xs: 12px;\n  --text-sm: 14px;\n  --text-base: 16px;\n  --text-lg: 18px;\n  --text-xl: 24px;\n  --text-2xl: 32px;\n\n  --leading-tight: 1.3;\n  --leading-normal: 1.5;\n  --leading-relaxed: 1.7;\n\n  /* ----- Spacing ----- */\n  --space-1: 4px;\n  --space-2: 8px;\n  --space-3: 12px;\n  --space-4: 16px;\n  --space-5: 24px;\n  --space-6: 32px;\n  --space-8: 48px;\n\n  /* ----- Border Radius ----- */\n  --radius-sm: 4px;\n  --radius-md: 8px;\n  --radius-lg: 12px;\n  --radius-xl: 16px;\n  --radius-full: 9999px;\n\n  /* ----- Shadows ----- */\n  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);\n  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);\n  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);\n  --shadow-glow: 0 0 20px rgba(139, 233, 253, 0.15);\n\n  /* ----- Layout ----- */\n  --sidebar-width: 240px;\n  --sidebar-collapsed: 64px;\n  --topbar-height: 56px;\n  --content-max-width: 1200px;\n}\n\n/* ========================================\n     BASE STYLES\n     ======================================== */\n\n* {\n  box-sizing: border-box;\n}\n\nhtml, body {\n  margin: 0;\n  padding: 0;\n  min-height: 100vh;\n  background: var(--bg-primary);\n  color: var(--text-primary);\n  font-family: var(--font-sans);\n  font-size: var(--text-base);\n  line-height: var(--leading-normal);\n}\n\n[data-theme="light"] {\n  --bg-primary: #f7f1e8;\n  --bg-secondary: rgba(255, 250, 244, 0.88);\n  --bg-tertiary: #ebe4da;\n  --bg-hover: #e0d9ce;\n  --bg-active: #dccfbe;\n  --text-primary: #22313a;\n  --text-secondary: #54656d;\n  --text-muted: #9aa0a8;\n  --text-link: #3a7d76;\n  --accent-cyan: #3a7d76;\n  --accent-green: #7f9a76;\n  --accent-orange: #b88934;\n  --accent-pink: #cf7b62;\n  --accent-purple: #8b7dbd;\n  --accent-red: #c75d4a;\n  --accent-yellow: #b8a034;\n}\n\na {\n  color: var(--text-link);\n  text-decoration: none;\n  transition: opacity 0.15s ease;\n}\n\na:hover {\n  opacity: 0.8;\n  text-decoration: none;\n}\n\nh1, h2, h3, h4, h5, h6 {\n  margin: 0 0 var(--space-3);\n  font-weight: 600;\n  line-height: var(--leading-tight);\n}\n\nh1 { font-size: var(--text-2xl); }\nh2 { font-size: var(--text-xl); }\nh3 { font-size: var(--text-lg); }\n\np {\n  margin: 0 0 var(--space-3);\n}\n\ncode, pre {\n  font-family: var(--font-mono);\n}\n\npre {\n  background: var(--bg-primary);\n  padding: var(--space-4);\n  border-radius: var(--radius-md);\n  overflow-x: auto;\n}\n\n/* ========================================\n     APP SHELL - LAYOUT\n     ======================================== */\n\n.app-shell {\n  display: flex;\n  min-height: 100vh;\n}\n\n/* ----- Sidebar ----- */\n.sidebar {\n  position: fixed;\n  left: 0;\n  top: 0;\n  bottom: 0;\n  width: var(--sidebar-width);\n  background: var(--bg-secondary);\n  border-right: 1px solid var(--bg-tertiary);\n  display: flex;\n  flex-direction: column;\n  transition: width 0.2s ease, transform 0.2s ease;\n  z-index: 100;\n  overflow: hidden;\n}\n\n.sidebar.collapsed {\n  width: var(--sidebar-collapsed);\n}\n\n.sidebar-header {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: var(--space-4);\n  border-bottom: 1px solid var(--bg-tertiary);\n  min-height: var(--topbar-height);\n}\n\n.sidebar-brand {\n  font-size: var(--text-lg);\n  font-weight: 700;\n  color: var(--text-primary);\n  white-space: nowrap;\n  overflow: hidden;\n}\n\n.sidebar.collapsed .sidebar-brand {\n  display: none;\n}\n\n.sidebar-toggle {\n  background: none;\n  border: none;\n  color: var(--text-secondary);\n  cursor: pointer;\n  padding: var(--space-2);\n  border-radius: var(--radius-sm);\n  transition: background 0.15s ease;\n}\n\n.sidebar-toggle:hover {\n  background: var(--bg-tertiary);\n}\n\n.sidebar-nav {\n  flex: 1;\n  overflow-y: auto;\n  padding: var(--space-2) 0;\n}\n\n.sidebar-group {\n  margin-bottom: var(--space-4);\n}\n\n.sidebar-group-title {\n  padding: var(--space-2) var(--space-4);\n  font-size: var(--text-xs);\n  font-weight: 600;\n  color: var(--text-muted);\n  text-transform: uppercase;\n  letter-spacing: 0.08em;\n  white-space: nowrap;\n  overflow: hidden;\n}\n\n.sidebar.collapsed .sidebar-group-title {\n  display: none;\n}\n\n.sidebar-link {\n  display: flex;\n  align-items: center;\n  gap: var(--space-3);\n  padding: var(--space-3) var(--space-4);\n  color: var(--text-secondary);\n  transition: all 0.15s ease;\n  border-left: 3px solid transparent;\n}\n\n.sidebar-link:hover {\n  background: var(--bg-hover);\n  color: var(--text-primary);\n}\n\n.sidebar-link.active {\n  background: var(--bg-active);\n  color: var(--text-primary);\n  border-left-color: var(--accent-cyan);\n}\n\n.sidebar-icon {\n  width: 20px;\n  height: 20px;\n  flex-shrink: 0;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n}\n\n.sidebar-label {\n  white-space: nowrap;\n  overflow: hidden;\n}\n\n.sidebar.collapsed .sidebar-label {\n  display: none;\n}\n\n/* ----- Main Area ----- */\n.main-area {\n  flex: 1;\n  margin-left: var(--sidebar-width);\n  display: flex;\n  flex-direction: column;\n  min-height: 100vh;\n  transition: margin-left 0.2s ease;\n}\n\n.sidebar.collapsed ~ .main-area {\n  margin-left: var(--sidebar-collapsed);\n}\n\n/* ----- Top Bar ----- */\n.top-bar {\n  position: sticky;\n  top: 0;\n  height: var(--topbar-height);\n  background: var(--bg-secondary);\n  border-bottom: 1px solid var(--bg-tertiary);\n  display: flex;\n  align-items: center;\n  padding: 0 var(--space-5);\n  gap: var(--space-4);\n  z-index: 50;\n}\n\n.top-bar-search {\n  flex: 1;\n  max-width: 480px;\n}\n\n.search-input {\n  width: 100%;\n  padding: var(--space-2) var(--space-4);\n  background: var(--bg-tertiary);\n  border: 1px solid transparent;\n  border-radius: var(--radius-full);\n  color: var(--text-primary);\n  font-size: var(--text-sm);\n  transition: all 0.15s ease;\n}\n\n.search-input::placeholder {\n  color: var(--text-muted);\n}\n\n.search-input:focus {\n  outline: none;\n  background: var(--bg-hover);\n  border-color: var(--accent-cyan);\n  box-shadow: var(--shadow-glow);\n}\n\n.top-bar-actions {\n  display: flex;\n  align-items: center;\n  gap: var(--space-3);\n}\n\n.theme-toggle {\n  background: none;\n  border: none;\n  color: var(--text-secondary);\n  cursor: pointer;\n  padding: var(--space-2);\n  border-radius: var(--radius-sm);\n}\n\n.theme-toggle:hover {\n  background: var(--bg-tertiary);\n}\n\n/* ----- Breadcrumbs ----- */\n.breadcrumbs {\n  display: flex;\n  align-items: center;\n  gap: var(--space-2);\n  padding: var(--space-3) var(--space-5);\n  font-size: var(--text-sm);\n  color: var(--text-muted);\n}\n\n.breadcrumb {\n  display: flex;\n  align-items: center;\n  gap: var(--space-2);\n}\n\n.breadcrumb-link {\n  color: var(--text-secondary);\n}\n\n.breadcrumb-link:hover {\n  color: var(--text-primary);\n}\n\n.breadcrumb-separator {\n  color: var(--text-muted);\n}\n\n.breadcrumb-current {\n  color: var(--text-primary);\n  font-weight: 500;\n}\n\n/* ----- Content ----- */\n.content {\n  flex: 1;\n  padding: var(--space-5);\n  max-width: var(--content-max-width);\n  width: 100%;\n  margin: 0 auto;\n}\n\n/* ========================================\n     COMPONENTS\n     ======================================== */\n\n/* ----- Cards ----- */\n.card {\n  background: var(--bg-secondary);\n  border: 1px solid var(--bg-tertiary);\n  border-radius: var(--radius-lg);\n  padding: var(--space-5);\n}\n\n.card-header {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  margin-bottom: var(--space-4);\n}\n\n.card-title {\n  font-size: var(--text-lg);\n  font-weight: 600;\n}\n\n/* ----- Buttons ----- */\n.btn {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  min-height: 40px;\n  padding: 0 var(--space-4);\n  border-radius: var(--radius-full);\n  border: none;\n  font-size: var(--text-sm);\n  font-weight: 600;\n  cursor: pointer;\n  transition: all 0.15s ease;\n  gap: var(--space-2);\n}\n\n.btn-primary {\n  background: var(--accent-cyan);\n  color: var(--bg-primary);\n}\n\n.btn-primary:hover {\n  background: #9ef0ff;\n  box-shadow: var(--shadow-glow);\n}\n\n.btn-secondary {\n  background: var(--bg-tertiary);\n  color: var(--text-secondary);\n}\n\n.btn-secondary:hover {\n  background: var(--bg-hover);\n  color: var(--text-primary);\n}\n\n.btn-ghost {\n  background: transparent;\n  color: var(--text-secondary);\n}\n\n.btn-ghost:hover {\n  background: var(--bg-tertiary);\n  color: var(--text-primary);\n}\n\n/* ----- Badges ----- */\n.badge {\n  display: inline-flex;\n  align-items: center;\n  padding: var(--space-1) var(--space-3);\n  border-radius: var(--radius-full);\n  font-size: var(--text-xs);\n  font-weight: 600;\n}\n\n.badge-function { background: rgba(139, 233, 253, 0.15); color: var(--color-function); }\n.badge-structure { background: rgba(80, 250, 123, 0.15); color: var(--color-structure); }\n.badge-hypothesis { background: rgba(255, 184, 108, 0.15); color: var(--color-hypothesis); }\n.badge-evidence { background: rgba(255, 121, 198, 0.15); color: var(--color-evidence); }\n.badge-relation { background: rgba(189, 147, 249, 0.15); color: var(--color-relation); }\n\n.badge-success { background: rgba(80, 250, 123, 0.15); color: var(--confidence-high); }\n.badge-warning { background: rgba(255, 184, 108, 0.15); color: var(--confidence-medium); }\n.badge-danger { background: rgba(255, 85, 85, 0.15); color: var(--confidence-low); }\n.badge-neutral { background: var(--bg-tertiary); color: var(--text-secondary); }\n\n.badge-new { background: rgba(139, 233, 253, 0.15); color: var(--status-new); }\n.badge-confirmed { background: rgba(80, 250, 123, 0.15); color: var(--status-confirmed); }\n.badge-rejected { background: rgba(255, 85, 85, 0.15); color: var(--status-rejected); }\n.badge-pending { background: rgba(241, 250, 140, 0.15); color: var(--status-pending); }\n\n/* ----- Form Elements ----- */\n.form-group {\n  margin-bottom: var(--space-4);\n}\n\n.form-label {\n  display: block;\n  margin-bottom: var(--space-2);\n  font-size: var(--text-sm);\n  font-weight: 500;\n  color: var(--text-secondary);\n}\n\n.form-input,\n.form-select,\n.form-textarea {\n  width: 100%;\n  padding: var(--space-3) var(--space-4);\n  background: var(--bg-tertiary);\n  border: 1px solid transparent;\n  border-radius: var(--radius-md);\n  color: var(--text-primary);\n  font-size: var(--text-base);\n  font-family: inherit;\n  transition: all 0.15s ease;\n}\n\n.form-input:focus,\n.form-select:focus,\n.form-textarea:focus {\n  outline: none;\n  border-color: var(--accent-cyan);\n  box-shadow: var(--shadow-glow);\n}\n\n.form-textarea {\n  min-height: 100px;\n  resize: vertical;\n}\n\n/* ----- Tables ----- */\n.table-wrap {\n  overflow-x: auto;\n}\n\ntable {\n  width: 100%;\n  border-collapse: collapse;\n}\n\nth, td {\n  padding: var(--space-3) var(--space-4);\n  text-align: left;\n  border-bottom: 1px solid var(--bg-tertiary);\n}\n\nth {\n  font-size: var(--text-xs);\n  font-weight: 600;\n  color: var(--text-muted);\n  text-transform: uppercase;\n  letter-spacing: 0.05em;\n}\n\ntr:hover td {\n  background: var(--bg-hover);\n}\n\n/* ----- List Items ----- */\n.list-item {\n  display: flex;\n  align-items: flex-start;\n  gap: var(--space-4);\n  padding: var(--space-4);\n  border-radius: var(--radius-md);\n  border: 1px solid var(--bg-tertiary);\n  background: var(--bg-secondary);\n  margin-bottom: var(--space-3);\n  transition: all 0.15s ease;\n}\n\n.list-item:hover {\n  border-color: var(--accent-cyan);\n  box-shadow: var(--shadow-sm);\n}\n\n.list-item-content {\n  flex: 1;\n  min-width: 0;\n}\n\n.list-item-title {\n  font-weight: 600;\n  margin-bottom: var(--space-1);\n}\n\n.list-item-meta {\n  font-size: var(--text-sm);\n  color: var(--text-muted);\n}\n\n.list-item-actions {\n  display: flex;\n  gap: var(--space-2);\n}\n\n/* ----- Empty State ----- */\n.empty-state {\n  text-align: center;\n  padding: var(--space-8) var(--space-4);\n  color: var(--text-muted);\n}\n\n.empty-state h3 {\n  color: var(--text-secondary);\n  margin-bottom: var(--space-2);\n}\n\n/* ----- Flash Messages ----- */\n.flash {\n  padding: var(--space-3) var(--space-4);\n  border-radius: var(--radius-md);\n  margin-bottom: var(--space-4);\n}\n\n.flash-success { background: rgba(80, 250, 123, 0.15); color: var(--confidence-high); }\n.flash-warning { background: rgba(255, 184, 108, 0.15); color: var(--confidence-medium); }\n.flash-danger { background: rgba(255, 85, 85, 0.15); color: var(--confidence-low); }\n.flash-info { background: rgba(139, 233, 253, 0.15); color: var(--accent-cyan); }\n\n/* ----- Grid Layouts ----- */\n.grid {\n  display: grid;\n  gap: var(--space-4);\n}\n\n.grid-2 { grid-template-columns: repeat(2, 1fr); }\n.grid-3 { grid-template-columns: repeat(3, 1fr); }\n.grid-4 { grid-template-columns: repeat(4, 1fr); }\n\n.grid-auto {\n  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));\n}\n\n/* ========================================\n     RESPONSIVE\n     ======================================== */\n\n@media (max-width: 1024px) {\n  .sidebar {\n    transform: translateX(-100%);\n  }\n\n  .sidebar.open {\n    transform: translateX(0);\n  }\n\n  .main-area {\n    margin-left: 0;\n  }\n}\n\n@media (max-width: 768px) {\n  :root {\n    --text-base: 15px;\n  }\n\n  .content {\n    padding: var(--space-4);\n  }\n\n  .grid-2, .grid-3, .grid-4 {\n    grid-template-columns: 1fr;\n  }\n}'
+
+----------------------------------------------------------------------
+Ran 91 tests in 10.376s
+
+FAILED (failures=2)
+

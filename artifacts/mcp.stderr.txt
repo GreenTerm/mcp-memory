@@ -1,29 +1,29 @@
-2026-04-18 20:47:13 INFO cli command_start command=run-mcp
-2026-04-18 20:47:13 INFO cli server_dispatch command=run-mcp host=127.0.0.1 port=55569 project_id=smoke-project
-2026-04-18 20:47:13 INFO mcp server_start host=127.0.0.1 port=55569 project_id=smoke-project
-2026-04-18 20:47:14 INFO mcp server_message message="GET /health HTTP/1.1" 200 - project_id=smoke-project
-2026-04-18 20:47:14 INFO mcp request_complete duration_ms=0 method=GET path=/health project_id=smoke-project status=200
-2026-04-18 20:47:14 INFO mcp server_message message="POST /mcp HTTP/1.1" 200 - project_id=smoke-project
-2026-04-18 20:47:14 INFO mcp request_complete duration_ms=0 method=POST path=/mcp project_id=smoke-project status=200
-2026-04-18 20:47:14 INFO mcp server_message message="POST /mcp HTTP/1.1" 200 - project_id=smoke-project
-2026-04-18 20:47:14 INFO mcp request_complete duration_ms=0 method=POST path=/mcp project_id=smoke-project status=200
-2026-04-18 20:47:14 INFO mcp tool_call project_id=smoke-project tool_name=search_records
-2026-04-18 20:47:14 INFO mcp server_message message="POST /mcp HTTP/1.1" 200 - project_id=smoke-project
-2026-04-18 20:47:14 INFO mcp request_complete duration_ms=1 method=POST path=/mcp project_id=smoke-project status=200
-2026-04-18 20:47:14 INFO mcp tool_call project_id=smoke-project tool_name=get_related
-2026-04-18 20:47:14 INFO mcp server_message message="POST /mcp HTTP/1.1" 200 - project_id=smoke-project
-2026-04-18 20:47:14 INFO mcp request_complete duration_ms=1 method=POST path=/mcp project_id=smoke-project status=200
-2026-04-18 20:47:14 INFO mcp tool_call project_id=smoke-project tool_name=create_structure
-2026-04-18 20:47:14 INFO services pending_created entity_id=struct_pending entity_type=structure operation=upsert_structure pending_change_id=0c29f5eb-2313-415b-b049-3c686869ec69 project_id=smoke-project
-2026-04-18 20:47:14 INFO mcp server_message message="POST /mcp HTTP/1.1" 200 - project_id=smoke-project
-2026-04-18 20:47:14 INFO mcp request_complete duration_ms=5 method=POST path=/mcp project_id=smoke-project status=200
-2026-04-18 20:47:14 INFO mcp tool_call project_id=smoke-project tool_name=list_pending_changes
-2026-04-18 20:47:14 INFO mcp server_message message="POST /mcp HTTP/1.1" 200 - project_id=smoke-project
-2026-04-18 20:47:14 INFO mcp request_complete duration_ms=7 method=POST path=/mcp project_id=smoke-project status=200
-2026-04-18 20:47:14 INFO mcp tool_call project_id=smoke-project tool_name=confirm_change
-2026-04-18 20:47:14 INFO services structure_upserted actor_type=agent binary_id=sample-binary field_count=0 project_id=smoke-project structure_id=struct_pending
-2026-04-18 20:47:14 INFO services pending_confirmed actor_type=agent operation=upsert_structure pending_change_id=0c29f5eb-2313-415b-b049-3c686869ec69 project_id=smoke-project
-2026-04-18 20:47:14 INFO mcp server_message message="POST /mcp HTTP/1.1" 200 - project_id=smoke-project
-2026-04-18 20:47:14 INFO mcp request_complete duration_ms=7 method=POST path=/mcp project_id=smoke-project status=200
-2026-04-18 20:47:14 INFO mcp server_message message="GET /health HTTP/1.1" 200 - project_id=smoke-project
-2026-04-18 20:47:14 INFO mcp request_complete duration_ms=0 method=GET path=/health project_id=smoke-project status=200
+2026-04-18 23:09:34 INFO cli command_start command=run-mcp
+2026-04-18 23:09:34 INFO cli server_dispatch command=run-mcp host=127.0.0.1 port=57067 project_id=smoke-project
+2026-04-18 23:09:34 INFO mcp server_start host=127.0.0.1 port=57067 project_id=smoke-project
+2026-04-18 23:09:35 INFO mcp server_message message="GET /health HTTP/1.1" 200 - project_id=smoke-project
+2026-04-18 23:09:35 INFO mcp request_complete duration_ms=0 method=GET path=/health project_id=smoke-project status=200
+2026-04-18 23:09:35 INFO mcp server_message message="POST /mcp HTTP/1.1" 200 - project_id=smoke-project
+2026-04-18 23:09:35 INFO mcp request_complete duration_ms=0 method=POST path=/mcp project_id=smoke-project status=200
+2026-04-18 23:09:35 INFO mcp server_message message="POST /mcp HTTP/1.1" 200 - project_id=smoke-project
+2026-04-18 23:09:35 INFO mcp request_complete duration_ms=0 method=POST path=/mcp project_id=smoke-project status=200
+2026-04-18 23:09:35 INFO mcp tool_call project_id=smoke-project tool_name=search_records
+2026-04-18 23:09:35 INFO mcp server_message message="POST /mcp HTTP/1.1" 200 - project_id=smoke-project
+2026-04-18 23:09:35 INFO mcp request_complete duration_ms=2 method=POST path=/mcp project_id=smoke-project status=200
+2026-04-18 23:09:35 INFO mcp tool_call project_id=smoke-project tool_name=get_related
+2026-04-18 23:09:35 INFO mcp server_message message="POST /mcp HTTP/1.1" 200 - project_id=smoke-project
+2026-04-18 23:09:35 INFO mcp request_complete duration_ms=1 method=POST path=/mcp project_id=smoke-project status=200
+2026-04-18 23:09:35 INFO mcp tool_call project_id=smoke-project tool_name=create_structure
+2026-04-18 23:09:35 INFO services pending_created entity_id=struct_pending entity_type=structure operation=upsert_structure pending_change_id=72118a5a-bc9d-4798-b56c-f1aaed738521 project_id=smoke-project
+2026-04-18 23:09:35 INFO mcp server_message message="POST /mcp HTTP/1.1" 200 - project_id=smoke-project
+2026-04-18 23:09:35 INFO mcp request_complete duration_ms=7 method=POST path=/mcp project_id=smoke-project status=200
+2026-04-18 23:09:35 INFO mcp tool_call project_id=smoke-project tool_name=list_pending_changes
+2026-04-18 23:09:35 INFO mcp server_message message="POST /mcp HTTP/1.1" 200 - project_id=smoke-project
+2026-04-18 23:09:35 INFO mcp request_complete duration_ms=6 method=POST path=/mcp project_id=smoke-project status=200
+2026-04-18 23:09:35 INFO mcp tool_call project_id=smoke-project tool_name=confirm_change
+2026-04-18 23:09:35 INFO services structure_upserted actor_type=agent binary_id=sample-binary field_count=0 project_id=smoke-project structure_id=struct_pending
+2026-04-18 23:09:35 INFO services pending_confirmed actor_type=agent operation=upsert_structure pending_change_id=72118a5a-bc9d-4798-b56c-f1aaed738521 project_id=smoke-project
+2026-04-18 23:09:35 INFO mcp server_message message="POST /mcp HTTP/1.1" 200 - project_id=smoke-project
+2026-04-18 23:09:35 INFO mcp request_complete duration_ms=7 method=POST path=/mcp project_id=smoke-project status=200
+2026-04-18 23:09:35 INFO mcp server_message message="GET /health HTTP/1.1" 200 - project_id=smoke-project
+2026-04-18 23:09:35 INFO mcp request_complete duration_ms=0 method=GET path=/health project_id=smoke-project status=200

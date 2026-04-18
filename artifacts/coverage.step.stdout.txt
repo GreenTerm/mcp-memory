@@ -1,2 +1,42 @@
-﻿Wrote XML report to F:\dev\mcp-memory\artifacts\coverage.xml
+﻿{
+  "output_path": "C:\\Users\\GREENZ~1\\AppData\\Local\\Temp\\tmp9xlxksv6\\bundle.json",
+  "counts": {
+    "functions": 1
+  }
+}
+{
+  "input_path": "C:\\Users\\GREENZ~1\\AppData\\Local\\Temp\\tmp9xlxksv6\\bundle.json",
+  "replace_existing": false,
+  "counts": {
+    "functions": 1
+  }
+}
+{
+  "output_path": "C:\\Users\\GREENZ~1\\AppData\\Local\\Temp\\tmp9xlxksv6\\backup.zip",
+  "file_count": 2
+}
+{
+  "project_id": "p1",
+  "display_name": "Project One",
+  "project_root": "C:\\Users\\GREENZ~1\\AppData\\Local\\Temp\\tmp9xlxksv6\\project",
+  "database_path": "C:\\Users\\GREENZ~1\\AppData\\Local\\Temp\\tmp9xlxksv6\\project\\project.db",
+  "attachments_dir": "C:\\Users\\GREENZ~1\\AppData\\Local\\Temp\\tmp9xlxksv6\\project\\attachments",
+  "exports_dir": "C:\\Users\\GREENZ~1\\AppData\\Local\\Temp\\tmp9xlxksv6\\project\\exports",
+  "backups_dir": "C:\\Users\\GREENZ~1\\AppData\\Local\\Temp\\tmp9xlxksv6\\project\\backups",
+  "logs_dir": "C:\\Users\\GREENZ~1\\AppData\\Local\\Temp\\tmp9xlxksv6\\project\\logs",
+  "http_host": "127.0.0.1",
+  "http_port": 12000,
+  "mcp_host": "127.0.0.1",
+  "mcp_port": 12001,
+  "write_mode": "confirm"
+}
+[]
+{
+  "pending_change": {
+    "status": "confirmed"
+  }
+}
+{
+  "status": "rejected"
+}
 
