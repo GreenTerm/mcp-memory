@@ -56,3 +56,6 @@ ehthumbs.db
 
 # Artifacts and large generated content
 artifacts/
+
+# AI planning and internal notes
+.ai/

@@ -54,6 +54,8 @@ from .i18n import language_switcher, localize_markup, resolve_language, translat
 def workspace_asset_response(path: str) -> tuple[str, bytes] | None:
     if path == "/ui/assets/app.css":
         return ("text/css; charset=utf-8", load_asset_text("app.css").encode("utf-8"))
+    if path == "/ui/assets/shell.js":
+        return ("application/javascript; charset=utf-8", load_asset_text("shell.js").encode("utf-8"))
     return None
 
 
