@@ -701,12 +701,14 @@ tr:hover td {
   background: var(--bg-secondary);
   border: 1px solid var(--bg-tertiary);
   border-radius: var(--radius-lg);
+  margin-bottom: var(--space-4);
 }
 
 .hero-card,
 .entity-hero,
 .panel-section {
   padding: var(--space-5);
+  margin-bottom: var(--space-4);
 }
 
 .eyebrow {
@@ -751,6 +753,12 @@ h1, h2, h3, .brand-mark {
 .metric-card,
 .mini-card {
   padding: var(--space-5);
+  display: block;
+}
+
+.result-card,
+.pending-card {
+  margin-bottom: var(--space-3);
 }
 
 .card-topline,
