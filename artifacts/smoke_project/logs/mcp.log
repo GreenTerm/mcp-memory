@@ -56,3 +56,7 @@
 2026-04-18 23:13:33 INFO mcp request_complete duration_ms=0 method=GET path=/health project_id=smoke-project status=200
 2026-04-18 23:13:33 INFO mcp server_message message="GET /health HTTP/1.1" 200 - project_id=smoke-project
 2026-04-18 23:13:33 INFO mcp request_complete duration_ms=0 method=GET path=/health project_id=smoke-project status=200
+2026-04-18 23:14:56 INFO mcp server_message message="GET /health HTTP/1.1" 200 - project_id=smoke-project
+2026-04-18 23:14:56 INFO mcp request_complete duration_ms=0 method=GET path=/health project_id=smoke-project status=200
+2026-04-18 23:14:56 INFO mcp server_message message="GET /health HTTP/1.1" 200 - project_id=smoke-project
+2026-04-18 23:14:56 INFO mcp request_complete duration_ms=0 method=GET path=/health project_id=smoke-project status=200
