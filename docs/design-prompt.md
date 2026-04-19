@@ -1,81 +1,63 @@
-Спроектируй красивый, спокойный и практичный web UI для локального offline-first приложения на Python/FastAPI/Jinja для reverse engineering knowledge base.
+# GUI Design Prompt
 
-Контекст продукта
+Design a calm, practical web UI for a local offline-first reverse engineering knowledge base. The UI is used daily as a working tool, not as a marketing site.
 
-Это локальный инструмент для хранения и просмотра знаний о:
-- функциях
-- структурах
-- гипотезах
-- связях между сущностями
-- истории изменений
+## Product Context
+
+The app stores and displays knowledge about:
+
+- functions
+- structures
+- global hypotheses
 - evidence
+- relations between entities
+- change history
+- audit trail
+- pending changes
 
-Приложение используется ежедневно как рабочий инструмент, а не как маркетинговый продукт. Интерфейс должен быть удобным для чтения, поиска, редактирования и навигации по знаниям о reverse engineering артефактах.
+The product is local-first and Windows-friendly. It uses Python stdlib HTTP, server-rendered HTML, packaged CSS and small progressive-enhancement JavaScript. Do not assume a SPA or heavy frontend stack.
 
-Визуальное направление
+## Visual Direction
 
-Основной стиль:
+The target feeling is:
+
 - 70% Obsidian
 - 30% Notion
+- dark-first
+- calm
+- dense enough for real work
+- readable for long reverse engineering sessions
+- modern, but not decorative
 
-Характер интерфейса:
-- тёмный
-- не перегруженный
-- простой
-- аккуратный
-- современный, но не декоративный
-- приятный для долгой работы
+Avoid:
 
-Темы:
-- обязательно тёмная и светлая
-- основная палитра вдохновлена Dracula
-- не делать слишком ярко и агрессивно
-- использовать красивые, но умеренные цветовые акценты
-- цвет должен помогать навигации, а не доминировать
+- generic admin dashboard visuals
+- marketing hero sections
+- spreadsheet-like tables as the primary UI
+- bright cyberpunk styling
+- heavy gradients
+- decorative blobs
+- large unused empty space
 
-Использование цвета:
-- для типа сущности
-- для confidence
-- для статуса гипотез
-- без кислотности
-- без перегруженных цветных плашек везде
+## Layout
 
-Форма и детали:
-- нужны скругления
-- мягкие границы
-- аккуратные тени
-- умеренное использование иконок
-- хорошие отступы
-- приятная плотность текста
-- хорошая визуальная иерархия
+Workspace layout:
 
-Чего не делать:
-- не строить интерфейс вокруг тяжёлых таблиц
-- не делать spreadsheet-like UI
-- не делать типичную корпоративную админку
-- не делать грубый IDE-style интерфейс
-- не делать слишком яркий cyberpunk
-- не делать перегруженный dashboard с множеством виджетов
-- не делать слишком слабое разделение групп и секций
+- left sidebar for workspace navigation
+- topbar for global controls
+- compact page header for breadcrumbs, page title and back-to-project-shelf link
+- main content as consistent cards/sections
+- optional right detail panel where useful
 
-Общая архитектура layout
+The topbar owns:
 
-Основной layout:
-- слева сворачиваемый sidebar
-- по центру основная рабочая область
-- справа detail panel там, где это полезно
-- сверху спокойная верхняя панель с глобальным поиском и базовыми действиями
+- global workspace search
+- theme toggle
+- write-mode status
+- language switcher
 
-Sidebar:
-- должен быть сворачиваемым
-- спокойный визуально
-- с хорошим разделением групп
-- с явным активным состоянием
-- не слишком широкий
-- должен поддерживать иерархию
+The sidebar owns:
 
-Структура sidebar:
-- Projects
 - Binaries
 - Functions
 - Structures
@@ -86,292 +68,51 @@ Sidebar:
 - Backups
 - Settings
 
-Обязательны breadcrumbs:
-- показывать иерархию вида Project / Binary / Function
-- breadcrumbs должны быть аккуратными и полезными, не декоративными
+Do not put `Projects` in the workspace sidebar. The return to project shelf lives in the workspace header.
 
-Главный экран
+## Components
 
-Главный экран должен быть ближе к лёгкому dashboard, но без перегруза.
-Он должен сочетать:
-- обзор проекта
-- список функций
-- быстрый доступ к основным разделам
+Use consistent styling for:
 
-На главном экране желательно показать:
-- название проекта
-- краткую project summary
-- количество бинарей
-- количество функций / структур / гипотез
-- последние обновлённые сущности
-- быстрый вход в Functions
-- быстрый вход в Graph
-- быстрый вход в Settings
-- Copy MCP config
-- путь к БД
-- backup/export actions
+- project cards
+- section cards
+- metric cards
+- quick entry cards
+- entity rows/cards
+- empty states
+- forms
+- buttons
+- badges
+- MCP config blocks
+- pending/audit cards
 
-Главный экран должен ощущаться как спокойная стартовая рабочая страница, а не как аналитическая панель мониторинга.
+Empty states need real internal padding and should sit inside the same card/section system as normal content.
 
-Страницы
+## Motion
 
-Нужно спроектировать следующие страницы:
+Animations should be simple and unobtrusive:
 
-1. Project Overview
-2. Projects List
-3. Functions List
-4. Function Detail
-5. Structures List
-6. Structure Detail
-7. Hypotheses List
-8. Graph Page
-9. Search Page
-10. Project Settings
-11. Import/Export
-12. Backup/Restore
-13. First-run Setup Wizard
+- sidebar open/close
+- page content entrance
+- menu open/close
+- hover/focus transitions
 
-Functions List
+Respect reduced-motion preferences.
 
-Это не должна быть тяжёлая таблица.
+## Language And Encoding
 
-Нужен гибридный list view:
-- выглядит как список
-- но внутри каждой строки есть аккуратная колонночная структура
-- строки должны быть визуально чистыми и современными
-- не как spreadsheet
-- не как стандартный data grid
+The UI supports English and Russian. Russian text must be real UTF-8, not mojibake. Long Russian labels must wrap cleanly without breaking cards.
 
-Для каждой строки функции показывать:
-- имя функции
-- summary
-- статус гипотез
-- confidence
-- дата обновления
+## MCP And Agent Context
 
-Дополнительно можно показать:
-- адрес
-- binary
-- тип сущности
-- теги
+The UI should make MCP endpoint information easy to copy, but the full agent workflow is exposed through MCP tools and prompts. The UI should not duplicate protocol documentation inline.
 
-Поведение списка:
-- сортировка
-- фильтры
-- поиск
-- хорошее выделение выбранного элемента
-- понятная группировка
-- явные разделители между элементами
+## Implementation Constraints
 
-Function Detail
-
-Это одна из главных страниц продукта.
-
-Структура страницы:
-- основная колонка по центру
-- справа боковая панель с быстрыми метаданными
-
-Верхний блок:
-- имя функции
-- адрес
-- краткое summary
-- confidence
-- статус
-- теги / тип сущности
-- дата обновления
-
-Правая боковая панель:
-- binary
-- source/origin
-- created/updated
-- quick relations summary
-- quick actions
-- evidence count
-- history count
-
-Вкладки функции:
-- Facts
-- Hypotheses
-- Relations
-- History
-
-Требования:
-- Facts и Hypotheses должны быть жёстко разделены
-- не смешивать их в одной ленте
-- UI должен визуально показывать разницу между подтверждённым знанием и интерпретацией
-
-Relations:
-- callers
-- callees
-- связанные структуры
-- связанные гипотезы
-- связанные сущности
-
-History:
-- список версий
-- кто изменил
-- когда изменил
-- что было изменено
-
-Graph Page
-
-Graph должен быть отдельной страницей.
-
-Структура:
-- слева список и фильтры
-- справа основная область с графом
-
-По умолчанию:
-- граф показывает callers/callees
-
-Стиль графа:
-- в духе Obsidian
-- спокойный
-- минималистичный
-- тонкие линии
-- аккуратные узлы
-- без перегруженной аналитической раскраски
-
-Фильтры слева:
-- по binary
-- по типу сущности
-- по статусу гипотез
-- по confidence
-- по глубине/hops
-
-Важно:
-- граф не должен пытаться показать всё сразу
-- ориентироваться на локальный граф и хороший focus
-- граф должен быть красивым и читаемым
-
-Search UI
-
-Нужны оба режима:
-- глобальная строка поиска в верхней панели
-- отдельная Search page
-
-Search page:
-- строка поиска
-- фильтры
-- список результатов
-- краткий preview каждого результата
-
-В результатах важно показывать:
-- summary
-
-Не нужно делать перегруженный side preview.
-Поиск должен быть быстрым, чистым и спокойным визуально.
-
-Projects List
-
-Список проектов должен выглядеть как список аккуратных объектов, а не как голая таблица.
-
-Для каждого проекта показывать:
-- название
-- число бинарей
-- путь к БД
-- MCP endpoint
-- action Copy MCP config
-- backup/export actions
-
-Важно:
-- хорошее визуальное разделение элементов
-- хорошая группировка
-- понятная иерархия
-
-Hypotheses List
-
-Страница гипотез должна быть простым списком, не kanban.
-
-Для каждой гипотезы показывать:
-- текст
-- статус
-- confidence
-- связанные сущности
-- дата обновления
-
-Setup Wizard
-
-Нужен простой first-run wizard в 3–4 шага:
-1. путь к базе
-2. создание проекта
-3. настройка MCP
-4. backup/export path
-
-Он должен быть:
-- очень понятным
-- спокойным
-- коротким
-- без лишней декоративности
-
-Project Settings
-
-Особенно важно показать:
-- Copy MCP config
-- путь к БД
-- backup/export controls
-
-Не перегружать страницу второстепенными настройками.
-
-Компоненты
-
-Нужно спроектировать следующие UI-компоненты:
-- Sidebar
-- Collapsible sidebar state
-- Top search bar
-- Breadcrumbs
-- Project summary card
-- Project list item
-- Function list row
-- Entity badge
-- Confidence badge
-- Hypothesis status badge
-- Detail side panel
-- Tabs for Facts/Hypotheses/Relations/History
-- Graph filters panel
-- Graph node style
-- Search input and search result card
-- Settings action card
-- Setup wizard step card
-- Import/export panel
-- Backup panel
-
-UX-приоритеты
-
-Главные действия пользователя:
-- искать функцию
-- читать карточки
-- редактировать facts/hypotheses
-- смотреть связи
-
-Интерфейс должен быть оптимизирован именно под это.
-
-Нужно добиться:
-- хорошей читаемости
-- спокойствия
-- ясной иерархии
-- простоты навигации
-- ощущения качественного internal tool
-
-Что нужно от тебя
-
-1. Сначала предложи общую дизайн-концепцию
-2. Потом опиши информационную архитектуру
-3. Потом опиши layout каждого ключевого экрана
-4. Потом опиши дизайн-систему:
-   - цвета
-   - типографика
-   - spacing
-   - радиусы
-   - границы
-   - тени
-   - состояния элементов
-5. Потом опиши ключевые компоненты
-6. Потом предложи структуру шаблонов для FastAPI + Jinja
-7. Потом предложи 2–3 визуальных варианта в рамках этого направления
-8. Все решения объясняй через:
-   - читаемость
-   - спокойствие
-   - простоту
-   - ежедневную работу
-   - локальный инженерный инструмент
+- no new runtime dependencies unless explicitly approved
+- no cloud services
+- no external fonts
+- no frontend build step
+- no hidden route changes
+- preserve existing forms and POST behavior
+- preserve `lang` across navigation

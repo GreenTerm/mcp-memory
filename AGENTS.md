@@ -7,7 +7,7 @@ Instructions for Codex in this repository. These notes should be treated as pers
 - This repository is for a local offline-first RE knowledge base on Python.
 - Prioritize simple local deployment on Windows over architectural purity.
 - Favor SQLite, stdlib, and a minimal dependency footprint.
-- Build backend and MCP before GUI.
+- Backend, MCP, and the server-rendered GUI are now implemented; preserve the stdlib-first shape unless a task explicitly asks for a broader redesign.
 - Avoid cloud dependencies, external databases, and heavy frontend stacks unless explicitly requested.
 
 ## Working Style

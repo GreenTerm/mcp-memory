@@ -1,66 +1,99 @@
 # Future Plans
 
-Список ближайших продуктовых улучшений, которые пока не реализованы, но уже согласованы как желаемые направления развития проекта.
+Список ближайших улучшений, которые еще не реализованы или требуют отдельного аккуратного прохода. Завершенные GUI/MCP hotfixes сюда больше не заносим как pending work.
 
-## 1. Entity Browser From Project Home
+## 1. FTS Escaping For Hyphenated Queries
 
-- Добавить возможность открыть список всех сущностей проекта с главного экрана workspace.
-- Поддержать быстрые переходы:
-  - все `functions`
-  - все `structures`
-  - все `global hypotheses`
-  - все сущности сразу в одном общем представлении
-- Цель: упростить навигацию по проекту без обязательного поискового запроса.
+Проблема: SQLite FTS может трактовать строку с дефисом как выражение. Например `gui-seed` может привести к ошибке парсинга вместо обычного поиска.
 
-## 2. Project Launch From GUI [Done]
+Цель:
 
-Status: done
+- безопасно quote/escape пользовательский FTS input
+- сохранить exact/tag filters
+- добавить regression tests для `gui-seed`, адресов и строк с символами вроде `-`, `.`, `:`
+- обновить MCP prompt warning после исправления
 
-Implemented in home UI: Start / Stop / Restart, Open Workspace, MCP endpoint visibility, and managed project HTTP/MCP lifecycle from a single `mcp-memory run-ui-home` entrypoint.
+Текущий workaround: искать по словам без дефиса (`gui seed`) или по `tag`.
 
-- Пользователь должен запускать только:
-  - `mcp-memory run-ui-home`
-- После этого home UI должен показывать список всех проектов и уметь запускать выбранный проект прямо из GUI.
-- При запуске из GUI должны стартовать:
-  - project HTTP server
-  - project MCP server
-- Цель: убрать необходимость отдельно запускать каждый проект вручную через CLI.
+## 2. Richer Entity Browser
 
-## 3. Replace Project Address On Dashboard With MCP Link
+Сейчас есть отдельные pages для functions, structures и global hypotheses. Следующий шаг - общий entity browser для больших проектов.
 
-- На project dashboard заменить текущее поле с адресом проекта.
-- Вместо него показывать поле со ссылкой или connection block для MCP endpoint проекта.
-- Цель: сделать главное подключаемое значение более полезным для агентского workflow.
+Идеи:
 
-## 4. Project Settings In GUI
+- единая страница всех сущностей
+- быстрые фильтры по binary, tag, entity type, status
+- compact rows для больших списков
+- bulk links на graph/search
+- сохранение query params при переходах
 
-- Добавить возможность изменять настройки проекта из GUI.
-- Обязательно поддержать изменение:
-  - `write_mode`
-- Желательно также дать редактировать:
-  - `display_name`
-  - `http_host/http_port`
-  - `mcp_host/mcp_port`
-- Цель: убрать необходимость править настройки проекта только через CLI или вручную.
+## 3. Relation Authoring From GUI
 
-## 5. Dark Theme In GUI
+Graph уже показывает существующие relations, но создавать связи удобнее через MCP/API.
 
-- Добавить полноценную тёмную тему в UI.
-- Сохранить текущий дружелюбный визуальный стиль, а не делать generic dark dashboard.
-- Желательно поддержать:
-  - ручное переключение темы
-  - сохранение выбора пользователя
-- Цель: сделать интерфейс комфортным для долгих RE-сессий.
+Цель:
 
-## 6. Agent Instructions In MCP Server
+- добавить простую GUI-форму `create_relation`
+- дать быстрый переход из detail page к созданию relation
+- валидировать entity type/id на уровне формы
+- после создания вести на focused graph
 
-- Добавить инструкции для агентов на стороне MCP server.
-- Нужен понятный способ передавать агенту:
-  - правила работы с проектом
-  - ограничения по записи
-  - рекомендации по стилю и workflow
-- Возможные варианты реализации:
-  - отдельный MCP tool
-  - системный resource / prompt surface
-  - проектный instruction document, отдаваемый через MCP
-- Цель: улучшить качество и предсказуемость агентской работы с knowledge base.
+## 4. Graph Polish
+
+Текущий graph - server-generated SVG без внешних graph dependencies.
+
+Возможные улучшения:
+
+- более понятная легенда
+- richer focus controls
+- сохранение выбранных filters
+- улучшенная плотность labels
+- links from side list to detail pages with better context
+
+## 5. MCP Resources If Needed
+
+Сейчас MCP resources объявлены как list-only compatibility surface и возвращают пустые списки. Данные проекта доступны через tools.
+
+Добавлять resources стоит только если появится реальная потребность клиента:
+
+- `project://config`
+- `project://recent`
+- `entity://function/...`
+- `entity://structure/...`
+- `entity://hypothesis/...`
+
+До этого tools проще, явнее и лучше подходят текущему локальному workflow.
+
+## 6. Optional Importers
+
+Будущие importers должны оставаться опциональными и offline-friendly.
+
+Кандидаты:
+
+- IDA export JSON
+- Ghidra export JSON
+- Binary Ninja export JSON
+- generic symbol list import
+
+Правило: importer не должен требовать внешнего daemon или cloud service.
+
+## 7. Larger Project UX
+
+Для проектов с сотнями и тысячами записей нужно проверить:
+
+- скорость list pages
+- размер HTML responses
+- pagination или incremental filters
+- graph caps and warnings
+- понятные empty/error states
+
+## 8. Packaging And Offline Install
+
+Проверить сценарий:
+
+```powershell
+pip download .
+pip install --no-index --find-links <wheelhouse> mcp-memory
+```
+
+Цель - сохранить простую установку на машине без интернета.

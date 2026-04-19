@@ -1,6 +1,6 @@
 # Module Guide
 
-Этот документ нужен для быстрой навигации по коду `mcp-memory`: кто за что отвечает, где искать поведение и какие модули являются основными точками входа.
+Краткая навигация по коду `mcp-memory`: где искать поведение, какие модули являются точками входа и какие границы важно сохранять.
 
 ## High-Level Layout
 
@@ -16,22 +16,9 @@ src/mcp_memory/
   storage/
 ```
 
-Логика проекта разделена так:
-
-- `config`: где и как живут app/project конфиги
-- `domain`: dataclass-модели и доменные типы
-- `storage`: SQLite bootstrap и low-level DB access
-- `services`: core business logic
-- `api`: JSON HTTP API
-- `mcp`: MCP-over-HTTP server
-- `gui`: server-rendered web UI
-- `cli`: основной пользовательский entrypoint
-
 ## Entry Points
 
 ### `mcp_memory.cli`
-
-Основной CLI интерфейс проекта.
 
 Главный файл:
 
@@ -39,76 +26,68 @@ src/mcp_memory/
 
 Отвечает за:
 
-- парсинг аргументов
-- выбор команды
-- bootstrap logging
-- запуск HTTP/MCP/UI servers
-- вызов import/export/backup/pending операций
-
-Когда нужен обзор всех доступных команд, начинать надо отсюда.
+- parsing CLI arguments
+- `init-app`, `create-project`, `list-projects`
+- `run-http-api`, `run-mcp`, `run-ui-home`
+- import/export/backup/restore commands
+- pending change commands
+- logging bootstrap
 
 ### `mcp_memory.api`
-
-Локальный JSON HTTP API.
 
 Главный файл:
 
 - [src/mcp_memory/api/server.py](../src/mcp_memory/api/server.py)
 
-Отвечает за:
+Локальный JSON HTTP API и project workspace UI живут в одном project HTTP server. Модуль отвечает за:
 
-- маршруты `GET`/`POST`
+- `GET` / `POST` routing
 - JSON serialization
-- связку UI + API в одном project HTTP server
+- UTF-8 responses
+- health/config endpoints
+- binding GUI handlers to `/ui/...`
 - request logging
-- payload conversion в domain write-модели
-
-Если нужен ответ на вопрос “какой HTTP route что делает”, смотреть сюда.
+- conversion of JSON payloads into service calls
 
 ### `mcp_memory.mcp`
-
-MCP-over-HTTP transport.
 
 Главный файл:
 
 - [src/mcp_memory/mcp/server.py](../src/mcp_memory/mcp/server.py)
 
-Отвечает за:
+Stdlib MCP HTTP server. Отвечает за:
 
-- `initialize`
-- `ping`
-- `tools/list`
-- `tools/call`
-- map MCP tools -> service operations
+- MCP Streamable HTTP compatible `POST /mcp`
+- JSON-RPC request/response handling
+- session lifecycle through `Mcp-Session-Id`
+- `initialize`, `ping`
+- `tools/list`, `tools/call`
+- `resources/list`, `resources/templates/list`
+- `prompts/list`, `prompts/get`
+- prompt registry
+- mapping MCP tools to service operations
 
-Если нужно понять, какие MCP tools доступны и как они вызывают core logic, смотреть сюда.
+Важно: `GET /mcp` и `DELETE /mcp` возвращают `405`. Отдельный SSE stream сейчас не предоставляется.
 
 ### `mcp_memory.gui`
-
-Server-rendered web UI.
 
 Главные файлы:
 
 - [src/mcp_memory/gui/home.py](../src/mcp_memory/gui/home.py)
 - [src/mcp_memory/gui/workspace.py](../src/mcp_memory/gui/workspace.py)
 - [src/mcp_memory/gui/render.py](../src/mcp_memory/gui/render.py)
+- [src/mcp_memory/gui/i18n.py](../src/mcp_memory/gui/i18n.py)
+- [src/mcp_memory/gui/assets/app.css](../src/mcp_memory/gui/assets/app.css)
+- [src/mcp_memory/gui/assets/ui.js](../src/mcp_memory/gui/assets/ui.js)
 
 Роли:
 
-- `home.py`
-  - home server
-  - список проектов
-  - probe project status
-- `workspace.py`
-  - project UI pages
-  - search/cards/history/audit/pending
-  - HTML form handlers
-- `render.py`
-  - повторно используемые HTML helpers
-  - layout fragments
-  - asset loading
-
-Если сломалась страница, form flow или navigation, почти всегда нужный код здесь.
+- `home.py`: home server, project shelf, start/stop/restart, edit/delete project actions
+- `workspace.py`: workspace routes, entity pages, graph, settings, import/export, backups, pending, audit
+- `render.py`: shared HTML helpers, shell, cards, forms, empty states
+- `i18n.py`: English/Russian phrase translations
+- `app.css`: shared visual system
+- `ui.js`: theme toggle, sidebar collapse, copy interactions, light page transitions
 
 ## Config Layer
 
@@ -123,24 +102,24 @@ Server-rendered web UI.
 - `ProjectConfig`
 - `AppConfig`
 
-Это основная форма конфигурации проекта и registry.
+`ProjectConfig` хранит identity проекта, paths, HTTP/MCP host/port и `write_mode`.
 
 ### `mcp_memory.config.registry`
 
 Отвечает за:
 
-- чтение `app_config.json`
-- запись `app_config.json`
-- поиск и список проектов
-
-Если нужно понять, как проект регистрируется или находится по `project_id`, смотреть сюда.
+- чтение и запись `app_config.json`
+- регистрацию проектов
+- поиск проекта по `project_id`
+- обновление project config из GUI/CLI
 
 ### `mcp_memory.config.paths`
 
-Отвечает за:
+Отвечает за выбор `app_home`:
 
-- вычисление `app_home`
-- fallback logic для `MCP_MEMORY_HOME`, `LOCALAPPDATA`, local fallback
+1. `MCP_MEMORY_HOME`
+2. `%LOCALAPPDATA%\mcp-memory`
+3. local fallback
 
 ## Domain Layer
 
@@ -150,17 +129,17 @@ Server-rendered web UI.
 
 - [src/mcp_memory/domain/models.py](../src/mcp_memory/domain/models.py)
 
-Содержит dataclass-модели и enum-ы для:
+Содержит dataclasses и enums для:
 
-- `FunctionWrite` / `FunctionRecord`
-- `StructureWrite` / `StructureRecord`
-- `GlobalHypothesisWrite` / `GlobalHypothesisRecord`
-- `EvidenceWrite` / `EvidenceRecord`
-- `ObservedFact`
-- `HypothesisItem`
-- статусы гипотез и timestamp helper
+- function writes/records
+- structure writes/records
+- global hypothesis writes/records
+- evidence records
+- observed facts
+- hypothesis items
+- statuses and timestamps
 
-Если нужна “истинная форма данных”, начинать надо здесь.
+Если нужно понять форму данных, начинать стоит здесь.
 
 ## Storage Layer
 
@@ -168,7 +147,7 @@ Server-rendered web UI.
 
 Отвечает за:
 
-- открытие SQLite database
+- opening SQLite database
 - connection wrapper
 - transaction access
 
@@ -176,37 +155,31 @@ Server-rendered web UI.
 
 Отвечает за:
 
-- bootstrap schema
-- применение SQL migrations
+- schema bootstrap
+- applying SQL migrations
 
-SQL миграции лежат в:
+SQL migrations:
 
 - [sql/migrations](../sql/migrations)
 
-Если нужно понять таблицы и индексы, смотреть сюда и в SQL.
-
 ## Service Layer
 
-Service layer — это core логика проекта. Все внешние интерфейсы поверх него тонкие.
+Service layer - основной слой бизнес-логики. HTTP API, MCP и GUI должны оставаться тонкими адаптерами поверх него.
 
 ### `services.projects`
 
-Создание app и project workspaces.
-
 Отвечает за:
 
-- `init-app`
-- `create-project`
-- directory bootstrap
-- project registration
+- app bootstrap
+- project workspace creation
+- directory creation
+- registry updates
 
 ### `services.functions`
 
-CRUD и валидация для `functions`.
-
 Отвечает за:
 
-- upsert функции
+- upsert function records
 - facts/hypotheses/tags
 - version snapshots
 - audit rows
@@ -215,28 +188,22 @@ CRUD и валидация для `functions`.
 
 ### `services.structures`
 
-CRUD и валидация для `structures`.
-
 Отвечает за:
 
-- upsert структуры
+- upsert structure records
 - fields serialization
 - facts/hypotheses/tags
 - versions/audit/search updates
 
 ### `services.hypotheses`
 
-CRUD и валидация для `global hypotheses`.
-
 Отвечает за:
 
-- upsert глобальной гипотезы
+- global hypothesis writes
 - facts/tags
 - versions/audit/search updates
 
 ### `services.evidence`
-
-Создание и listing `evidence`.
 
 Отвечает за:
 
@@ -246,163 +213,61 @@ CRUD и валидация для `global hypotheses`.
 
 ### `services.relations`
 
-Связи между сущностями.
-
 Отвечает за:
 
 - create relation
 - list relations
-- traverse related entities
+- related traversal
+- graph source data
 
 ### `services.search`
 
-Локальный поиск без embeddings.
-
 Отвечает за:
 
-- exact/FTS search
+- exact search
+- FTS5 search
+- tag filtering
 - entity type filtering
-- binary/tag/address filtering
 
-### `services.pending`
-
-Confirm-mode queue.
-
-Отвечает за:
-
-- create pending change
-- list pending changes
-- confirm pending
-- reject pending
-- apply deferred operations
-
-Это критичный модуль для agent-safe write flow.
+Known caveat: FTS strings with hyphens can be parsed as expressions. Search by separate words or tags until escaping is fixed.
 
 ### `services.transfer`
 
-JSON import/export.
-
 Отвечает за:
 
-- export bundle
-- import bundle
-- clear and replace project data
+- JSON export
+- JSON import
+- replace-existing behavior
 
 ### `services.archive`
 
-Zip backup/restore.
+Отвечает за:
+
+- zip backup
+- restore project workspace
+
+### `services.pending`
 
 Отвечает за:
 
-- backup workspace
-- restore workspace
-- re-register restored project
+- pending change proposals
+- confirm/reject flow
+- write-mode integration for agent and GUI writes
 
-## Logging
+## Tests
 
-### `mcp_memory.logging_utils`
+Основные группы тестов:
 
-Файл:
+- `tests/test_services.py`
+- `tests/test_api_server.py`
+- `tests/test_mcp_server.py`
+- `tests/test_gui_home.py`
+- `scripts/local_smoke_check.py`
 
-- [src/mcp_memory/logging_utils.py](../src/mcp_memory/logging_utils.py)
+Полный локальный check:
 
-Отвечает за:
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_local_checks.ps1
+```
 
-- logger bootstrap
-- plain-text runtime formatting
-- shared log event helper
-- request timing helper
-- logger shutdown for tests
-
-Это runtime logging слой. Не путать с `audit_log` в SQLite.
-
-## Как искать код по задаче
-
-### Нужно изменить CLI-команду
-
-Смотреть:
-
-- `cli/main.py`
-- при необходимости соответствующий service
-
-### Нужно изменить HTTP route
-
-Смотреть:
-
-- `api/server.py`
-- потом domain/service слой
-
-### Нужно изменить MCP tool
-
-Смотреть:
-
-- `mcp/server.py`
-- потом service слой
-
-### Нужно изменить UI страницу или HTML form
-
-Смотреть:
-
-- `gui/workspace.py`
-- иногда `gui/render.py`
-- home screen: `gui/home.py`
-
-### Нужно изменить хранение сущности
-
-Смотреть:
-
-- `domain/models.py`
-- соответствующий `services/*.py`
-- при необходимости `sql/migrations`
-
-### Нужно понять, почему запись попала в pending вместо прямого save
-
-Смотреть:
-
-- `services/pending.py`
-- `api/server.py`
-- `mcp/server.py`
-- `gui/workspace.py`
-
-### Нужно понять runtime log behavior
-
-Смотреть:
-
-- `logging_utils.py`
-- `cli/main.py`
-- `api/server.py`
-- `mcp/server.py`
-- `gui/home.py`
-- `gui/workspace.py`
-
-## Test Layout
-
-Тесты лежат в:
-
-- [tests](../tests)
-
-Основные группы:
-
-- `test_config_cli.py`
-- `test_api_server.py`
-- `test_mcp_server.py`
-- `test_gui_home.py`
-- `test_services.py`
-- `test_transfer_archive.py`
-- `test_logging_runtime.py`
-
-Общий smoke/coverage workflow:
-
-- [scripts/run_local_checks.ps1](../scripts/run_local_checks.ps1)
-- [scripts/local_smoke_check.py](../scripts/local_smoke_check.py)
-
-## Practical Rule Of Thumb
-
-Если нужно быстро ориентироваться:
-
-1. Найди внешний интерфейс: CLI / HTTP / MCP / UI
-2. Перейди в соответствующий entrypoint
-3. Найди вызов нужного service
-4. Уже потом смотри domain/storage
-
-Это почти всегда самый быстрый маршрут по проекту.
+Порог coverage: `>=95%`.
