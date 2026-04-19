@@ -3,9 +3,10 @@ from __future__ import annotations
 import json
 import logging
 import traceback
+import uuid
 from dataclasses import dataclass
 from http import HTTPStatus
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import urlparse
@@ -48,6 +49,14 @@ class ToolSpec:
     handler: Callable[[ProjectConfig, ProjectRegistry, dict[str, Any]], Any]
 
 
+@dataclass(frozen=True)
+class PromptSpec:
+    name: str
+    description: str
+    arguments: list[dict[str, Any]]
+    renderer: Callable[[ProjectConfig, dict[str, str]], str]
+
+
 class McpRequestError(ValueError):
     """Raised when an MCP request is malformed."""
 
@@ -62,7 +71,7 @@ def serve_project_mcp_api(
     logger = configure_logging("mcp", log_level, project.logs_dir / "mcp.log")
     configure_logging("services", log_level, project.logs_dir / "mcp.log")
     handler = build_handler(project, registry, logger=logger)
-    server = HTTPServer((host, port), handler)
+    server = ThreadingHTTPServer((host, port), handler)
     log_event(logger, logging.INFO, "server_start", project_id=project.project_id, host=host, port=port)
     server.serve_forever()
 
@@ -73,9 +82,12 @@ def build_handler(
     logger: logging.Logger | None = None,
 ) -> type[BaseHTTPRequestHandler]:
     tools = _build_tools()
+    prompts = _build_prompts()
     request_logger = logger or get_logger("mcp")
+    sessions: set[str] = set()
 
     class RequestHandler(BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
         server_version = "mcp-memory-mcp/0.1"
 
         def do_GET(self) -> None:
@@ -84,6 +96,24 @@ def build_handler(
             parsed = urlparse(self.path)
             if parsed.path == "/health":
                 self._send_json({"status": "ok", "project_id": project.project_id})
+            elif parsed.path == "/mcp":
+                self._send_json(
+                    {"error": {"code": "method_not_allowed", "message": "SSE streams are not available"}},
+                    status=HTTPStatus.METHOD_NOT_ALLOWED,
+                )
+            else:
+                self._send_json({"error": {"code": "not_found", "message": "Unknown route"}}, status=HTTPStatus.NOT_FOUND)
+            request_log.finish(request_logger, "request_complete", int(self._response_status), project_id=project.project_id)
+
+        def do_DELETE(self) -> None:
+            request_log = start_request_log("DELETE", self.path)
+            self._response_status = HTTPStatus.METHOD_NOT_ALLOWED
+            parsed = urlparse(self.path)
+            if parsed.path == "/mcp":
+                self._send_json(
+                    {"error": {"code": "method_not_allowed", "message": "Session deletion is not available"}},
+                    status=HTTPStatus.METHOD_NOT_ALLOWED,
+                )
             else:
                 self._send_json({"error": {"code": "not_found", "message": "Unknown route"}}, status=HTTPStatus.NOT_FOUND)
             request_log.finish(request_logger, "request_complete", int(self._response_status), project_id=project.project_id)
@@ -103,20 +133,43 @@ def build_handler(
                 return
 
             try:
+                method = None if "method" not in payload else str(payload["method"])
+                session_id = self.headers.get("Mcp-Session-Id")
+                if session_id and session_id not in sessions and method != "initialize":
+                    self._send_json(
+                        {"error": {"code": "session_not_found", "message": "Unknown MCP session"}},
+                        status=HTTPStatus.NOT_FOUND,
+                    )
+                    return
+
+                if method is None:
+                    self._send_accepted()
+                    return
+
+                if "id" not in payload:
+                    self._send_accepted()
+                    return
+
                 request_id = payload.get("id")
-                method = str(payload["method"])
                 params = payload.get("params", {})
                 if not isinstance(params, dict):
                     raise McpRequestError("params must be an object")
 
                 if method == "initialize":
+                    session_id = uuid.uuid4().hex
+                    sessions.add(session_id)
                     self._send_rpc_result(
                         request_id,
                         {
                             "protocolVersion": "2025-03-26",
                             "serverInfo": {"name": "mcp-memory", "version": "0.1.0"},
-                            "capabilities": {"tools": {"listChanged": False}},
+                            "capabilities": {
+                                "tools": {"listChanged": False},
+                                "resources": {"subscribe": False, "listChanged": False},
+                                "prompts": {"listChanged": False},
+                            },
                         },
+                        headers={"Mcp-Session-Id": session_id},
                     )
                     return
 
@@ -136,6 +189,56 @@ def build_handler(
                                 }
                                 for spec in tools.values()
                             ]
+                        },
+                    )
+                    return
+
+                if method == "resources/list":
+                    self._send_rpc_result(request_id, {"resources": []})
+                    return
+
+                if method == "resources/templates/list":
+                    self._send_rpc_result(request_id, {"resourceTemplates": []})
+                    return
+
+                if method == "prompts/list":
+                    self._send_rpc_result(
+                        request_id,
+                        {
+                            "prompts": [
+                                {
+                                    "name": spec.name,
+                                    "description": spec.description,
+                                    "arguments": spec.arguments,
+                                }
+                                for spec in prompts.values()
+                            ]
+                        },
+                    )
+                    return
+
+                if method == "prompts/get":
+                    prompt_name = str(params["name"])
+                    prompt_arguments = params.get("arguments", {})
+                    if not isinstance(prompt_arguments, dict):
+                        raise McpRequestError("prompt arguments must be an object")
+                    spec = prompts.get(prompt_name)
+                    if spec is None:
+                        raise McpRequestError(f"Unknown prompt: {prompt_name}")
+                    rendered_arguments = {str(key): str(value) for key, value in prompt_arguments.items()}
+                    self._send_rpc_result(
+                        request_id,
+                        {
+                            "description": spec.description,
+                            "messages": [
+                                {
+                                    "role": "user",
+                                    "content": {
+                                        "type": "text",
+                                        "text": spec.renderer(project, rendered_arguments),
+                                    },
+                                }
+                            ],
                         },
                     )
                     return
@@ -218,22 +321,258 @@ def build_handler(
                 return None
             return parsed
 
-        def _send_json(self, payload: Any, status: HTTPStatus = HTTPStatus.OK) -> None:
+        def _send_json(
+            self,
+            payload: Any,
+            status: HTTPStatus = HTTPStatus.OK,
+            headers: dict[str, str] | None = None,
+        ) -> None:
             body = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
             self._response_status = status
             self.send_response(status.value)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
+            for name, value in (headers or {}).items():
+                self.send_header(name, value)
             self.end_headers()
             self.wfile.write(body)
 
-        def _send_rpc_result(self, request_id: Any, result: Any) -> None:
-            self._send_json({"jsonrpc": "2.0", "id": request_id, "result": result})
+        def _send_accepted(self) -> None:
+            self._response_status = HTTPStatus.ACCEPTED
+            self.send_response(HTTPStatus.ACCEPTED.value)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
+        def _send_rpc_result(self, request_id: Any, result: Any, headers: dict[str, str] | None = None) -> None:
+            self._send_json({"jsonrpc": "2.0", "id": request_id, "result": result}, headers=headers)
 
         def _send_rpc_error(self, request_id: Any, code: int, message: str) -> None:
             self._send_json({"jsonrpc": "2.0", "id": request_id, "error": {"code": code, "message": message}})
 
     return RequestHandler
+
+
+def _build_prompts() -> dict[str, PromptSpec]:
+    common_arguments = [
+        {"name": "task", "description": "Current analysis task or user goal.", "required": False},
+        {"name": "binary_id", "description": "Binary/workspace identifier to prefer in examples.", "required": False},
+        {"name": "focus_entity", "description": "Entity id or address the agent should focus on.", "required": False},
+    ]
+    return {
+        "agent_workspace_guide": PromptSpec(
+            name="agent_workspace_guide",
+            description="Guide an agent through safe mcp-memory workspace discovery and writes.",
+            arguments=common_arguments,
+            renderer=lambda project, arguments: _render_agent_workspace_guide(project, arguments),
+        ),
+        "record_function_analysis": PromptSpec(
+            name="record_function_analysis",
+            description="Explain how to create or update function analysis records.",
+            arguments=common_arguments,
+            renderer=lambda project, arguments: _render_function_prompt(project, arguments),
+        ),
+        "record_structure_analysis": PromptSpec(
+            name="record_structure_analysis",
+            description="Explain how to record structures and their fields.",
+            arguments=common_arguments,
+            renderer=lambda project, arguments: _render_structure_prompt(project, arguments),
+        ),
+        "record_hypothesis_evidence": PromptSpec(
+            name="record_hypothesis_evidence",
+            description="Explain how to keep facts, hypotheses, evidence, and relations separate.",
+            arguments=common_arguments,
+            renderer=lambda project, arguments: _render_hypothesis_evidence_prompt(project, arguments),
+        ),
+        "search_and_graph_workflow": PromptSpec(
+            name="search_and_graph_workflow",
+            description="Explain how to search records and build context through graph relations.",
+            arguments=common_arguments,
+            renderer=lambda project, arguments: _render_search_graph_prompt(project, arguments),
+        ),
+    }
+
+
+def _prompt_context(project: ProjectConfig, arguments: dict[str, str]) -> str:
+    task = arguments.get("task", "").strip() or "No task argument provided."
+    binary_id = arguments.get("binary_id", "").strip() or "<binary_id>"
+    focus_entity = arguments.get("focus_entity", "").strip() or "<entity_id_or_address>"
+    write_mode_note = (
+        "Writes are applied immediately."
+        if project.write_mode == "auto"
+        else "Writes return pending changes; call list_pending_changes and confirm_change before assuming data was committed."
+    )
+    return "\n".join(
+        [
+            "Active mcp-memory project:",
+            f"- project_id: {project.project_id}",
+            f"- display_name: {project.display_name}",
+            f"- write_mode: {project.write_mode}",
+            f"- http_endpoint: http://{project.http_host}:{project.http_port}",
+            f"- mcp_endpoint: http://{project.mcp_host}:{project.mcp_port}/mcp",
+            f"- write_mode_rule: {write_mode_note}",
+            f"- task: {task}",
+            f"- preferred_binary_id: {binary_id}",
+            f"- focus_entity: {focus_entity}",
+        ]
+    )
+
+
+def _json_example(payload: dict[str, Any]) -> str:
+    return json.dumps(payload, ensure_ascii=False, indent=2)
+
+
+def _render_agent_workspace_guide(project: ProjectConfig, arguments: dict[str, str]) -> str:
+    binary_id = arguments.get("binary_id", "").strip() or "bin-main"
+    focus_entity = arguments.get("focus_entity", "").strip() or "fn_main"
+    return f"""{_prompt_context(project, arguments)}
+
+Use this server as a local offline-first reverse engineering memory.
+
+Recommended workflow:
+1. Call get_project_config first and check write_mode.
+2. Search before writing: use search_records with q, tag, address, binary_id, and entity_types.
+3. Read exact records with get_record before updating them.
+4. Expand local context with get_related for 1-2 hops.
+5. Keep facts, hypotheses, evidence, and relations separate.
+6. In confirm mode, create/update tools return pending changes. Confirm with confirm_change only after reviewing list_pending_changes.
+7. In auto mode, create/update tools commit immediately.
+
+Safe search example:
+{_json_example({"q": "loader", "entity_types": ["function"], "binary_id": binary_id, "limit": 20})}
+
+Focused read example:
+{_json_example({"entity_type": "function", "entity_id": focus_entity, "binary_id": binary_id})}
+
+FTS warning: avoid raw hyphenated query text such as gui-seed. Search individual words like gui seed, or use tag='gui-seed' until FTS escaping is fixed."""
+
+
+def _render_function_prompt(project: ProjectConfig, arguments: dict[str, str]) -> str:
+    binary_id = arguments.get("binary_id", "").strip() or "bin-main"
+    focus_entity = arguments.get("focus_entity", "").strip() or "fn_example"
+    return f"""{_prompt_context(project, arguments)}
+
+Use create_function to create or replace a function analysis record. Use update_function for the same payload when the intent is explicitly an update.
+
+Required fields: binary_id, function_id, address, raw_name, current_name, summary, behavior_description. Include created_by and updated_by for audit clarity.
+
+Good function payload:
+{_json_example({
+    "binary_id": binary_id,
+    "function_id": focus_entity,
+    "address": "0x401000",
+    "raw_name": "sub_401000",
+    "current_name": "load_project_config",
+    "summary": "Loads local project configuration and validates paths.",
+    "behavior_description": "Reads project metadata, normalizes paths, and prepares runtime endpoints.",
+    "important_variables": ["project_root", "database_path"],
+    "used_apis": ["CreateFileW", "ReadFile"],
+    "strings": ["project.db", "mcp"],
+    "constants": ["0x401000"],
+    "confidence": 0.82,
+    "tags": ["config", "loader"],
+    "observed_facts": [{"fact": "The function reads project configuration paths.", "source_origin": "agent"}],
+    "hypotheses": [{"statement": "This function runs before HTTP and MCP startup.", "status": "new", "confidence": 0.66}],
+    "source_origin": "agent",
+    "created_by": "agent",
+    "updated_by": "agent",
+    "allow_conflict": True,
+})}
+
+If write_mode is confirm, capture pending_change_id and ask for/perform confirm_change only after review."""
+
+
+def _render_structure_prompt(project: ProjectConfig, arguments: dict[str, str]) -> str:
+    binary_id = arguments.get("binary_id", "").strip() or "bin-main"
+    focus_entity = arguments.get("focus_entity", "").strip() or "PROJECT_CONTEXT"
+    return f"""{_prompt_context(project, arguments)}
+
+Use create_structure or update_structure for recovered data layouts. Keep field offsets stable and include comments when field purpose is inferred.
+
+Required fields: binary_id, structure_id, raw_name, current_name, summary. Fields are optional but should include name, offset, data_type, optional size, and comment.
+
+Good structure payload:
+{_json_example({
+    "binary_id": binary_id,
+    "structure_id": focus_entity,
+    "raw_name": "_PROJECT_CONTEXT_raw",
+    "current_name": "PROJECT_CONTEXT",
+    "summary": "Holds local project paths and runtime endpoint configuration.",
+    "fields": [
+        {"name": "flags", "offset": "0x0", "data_type": "uint32_t", "size": 4, "comment": "Runtime flags."},
+        {"name": "database_path", "offset": "0x8", "data_type": "wchar_t *", "size": 8, "comment": "Path to project.db."},
+    ],
+    "tags": ["config", "structure"],
+    "observed_facts": [{"fact": "The structure stores a database path pointer.", "source_origin": "agent"}],
+    "hypotheses": [{"statement": "This structure is shared by HTTP and MCP startup paths.", "status": "new", "confidence": 0.7}],
+    "source_origin": "agent",
+    "created_by": "agent",
+    "updated_by": "agent",
+})}
+
+Link structures to functions with create_relation relation_type='uses_structure' when a function reads or writes the layout."""
+
+
+def _render_hypothesis_evidence_prompt(project: ProjectConfig, arguments: dict[str, str]) -> str:
+    binary_id = arguments.get("binary_id", "").strip() or "bin-main"
+    focus_entity = arguments.get("focus_entity", "").strip() or "fn_example"
+    return f"""{_prompt_context(project, arguments)}
+
+Use observed_facts for directly observed statements. Use hypotheses for interpretations that may change. Use add_evidence for concrete support such as blocks, excerpts, xrefs, or attachments. Use create_relation for graph edges between entities.
+
+Global hypothesis example:
+{_json_example({
+    "hypothesis_id": "hyp_runtime_startup_order",
+    "title": "Runtime starts HTTP before MCP",
+    "statement": "The local launcher appears to validate HTTP health before exposing the MCP endpoint.",
+    "status": "new",
+    "confidence": 0.64,
+    "binary_id": binary_id,
+    "tags": ["runtime", "startup"],
+    "observed_facts": [{"fact": "HTTP health is checked during startup logs.", "source_origin": "agent"}],
+    "source_origin": "agent",
+    "created_by": "agent",
+    "updated_by": "agent",
+})}
+
+Evidence example:
+{_json_example({
+    "evidence_id": "ev_startup_log_001",
+    "entity_type": "function",
+    "entity_id": focus_entity,
+    "evidence_type": "log",
+    "description": "Startup log shows HTTP health before MCP tool calls.",
+    "excerpt": "GET /health ... POST /mcp",
+    "created_by": "agent",
+})}
+
+Relation example:
+{_json_example({
+    "from_entity_type": "function",
+    "from_entity_id": focus_entity,
+    "to_entity_type": "global_hypothesis",
+    "to_entity_id": "hyp_runtime_startup_order",
+    "relation_type": "supports",
+    "created_by": "agent",
+})}"""
+
+
+def _render_search_graph_prompt(project: ProjectConfig, arguments: dict[str, str]) -> str:
+    binary_id = arguments.get("binary_id", "").strip() or "bin-main"
+    focus_entity = arguments.get("focus_entity", "").strip() or "fn_main"
+    return f"""{_prompt_context(project, arguments)}
+
+Use search_records for discovery, get_record for exact reads, and get_related for graph expansion. Prefer a small loop: search -> read -> related -> read linked records -> write only what is supported.
+
+Search examples:
+{_json_example({"q": "Synthetic", "limit": 50})}
+{_json_example({"tag": "gui-seed", "limit": 50})}
+{_json_example({"address": "0x401000", "binary_id": binary_id, "entity_types": ["function"], "limit": 10})}
+
+Graph context examples:
+{_json_example({"entity_type": "function", "entity_id": focus_entity, "hops": 1})}
+{_json_example({"entity_type": "function", "entity_id": focus_entity, "hops": 2})}
+
+When adding graph edges, use relation types that describe the analysis claim: calls, uses_structure, supports, refutes, aliases, dispatches_to, owns, reads, writes."""
 
 
 def _build_tools() -> dict[str, ToolSpec]:

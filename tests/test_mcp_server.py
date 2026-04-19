@@ -3,7 +3,8 @@ from __future__ import annotations
 import json
 import threading
 import unittest
-from http.server import HTTPServer
+from http import HTTPStatus
+from http.server import ThreadingHTTPServer
 from pathlib import Path
 from urllib import error, request
 from unittest import mock
@@ -41,7 +42,7 @@ class McpServerTests(unittest.TestCase):
                 )
             )
         handler = build_handler(self.sandbox.project, self.sandbox.registry)
-        self.server = HTTPServer(("127.0.0.1", 0), handler)
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
         self.base_url = f"http://127.0.0.1:{self.server.server_port}"
@@ -54,8 +55,126 @@ class McpServerTests(unittest.TestCase):
 
     def test_health_and_initialize(self) -> None:
         self.assertEqual(self._get_json("/health")["status"], "ok")
-        response = self._rpc("initialize", {"protocolVersion": "2025-03-26"}, request_id=1)
+        status, headers, body = self._post_rpc(
+            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-03-26"}}
+        )
+        self.assertEqual(status, HTTPStatus.OK)
+        self.assertTrue(headers.get("Mcp-Session-Id"))
+        response = json.loads(body.decode("utf-8"))
         self.assertEqual(response["result"]["serverInfo"]["name"], "mcp-memory")
+        self.assertIn("resources", response["result"]["capabilities"])
+        self.assertIn("prompts", response["result"]["capabilities"])
+
+    def test_streamable_http_handshake_for_codex_client(self) -> None:
+        status, headers, body, version = self._post_rpc_response(
+            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-03-26"}},
+            headers={"Accept": "application/json, text/event-stream"},
+        )
+        self.assertEqual(status, HTTPStatus.OK)
+        self.assertEqual(version, 11)
+        self.assertEqual(json.loads(body.decode("utf-8"))["result"]["serverInfo"]["name"], "mcp-memory")
+        session_id = headers.get("Mcp-Session-Id")
+        self.assertTrue(session_id)
+
+        status, _, body = self._post_rpc(
+            {"jsonrpc": "2.0", "method": "notifications/initialized"},
+            headers={"Accept": "application/json, text/event-stream", "Mcp-Session-Id": session_id},
+        )
+        self.assertEqual(status, HTTPStatus.ACCEPTED)
+        self.assertEqual(body, b"")
+
+        status, _, body = self._post_rpc(
+            {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
+            headers={"Accept": "application/json, text/event-stream", "Mcp-Session-Id": session_id},
+        )
+        self.assertEqual(status, HTTPStatus.OK)
+        tool_names = {item["name"] for item in json.loads(body.decode("utf-8"))["result"]["tools"]}
+        self.assertIn("search_records", tool_names)
+
+    def test_mcp_list_methods_return_empty_collections(self) -> None:
+        self.assertEqual(self._rpc("resources/list", {}, request_id=20)["result"], {"resources": []})
+        self.assertEqual(self._rpc("resources/templates/list", {}, request_id=21)["result"], {"resourceTemplates": []})
+        prompts = self._rpc("prompts/list", {}, request_id=22)["result"]["prompts"]
+        prompt_names = {item["name"] for item in prompts}
+        self.assertEqual(
+            prompt_names,
+            {
+                "agent_workspace_guide",
+                "record_function_analysis",
+                "record_structure_analysis",
+                "record_hypothesis_evidence",
+                "search_and_graph_workflow",
+            },
+        )
+        workspace_prompt = next(item for item in prompts if item["name"] == "agent_workspace_guide")
+        self.assertIn("description", workspace_prompt)
+        self.assertIn("arguments", workspace_prompt)
+        self.assertIn("task", {item["name"] for item in workspace_prompt["arguments"]})
+
+    def test_prompts_get_returns_agent_instructions(self) -> None:
+        response = self._rpc(
+            "prompts/get",
+            {
+                "name": "agent_workspace_guide",
+                "arguments": {
+                    "task": "Review startup flow",
+                    "binary_id": "bin-main",
+                    "focus_entity": "fn_main",
+                },
+            },
+            request_id=24,
+        )
+        result = response["result"]
+        self.assertIn("safe mcp-memory workspace", result["description"])
+        self.assertEqual(result["messages"][0]["role"], "user")
+        self.assertEqual(result["messages"][0]["content"]["type"], "text")
+        text = result["messages"][0]["content"]["text"]
+        self.assertIn("project_id: test-project", text)
+        self.assertIn("write_mode: auto", text)
+        self.assertIn("Review startup flow", text)
+        self.assertIn("bin-main", text)
+        self.assertIn("fn_main", text)
+        self.assertIn("get_project_config", text)
+        self.assertIn("search_records", text)
+        self.assertIn("get_record", text)
+        self.assertIn("get_related", text)
+        self.assertIn("confirm_change", text)
+        self.assertIn("gui-seed", text)
+
+    def test_prompts_get_validates_unknown_prompt_and_arguments(self) -> None:
+        unknown = self._rpc("prompts/get", {"name": "missing_prompt"}, request_id=25)
+        self.assertEqual(unknown["error"]["code"], -32602)
+        self.assertIn("Unknown prompt", unknown["error"]["message"])
+
+        bad_arguments = self._rpc("prompts/get", {"name": "agent_workspace_guide", "arguments": []}, request_id=26)
+        self.assertEqual(bad_arguments["error"]["code"], -32602)
+        self.assertIn("prompt arguments must be an object", bad_arguments["error"]["message"])
+
+        missing_name = self._rpc("prompts/get", {}, request_id=27)
+        self.assertEqual(missing_name["error"]["code"], -32602)
+
+    def test_notifications_and_session_errors_follow_streamable_http(self) -> None:
+        status, _, body = self._post_rpc({"jsonrpc": "2.0", "method": "notifications/initialized"})
+        self.assertEqual(status, HTTPStatus.ACCEPTED)
+        self.assertEqual(body, b"")
+
+        with self.assertRaises(error.HTTPError) as ctx:
+            self._post_rpc(
+                {"jsonrpc": "2.0", "id": 23, "method": "ping", "params": {}},
+                headers={"Mcp-Session-Id": "missing-session"},
+            )
+        self.assertEqual(ctx.exception.code, HTTPStatus.NOT_FOUND)
+        self.assertEqual(json.loads(ctx.exception.read().decode("utf-8"))["error"]["code"], "session_not_found")
+
+    def test_mcp_get_and_delete_are_method_not_allowed(self) -> None:
+        with self.assertRaises(error.HTTPError) as get_ctx:
+            request.urlopen(self.base_url + "/mcp")
+        self.assertEqual(get_ctx.exception.code, HTTPStatus.METHOD_NOT_ALLOWED)
+
+        delete_request = request.Request(self.base_url + "/mcp", method="DELETE")
+        with self.assertRaises(error.HTTPError) as delete_ctx:
+            request.urlopen(delete_request)
+        self.assertEqual(delete_ctx.exception.code, HTTPStatus.METHOD_NOT_ALLOWED)
 
     def test_tools_list_and_calls(self) -> None:
         listed = self._rpc("tools/list", {}, request_id=2)
@@ -285,7 +404,7 @@ class McpServerTests(unittest.TestCase):
 
     def test_serve_project_mcp_api_constructs_server(self) -> None:
         fake_server = mock.Mock()
-        with mock.patch("mcp_memory.mcp.server.HTTPServer", return_value=fake_server) as server_cls:
+        with mock.patch("mcp_memory.mcp.server.ThreadingHTTPServer", return_value=fake_server) as server_cls:
             serve_project_mcp_api(self.sandbox.project, self.sandbox.registry, "127.0.0.1", 9998)
         server_cls.assert_called_once()
         fake_server.serve_forever.assert_called_once()
@@ -303,14 +422,32 @@ class McpServerTests(unittest.TestCase):
 
     def _rpc(self, method: str, params: dict, request_id: int | None) -> dict:
         payload = {"jsonrpc": "2.0", "id": request_id, "method": method, "params": params}
+        _, _, body = self._post_rpc(payload)
+        return json.loads(body.decode("utf-8"))
+
+    def _post_rpc(
+        self,
+        payload: dict,
+        headers: dict[str, str] | None = None,
+    ) -> tuple[int, dict[str, str], bytes]:
+        status, headers, body, _ = self._post_rpc_response(payload, headers=headers)
+        return status, headers, body
+
+    def _post_rpc_response(
+        self,
+        payload: dict,
+        headers: dict[str, str] | None = None,
+    ) -> tuple[int, dict[str, str], bytes, int]:
+        request_headers = {"Content-Type": "application/json; charset=utf-8"}
+        request_headers.update(headers or {})
         req = request.Request(
             self.base_url + "/mcp",
             data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json; charset=utf-8"},
+            headers=request_headers,
             method="POST",
         )
         with request.urlopen(req) as response:
-            return json.loads(response.read().decode("utf-8"))
+            return response.status, dict(response.headers.items()), response.read(), response.version
 
     def _call_tool(self, name: str, arguments: dict) -> dict:
         return self._rpc("tools/call", {"name": name, "arguments": arguments}, request_id=3)
