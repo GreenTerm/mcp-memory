@@ -148,3 +148,16 @@ class ProjectService:
             write_mode=updated.write_mode,
         )
         return updated
+
+    def delete_project(self, project_id: str) -> None:
+        existing = self._registry.get_project(project_id)
+        if existing is None:
+            raise ValueError(f"project_id not found: {project_id}")
+        self._registry.remove_project(project_id)
+        log_event(
+            self._logger,
+            logging.INFO,
+            "project_deleted",
+            project_id=project_id,
+            project_root=existing.project_root,
+        )

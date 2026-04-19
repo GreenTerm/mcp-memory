@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import json
 import logging
+import math
+import zipfile
 from html import escape
 from http import HTTPStatus
+from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs
 
@@ -25,7 +28,9 @@ from mcp_memory.services import (
     GlobalHypothesisService,
     GlobalHypothesisValidationError,
     PendingChangeService,
+    ProjectArchiveService,
     ProjectService,
+    ProjectTransferService,
     RelationService,
     SearchQuery,
     SearchService,
@@ -38,15 +43,21 @@ from mcp_memory.storage import Database, open_database
 logger = get_logger("ui")
 
 from .render import (
+    app_shell,
     badge,
+    breadcrumbs,
     empty_state,
     flash_banner,
     html_page,
     key_value_grid,
     load_asset_text,
+    mcp_config_block,
     section,
     shell_command,
+    sidebar_nav,
     table,
+    top_search,
+    write_mode_badge,
 )
 from .i18n import language_switcher, localize_markup, resolve_language, translate_text, with_lang
 
@@ -54,7 +65,59 @@ from .i18n import language_switcher, localize_markup, resolve_language, translat
 def workspace_asset_response(path: str) -> tuple[str, bytes] | None:
     if path == "/ui/assets/app.css":
         return ("text/css; charset=utf-8", load_asset_text("app.css").encode("utf-8"))
+    if path == "/ui/assets/ui.js":
+        return ("text/javascript; charset=utf-8", load_asset_text("ui.js").encode("utf-8"))
     return None
+
+
+def workspace_page_html(
+    project: ProjectConfig,
+    page_title: str,
+    main_content: str,
+    current_url: str,
+    lang: str,
+    title_suffix: str | None = None,
+    breadcrumb_items: list[tuple[str, str | None]] | None = None,
+) -> str:
+    _, _, query_string = current_url.partition("?")
+    query = parse_qs(query_string)
+    search_query = query.get("q", [""])[0]
+    sidebar = workspace_sidebar(current_url, lang)
+    topbar = top_search(
+        with_lang("/ui/search", lang),
+        search_query,
+        lang,
+        write_mode_badge(project.write_mode) + language_switcher(current_url, lang),
+    )
+    trail = breadcrumbs(
+        breadcrumb_items
+        or [
+            ("Project", with_lang("/ui/", lang)),
+            (page_title, None),
+        ]
+    )
+    body = app_shell(sidebar, topbar, trail, main_content)
+    html_title = title_suffix or f"{page_title} - {project.display_name}"
+    return localize_markup(
+        html_page(html_title, body, "/ui/assets/app.css", page_class="workspace-page has-app-shell", html_lang=lang),
+        lang,
+    )
+
+
+def workspace_sidebar(current_url: str, lang: str) -> str:
+    items = [
+        ("Binaries", with_lang("/ui/search?entity_type=binary", lang), "entities"),
+        ("Functions", with_lang("/ui/functions", lang), "entities"),
+        ("Structures", with_lang("/ui/structures", lang), "entities"),
+        ("Hypotheses", with_lang("/ui/global-hypotheses", lang), "entities"),
+        ("Search", with_lang("/ui/search", lang), "workspace"),
+        ("Graph", with_lang("/ui/graph", lang), "workspace"),
+        ("Import/Export", with_lang("/ui/import-export", lang), "project"),
+        ("Backups", with_lang("/ui/backups", lang), "project"),
+        ("Settings", with_lang("/ui/settings", lang), "project"),
+    ]
+    path, _, _ = current_url.partition("?")
+    return sidebar_nav(items, active_href=path, brand_href=with_lang("/ui/", lang))
 
 
 def render_workspace_response(project: ProjectConfig, registry: ProjectRegistry, raw_path: str) -> tuple[HTTPStatus, str] | None:
@@ -66,12 +129,20 @@ def render_workspace_response(project: ProjectConfig, registry: ProjectRegistry,
         return (HTTPStatus.OK, render_workspace_dashboard(project, lang))
     if path == "/ui/search":
         return (HTTPStatus.OK, render_search_page(project, query, raw_path, lang))
+    if path == "/ui/graph":
+        return (HTTPStatus.OK, render_graph_page(project, query, raw_path, lang))
     if path == "/ui/pending":
         return (HTTPStatus.OK, render_pending_page(project, query, raw_path, lang))
     if path == "/ui/audit":
         return (HTTPStatus.OK, render_audit_page(project, query, raw_path, lang))
     if path == "/ui/settings":
         return (HTTPStatus.OK, render_project_settings_page(project, raw_path, project_settings_form_defaults(project), None, False, lang))
+    if path == "/ui/import-export":
+        return (HTTPStatus.OK, render_import_export_page(project, query, raw_path, None, lang))
+    if path == "/ui/backups":
+        return (HTTPStatus.OK, render_backups_page(project, query, raw_path, None, lang))
+    if path == "/ui/functions":
+        return (HTTPStatus.OK, render_functions_list_page(project, query, raw_path, lang))
     if path == "/ui/functions/new":
         return (HTTPStatus.OK, render_function_form_page(project, "new", function_form_defaults(project), None, lang))
     if path.startswith("/ui/functions/") and path.endswith("/history"):
@@ -79,7 +150,9 @@ def render_workspace_response(project: ProjectConfig, registry: ProjectRegistry,
     if path.startswith("/ui/functions/") and path.endswith("/edit"):
         return render_function_edit_response(project, path, lang)
     if path.startswith("/ui/functions/"):
-        return render_function_response(project, path, lang)
+        return render_function_response(project, path, query, raw_path, lang)
+    if path == "/ui/structures":
+        return (HTTPStatus.OK, render_structures_list_page(project, query, raw_path, lang))
     if path == "/ui/structures/new":
         return (HTTPStatus.OK, render_structure_form_page(project, "new", structure_form_defaults(project), None, lang))
     if path.startswith("/ui/structures/") and path.endswith("/history"):
@@ -87,7 +160,9 @@ def render_workspace_response(project: ProjectConfig, registry: ProjectRegistry,
     if path.startswith("/ui/structures/") and path.endswith("/edit"):
         return render_structure_edit_response(project, path, lang)
     if path.startswith("/ui/structures/"):
-        return render_structure_response(project, path.rsplit("/", 1)[-1], lang)
+        return render_structure_response(project, path.rsplit("/", 1)[-1], query, raw_path, lang)
+    if path == "/ui/global-hypotheses":
+        return (HTTPStatus.OK, render_global_hypotheses_list_page(project, query, raw_path, lang))
     if path == "/ui/global-hypotheses/new":
         return (
             HTTPStatus.OK,
@@ -98,7 +173,7 @@ def render_workspace_response(project: ProjectConfig, registry: ProjectRegistry,
     if path.startswith("/ui/global-hypotheses/") and path.endswith("/edit"):
         return render_global_hypothesis_edit_response(project, path, lang)
     if path.startswith("/ui/global-hypotheses/"):
-        return render_global_hypothesis_response(project, path.rsplit("/", 1)[-1], lang)
+        return render_global_hypothesis_response(project, path.rsplit("/", 1)[-1], query, raw_path, lang)
     if path.startswith("/ui/"):
         return (HTTPStatus.NOT_FOUND, render_not_found(project, "That workspace page does not exist.", lang))
     return None
@@ -141,6 +216,18 @@ def workspace_post_action(project: ProjectConfig, registry: ProjectRegistry, raw
     if path == "/ui/settings":
         return submit_project_settings_form(project, registry, form_data, lang)
 
+    if path == "/ui/import-export/export":
+        return submit_import_export_export(project, form_data, lang)
+
+    if path == "/ui/import-export/import":
+        return submit_import_export_import(project, form_data, lang)
+
+    if path == "/ui/backups/create":
+        return submit_backup_create(project, registry, form_data, lang)
+
+    if path == "/ui/backups/restore":
+        return submit_backup_restore(project, registry, form_data, lang)
+
     if path == "/ui/functions/new":
         return submit_function_form(project, form_data, is_edit=False, lang=lang)
 
@@ -164,35 +251,49 @@ def workspace_post_action(project: ProjectConfig, registry: ProjectRegistry, raw
 
 def render_workspace_dashboard(project: ProjectConfig, lang: str) -> str:
     with open_database(project.database_path) as database:
-        function_count = len(FunctionService(database).list_project_functions(project.project_id))
-        structure_count = len(StructureService(database).list_project_structures(project.project_id))
-        hypothesis_count = len(GlobalHypothesisService(database).list_hypotheses(project.project_id))
+        functions = FunctionService(database).list_project_functions(project.project_id)
+        structures = StructureService(database).list_project_structures(project.project_id)
+        hypotheses = GlobalHypothesisService(database).list_hypotheses(project.project_id)
+        function_count = len(functions)
+        structure_count = len(structures)
+        hypothesis_count = len(hypotheses)
         pending_count = len(PendingChangeService(database).list_pending_changes(project.project_id))
+        recent_updates = SearchService(database).search(SearchQuery(project.project_id, limit=5))
 
+    binary_ids = sorted(
+        {
+            item.binary_id
+            for item in [*functions, *structures, *hypotheses]
+            if getattr(item, "binary_id", None)
+        }
+    )
+    mcp_endpoint = f"http://{project.mcp_host}:{project.mcp_port}/mcp"
     overview = key_value_grid(
         [
-            ("Project", project.display_name),
             ("Project ID", project.project_id),
             ("Write Mode", project.write_mode),
-            ("MCP", f"http://{project.mcp_host}:{project.mcp_port}/mcp"),
+            ("HTTP Endpoint", f"http://{project.http_host}:{project.http_port}"),
+            ("MCP Endpoint", mcp_endpoint),
         ]
     )
-    connection_note = (
-        "<div class=\"panel-note\">"
-        f"<p>{escape(translate_text(lang, 'Use the MCP endpoint as the primary connection target for agents.'))}</p>"
-        f"{shell_command(f'http://{project.mcp_host}:{project.mcp_port}/mcp')}"
-        f"<p>{escape(translate_text(lang, 'Workspace HTTP remains available at'))} {escape(project.http_host)}:{escape(str(project.http_port))}</p>"
-        "</div>"
-    )
+    project_summary = "Local offline-first reverse-engineering knowledge base."
     body = (
         "<main class=\"workspace-shell\">"
-        f"{workspace_header(project, 'Workspace Dashboard', '/ui/', lang)}"
-        f"{section('Project Snapshot', overview + connection_note + metric_grid(function_count, structure_count, hypothesis_count, pending_count), 'A calm overview of what is already in this workspace.')}"
-        f"{section('Jump Back In', search_form('', '', '', '') + quick_links(project), 'Start broad, then narrow down only when you need to.')}"
+        f"{workspace_header(project, 'Project Overview', '/ui/', lang)}"
+        "<section class=\"entity-hero\">"
+        f"{render_header_meta([badge('Project', 'accent')])}"
+        f"<h2>{escape(project.display_name)}</h2>"
+        f"<p class=\"entity-subtitle\">{escape(project_summary)}</p>"
+        f"{overview}"
+        f"{mcp_config_block(mcp_endpoint, project.project_id)}"
+        "</section>"
+        f"{section('Project Stats', metric_grid(len(binary_ids), function_count, structure_count, hypothesis_count, pending_count), 'The current shape of this local workspace.')}"
+        f"{section('Quick Entries', overview_quick_entries(), 'Open the working surface you need next.')}"
+        f"{section('Storage Paths', overview_storage_paths(project), 'Everything stays local to this project workspace.')}"
+        f"{section('Recent Updates', render_recent_updates(project, recent_updates), 'Latest searchable records from this project.')}"
         "</main>"
     )
-    html = html_page(f"{project.display_name} Workspace", body, "/ui/assets/app.css", page_class="warm-lab workspace-page", html_lang=lang)
-    return localize_markup(html, lang)
+    return workspace_page_html(project, "Project Overview", body, "/ui/", lang, title_suffix=f"{project.display_name} Workspace")
 
 
 def render_search_page(project: ProjectConfig, query: dict[str, list[str]], current_url: str, lang: str) -> str:
@@ -235,15 +336,172 @@ def render_search_page(project: ProjectConfig, query: dict[str, list[str]], curr
     body = (
         "<main class=\"workspace-shell\">"
         f"{workspace_header(project, 'Search', current_url, lang)}"
-        f"{section('Search Workspace', search_form(q, entity_type, binary_id, tag), 'One search box, then small filters only when they help.')}"
+        f"{section('Search Workspace', search_form(q, entity_type, binary_id, tag, lang), 'One search box, then small filters only when they help.')}"
         f"{results_html}"
         "</main>"
     )
-    html = html_page(f"{project.display_name} Search", body, "/ui/assets/app.css", page_class="warm-lab workspace-page", html_lang=lang)
-    return localize_markup(html, lang)
+    return workspace_page_html(project, "Search", body, current_url, lang, title_suffix=f"{project.display_name} Search")
 
 
-def render_function_response(project: ProjectConfig, path: str, lang: str) -> tuple[HTTPStatus, str]:
+def render_graph_page(project: ProjectConfig, query: dict[str, list[str]], current_url: str, lang: str) -> str:
+    focus_type = query_value(query, "focus_type")
+    focus_id = query_value(query, "focus_id")
+    binary_id = query_value(query, "binary_id")
+    entity_type = query_value(query, "entity_type")
+    status = query_value(query, "status")
+    min_confidence_text = query_value(query, "min_confidence")
+    hops_text = query_value(query, "hops") or "1"
+    flash_html = ""
+    hops = 1
+    if hops_text in {"1", "2"}:
+        hops = int(hops_text)
+    else:
+        flash_html = flash_banner("Hops must be 1 or 2.", "warning")
+
+    min_confidence: float | None = None
+    if min_confidence_text:
+        try:
+            min_confidence = float(min_confidence_text)
+        except ValueError:
+            flash_html = flash_banner("Min confidence must be a number.", "warning")
+
+    with open_database(project.database_path) as database:
+        functions = FunctionService(database).list_project_functions(project.project_id)
+        structures = StructureService(database).list_project_structures(project.project_id)
+        hypotheses = GlobalHypothesisService(database).list_hypotheses(project.project_id)
+        relations = RelationService(database).list_project_relations(project.project_id)
+
+    nodes = graph_nodes(project, functions, structures, hypotheses, relations)
+    selected_edges = graph_edges_for_focus(relations, focus_type, focus_id, hops) if focus_type and focus_id else relations[:80]
+    selected_keys = graph_node_keys(selected_edges)
+    if focus_type and focus_id:
+        selected_keys.add((focus_type, focus_id))
+    if not focus_type and not focus_id:
+        selected_keys = graph_node_keys_limited(selected_edges, 50)
+
+    filtered_keys = {
+        key
+        for key in selected_keys
+        if graph_node_matches(nodes.get(key), entity_type, binary_id, status, min_confidence)
+    }
+    filtered_edges = [
+        edge
+        for edge in selected_edges
+        if (edge.from_entity_type, edge.from_entity_id) in filtered_keys
+        and (edge.to_entity_type, edge.to_entity_id) in filtered_keys
+    ][:80]
+    filtered_keys = graph_node_keys(filtered_edges) | {
+        key
+        for key in filtered_keys
+        if key == (focus_type, focus_id)
+    }
+    graph_html = render_graph_svg(project, nodes, filtered_keys, filtered_edges, lang)
+    side_list = render_graph_side_list(project, nodes, filtered_keys, lang)
+    if not filtered_keys:
+        graph_html = empty_state("No graph links yet", "Create relations first, or loosen one graph filter.")
+        side_list = f"<div class=\"link-grid\"><a class=\"quick-link\" href=\"{escape(with_lang('/ui/search', lang), quote=True)}\">Open Search</a><a class=\"quick-link\" href=\"{escape(with_lang('/ui/functions', lang), quote=True)}\">Open Functions</a></div>"
+
+    body = (
+        "<main class=\"workspace-shell\">"
+        f"{workspace_header(project, 'Graph', current_url, lang)}"
+        f"{flash_html}"
+        f"{section('Graph Filters', graph_filter_form(focus_type, focus_id, binary_id, entity_type, status, min_confidence_text, hops_text, lang), 'Focus one entity or scan recent relation clusters.')} "
+        "<div class=\"detail-layout\">"
+        f"<section class=\"panel-section graph-panel\"><div class=\"section-heading\"><h2>Relation Graph</h2></div>{graph_html}</section>"
+        f"<aside class=\"detail-panel\"><h2>Graph Nodes</h2>{side_list}</aside>"
+        "</div>"
+        "</main>"
+    )
+    return workspace_page_html(project, "Graph", body, current_url, lang, title_suffix=f"{project.display_name} Graph")
+
+
+def render_functions_list_page(project: ProjectConfig, query: dict[str, list[str]], current_url: str, lang: str) -> str:
+    q = query_value(query, "q")
+    binary_id = query_value(query, "binary_id")
+    tag = query_value(query, "tag")
+    sort = query_value(query, "sort") or "name"
+    with open_database(project.database_path) as database:
+        functions = FunctionService(database).list_project_functions(project.project_id)
+    items = filter_functions(functions, q, binary_id, tag)
+    items = sort_records(items, sort)
+    content = (
+        "<div class=\"result-list\">" + "".join(render_function_list_row(project, item) for item in items) + "</div>"
+        if items
+        else empty_state("No functions found", "Try a broader query or clear one filter.")
+    )
+    body = (
+        "<main class=\"workspace-shell\">"
+        f"{workspace_header(project, 'Functions', current_url, lang)}"
+        f"{section('Functions', entity_list_filter_form('/ui/functions', q, binary_id, tag, '', sort, lang), 'Filter by text, binary, tag, or sort order.')}"
+        f"{content}"
+        "</main>"
+    )
+    return workspace_page_html(project, "Functions", body, current_url, lang, title_suffix=f"Functions - {project.display_name}")
+
+
+def render_structures_list_page(project: ProjectConfig, query: dict[str, list[str]], current_url: str, lang: str) -> str:
+    q = query_value(query, "q")
+    binary_id = query_value(query, "binary_id")
+    tag = query_value(query, "tag")
+    sort = query_value(query, "sort") or "name"
+    with open_database(project.database_path) as database:
+        structures = StructureService(database).list_project_structures(project.project_id)
+    items = filter_structures(structures, q, binary_id, tag)
+    items = sort_records(items, sort)
+    content = (
+        "<div class=\"result-list\">" + "".join(render_structure_list_row(item) for item in items) + "</div>"
+        if items
+        else empty_state("No structures found", "Try a broader query or clear one filter.")
+    )
+    body = (
+        "<main class=\"workspace-shell\">"
+        f"{workspace_header(project, 'Structures', current_url, lang)}"
+        f"{section('Structures', entity_list_filter_form('/ui/structures', q, binary_id, tag, '', sort, lang), 'Filter by text, binary, tag, or sort order.')}"
+        f"{content}"
+        "</main>"
+    )
+    return workspace_page_html(project, "Structures", body, current_url, lang, title_suffix=f"Structures - {project.display_name}")
+
+
+def render_global_hypotheses_list_page(project: ProjectConfig, query: dict[str, list[str]], current_url: str, lang: str) -> str:
+    q = query_value(query, "q")
+    binary_id = query_value(query, "binary_id")
+    tag = query_value(query, "tag")
+    status = query_value(query, "status")
+    sort = query_value(query, "sort") or "updated"
+    with open_database(project.database_path) as database:
+        hypotheses = GlobalHypothesisService(database).list_hypotheses(project.project_id)
+    items = filter_global_hypotheses(hypotheses, q, binary_id, tag, status)
+    items = sort_records(items, sort)
+    content = (
+        "<div class=\"result-list\">" + "".join(render_global_hypothesis_list_row(item) for item in items) + "</div>"
+        if items
+        else empty_state("No global hypotheses found", "Try a broader query or clear one filter.")
+    )
+    body = (
+        "<main class=\"workspace-shell\">"
+        f"{workspace_header(project, 'Global Hypotheses', current_url, lang)}"
+        f"{section('Global Hypotheses', entity_list_filter_form('/ui/global-hypotheses', q, binary_id, tag, status, sort, lang), 'Filter by text, binary, tag, status, or sort order.')}"
+        f"{content}"
+        "</main>"
+    )
+    return workspace_page_html(
+        project,
+        "Global Hypotheses",
+        body,
+        current_url,
+        lang,
+        title_suffix=f"Global Hypotheses - {project.display_name}",
+    )
+
+
+def render_function_response(
+    project: ProjectConfig,
+    path: str,
+    query: dict[str, list[str]],
+    current_url: str,
+    lang: str,
+) -> tuple[HTTPStatus, str]:
     parts = [segment for segment in path.split("/") if segment]
     if len(parts) != 4:
             return (HTTPStatus.NOT_FOUND, render_not_found(project, "Function page not found.", lang))
@@ -255,43 +513,71 @@ def render_function_response(project: ProjectConfig, path: str, lang: str) -> tu
         evidence = EvidenceService(database).list_evidence(project.project_id, "function", function.function_id)
         relations = RelationService(database).list_relations(project.project_id, "function", function.function_id)
         relation_html = render_relation_list(project, database, relations, "function", function.function_id)
+        versions = list_entity_versions(project.project_id, database, "function", function.function_id)
 
+    active_tab = detail_tab(query)
+    base_url = f"/ui/functions/{function.binary_id}/{function.function_id}"
     signals = function.tags + function.used_apis + function.strings + function.constants
     summary_html = f"<p class=\"body-copy\">{escape(function.summary)}</p><p class=\"body-copy\">{escape(function.behavior_description)}</p>"
     metadata_html = key_value_grid(
         [
+            ("Function ID", function.function_id),
             ("Address", function.address),
             ("Binary", function.binary_id),
+            ("Raw Name", function.raw_name),
             ("Source", function.source_origin),
+            ("Updated", function.updated_at),
+            ("Confidence", "Unspecified" if function.confidence is None else f"{function.confidence:.2f}"),
         ]
     )
-    timeline_html = entity_timeline_links(f"/ui/functions/{function.binary_id}/{function.function_id}/history", "/ui/audit")
-    actions_html = entity_action_links(f"/ui/functions/{function.binary_id}/{function.function_id}/edit")
+    timeline_html = entity_timeline_links(with_lang(f"{base_url}?tab=history", lang), with_lang("/ui/audit", lang))
+    actions_html = entity_action_links(with_lang(f"{base_url}/edit", lang))
+    tab_content = detail_tab_content(
+        active_tab,
+        facts=section("Summary", summary_html)
+        + section("Signals", render_chip_list(signals))
+        + section("Observed Facts", render_fact_list(function.observed_facts))
+        + section("Evidence", render_evidence_list(evidence)),
+        hypotheses=section("Hypotheses", render_hypothesis_list(function.hypotheses)),
+        relations=section("Relations", focused_graph_link("function", function.function_id, lang) + relation_html),
+        history=section("History", render_versions_inline(versions), "Each snapshot shows the stored record exactly as it was committed."),
+    )
+    side_panel = detail_side_panel("Function Metadata", metadata_html, actions_html + timeline_html)
     body = (
         "<main class=\"workspace-shell\">"
-        f"{workspace_header(project, function.current_name, path, lang)}"
+        f"{workspace_header(project, function.current_name, current_url, lang)}"
         "<article class=\"entity-hero\">"
-        f"{render_header_meta([badge('Function', 'accent'), badge(function.binary_id, 'neutral')])}"
+        f"{render_header_meta([badge('Function', 'accent'), confidence_badge_markup(function.confidence), badge(function.binary_id, 'neutral')])}"
         f"<h2>{escape(function.current_name)}</h2>"
         f"<p class=\"entity-subtitle\">{escape(function.raw_name)} - {escape(function.address)}</p>"
         "</article>"
-        f"{section('Actions', actions_html)}"
-        f"{section('Timeline', timeline_html, 'Use these pages when you need to understand how a record changed over time.')}"
-        f"{section('Summary', summary_html)}"
-        f"{section('Key Metadata', metadata_html)}"
-        f"{section('Signals', render_chip_list(signals))}"
-        f"{section('Observed Facts', render_fact_list(function.observed_facts))}"
-        f"{section('Hypotheses', render_hypothesis_list(function.hypotheses))}"
-        f"{section('Evidence', render_evidence_list(evidence))}"
-        f"{section('Relations', relation_html)}"
+        f"{detail_tabs(base_url, active_tab, lang)}"
+        f"<div class=\"detail-layout\"><div class=\"detail-main\">{tab_content}</div>{side_panel}</div>"
         "</main>"
     )
-    html = html_page(f"{function.current_name} - {project.display_name}", body, "/ui/assets/app.css", page_class="warm-lab workspace-page", html_lang=lang)
-    html = localize_markup(html, lang)
+    html = workspace_page_html(
+        project,
+        function.current_name,
+        body,
+        current_url,
+        lang,
+        title_suffix=f"{function.current_name} - {project.display_name}",
+        breadcrumb_items=[
+            ("Project", with_lang("/ui/", lang)),
+            ("Functions", with_lang("/ui/functions", lang)),
+            (function.current_name, None),
+        ],
+    )
     return (HTTPStatus.OK, html)
 
 
-def render_structure_response(project: ProjectConfig, structure_id: str, lang: str) -> tuple[HTTPStatus, str]:
+def render_structure_response(
+    project: ProjectConfig,
+    structure_id: str,
+    query: dict[str, list[str]],
+    current_url: str,
+    lang: str,
+) -> tuple[HTTPStatus, str]:
     with open_database(project.database_path) as database:
         structure = StructureService(database).get_structure(project.project_id, structure_id)
         if structure is None:
@@ -299,7 +585,10 @@ def render_structure_response(project: ProjectConfig, structure_id: str, lang: s
         evidence = EvidenceService(database).list_evidence(project.project_id, "structure", structure.structure_id)
         relations = RelationService(database).list_relations(project.project_id, "structure", structure.structure_id)
         relation_html = render_relation_list(project, database, relations, "structure", structure.structure_id)
+        versions = list_entity_versions(project.project_id, database, "structure", structure.structure_id)
 
+    active_tab = detail_tab(query)
+    base_url = f"/ui/structures/{structure.structure_id}"
     field_rows = [
         [
             escape(field.name),
@@ -316,32 +605,63 @@ def render_structure_response(project: ProjectConfig, structure_id: str, lang: s
         else empty_state("No fields yet", "This structure has no member layout recorded yet.")
     )
     summary_html = f"<p class=\"body-copy\">{escape(structure.summary)}</p>"
-    timeline_html = entity_timeline_links(f"/ui/structures/{structure.structure_id}/history", "/ui/audit")
-    actions_html = entity_action_links(f"/ui/structures/{structure.structure_id}/edit")
+    metadata_html = key_value_grid(
+        [
+            ("Structure ID", structure.structure_id),
+            ("Binary", structure.binary_id),
+            ("Raw Name", structure.raw_name),
+            ("Fields", str(len(structure.fields))),
+            ("Updated", structure.updated_at),
+        ]
+    )
+    timeline_html = entity_timeline_links(with_lang(f"{base_url}?tab=history", lang), with_lang("/ui/audit", lang))
+    actions_html = entity_action_links(with_lang(f"{base_url}/edit", lang))
+    tab_content = detail_tab_content(
+        active_tab,
+        facts=section("Summary", summary_html)
+        + section("Fields", fields_table)
+        + section("Observed Facts", render_fact_list(structure.observed_facts))
+        + section("Evidence", render_evidence_list(evidence)),
+        hypotheses=section("Hypotheses", render_hypothesis_list(structure.hypotheses)),
+        relations=section("Relations", focused_graph_link("structure", structure.structure_id, lang) + relation_html),
+        history=section("History", render_versions_inline(versions), "Each snapshot shows the stored record exactly as it was committed."),
+    )
+    side_panel = detail_side_panel("Structure Metadata", metadata_html, actions_html + timeline_html)
     body = (
         "<main class=\"workspace-shell\">"
-        f"{workspace_header(project, structure.current_name, f'/ui/structures/{structure.structure_id}', lang)}"
+        f"{workspace_header(project, structure.current_name, current_url, lang)}"
         "<article class=\"entity-hero\">"
         f"{render_header_meta([badge('Structure', 'accent'), badge(structure.binary_id, 'neutral')])}"
         f"<h2>{escape(structure.current_name)}</h2>"
         f"<p class=\"entity-subtitle\">{escape(structure.raw_name)}</p>"
         "</article>"
-        f"{section('Actions', actions_html)}"
-        f"{section('Timeline', timeline_html, 'Use these pages when you need to understand how a record changed over time.')}"
-        f"{section('Summary', summary_html)}"
-        f"{section('Fields', fields_table)}"
-        f"{section('Observed Facts', render_fact_list(structure.observed_facts))}"
-        f"{section('Hypotheses', render_hypothesis_list(structure.hypotheses))}"
-        f"{section('Evidence', render_evidence_list(evidence))}"
-        f"{section('Relations', relation_html)}"
+        f"{detail_tabs(base_url, active_tab, lang)}"
+        f"<div class=\"detail-layout\"><div class=\"detail-main\">{tab_content}</div>{side_panel}</div>"
         "</main>"
     )
-    html = html_page(f"{structure.current_name} - {project.display_name}", body, "/ui/assets/app.css", page_class="warm-lab workspace-page", html_lang=lang)
-    html = localize_markup(html, lang)
+    html = workspace_page_html(
+        project,
+        structure.current_name,
+        body,
+        current_url,
+        lang,
+        title_suffix=f"{structure.current_name} - {project.display_name}",
+        breadcrumb_items=[
+            ("Project", with_lang("/ui/", lang)),
+            ("Structures", with_lang("/ui/structures", lang)),
+            (structure.current_name, None),
+        ],
+    )
     return (HTTPStatus.OK, html)
 
 
-def render_global_hypothesis_response(project: ProjectConfig, hypothesis_id: str, lang: str) -> tuple[HTTPStatus, str]:
+def render_global_hypothesis_response(
+    project: ProjectConfig,
+    hypothesis_id: str,
+    query: dict[str, list[str]],
+    current_url: str,
+    lang: str,
+) -> tuple[HTTPStatus, str]:
     with open_database(project.database_path) as database:
         hypothesis = GlobalHypothesisService(database).get_hypothesis(project.project_id, hypothesis_id)
         if hypothesis is None:
@@ -349,37 +669,125 @@ def render_global_hypothesis_response(project: ProjectConfig, hypothesis_id: str
         evidence = EvidenceService(database).list_evidence(project.project_id, "global_hypothesis", hypothesis.hypothesis_id)
         relations = RelationService(database).list_relations(project.project_id, "global_hypothesis", hypothesis.hypothesis_id)
         relation_html = render_relation_list(project, database, relations, "global_hypothesis", hypothesis.hypothesis_id)
+        versions = list_entity_versions(project.project_id, database, "global_hypothesis", hypothesis.hypothesis_id)
 
+    active_tab = detail_tab(query)
+    base_url = f"/ui/global-hypotheses/{hypothesis.hypothesis_id}"
     confidence = "Unspecified" if hypothesis.confidence is None else f"{hypothesis.confidence:.2f}"
     statement_html = f"<p class=\"body-copy\">{escape(hypothesis.statement)}</p>"
-    status_html = key_value_grid(
+    metadata_html = key_value_grid(
         [
+            ("Hypothesis ID", hypothesis.hypothesis_id),
             ("Status", hypothesis.status.value),
             ("Confidence", confidence),
             ("Binary", hypothesis.binary_id or "Any"),
+            ("Updated", hypothesis.updated_at),
         ]
     )
-    timeline_html = entity_timeline_links(f"/ui/global-hypotheses/{hypothesis.hypothesis_id}/history", "/ui/audit")
-    actions_html = entity_action_links(f"/ui/global-hypotheses/{hypothesis.hypothesis_id}/edit")
+    timeline_html = entity_timeline_links(with_lang(f"{base_url}?tab=history", lang), with_lang("/ui/audit", lang))
+    actions_html = entity_action_links(with_lang(f"{base_url}/edit", lang))
+    tab_content = detail_tab_content(
+        active_tab,
+        facts=section("Statement", statement_html)
+        + section("Supporting Facts", render_fact_list(hypothesis.observed_facts))
+        + section("Evidence", render_evidence_list(evidence)),
+        hypotheses=section("Hypothesis Status", metadata_html),
+        relations=section("Relations", focused_graph_link("global_hypothesis", hypothesis.hypothesis_id, lang) + relation_html),
+        history=section("History", render_versions_inline(versions), "Each snapshot shows the stored record exactly as it was committed."),
+    )
+    side_panel = detail_side_panel("Hypothesis Metadata", metadata_html, actions_html + timeline_html)
     body = (
         "<main class=\"workspace-shell\">"
-        f"{workspace_header(project, hypothesis.title, f'/ui/global-hypotheses/{hypothesis.hypothesis_id}', lang)}"
+        f"{workspace_header(project, hypothesis.title, current_url, lang)}"
         "<article class=\"entity-hero\">"
-        f"{render_header_meta([badge('Global Hypothesis', 'accent'), badge(hypothesis.status.value.title(), hypothesis_tone(hypothesis.status.value))])}"
+        f"{render_header_meta([badge('Global Hypothesis', 'accent'), badge(hypothesis.status.value.title(), hypothesis_tone(hypothesis.status.value)), confidence_badge_markup(hypothesis.confidence)])}"
         f"<h2>{escape(hypothesis.title)}</h2>"
         "</article>"
-        f"{section('Actions', actions_html)}"
-        f"{section('Timeline', timeline_html, 'Use these pages when you need to understand how a record changed over time.')}"
-        f"{section('Statement', statement_html)}"
-        f"{section('Status', status_html)}"
-        f"{section('Supporting Facts', render_fact_list(hypothesis.observed_facts))}"
-        f"{section('Evidence', render_evidence_list(evidence))}"
-        f"{section('Relations', relation_html)}"
+        f"{detail_tabs(base_url, active_tab, lang)}"
+        f"<div class=\"detail-layout\"><div class=\"detail-main\">{tab_content}</div>{side_panel}</div>"
         "</main>"
     )
-    html = html_page(f"{hypothesis.title} - {project.display_name}", body, "/ui/assets/app.css", page_class="warm-lab workspace-page", html_lang=lang)
-    html = localize_markup(html, lang)
+    html = workspace_page_html(
+        project,
+        hypothesis.title,
+        body,
+        current_url,
+        lang,
+        title_suffix=f"{hypothesis.title} - {project.display_name}",
+        breadcrumb_items=[
+            ("Project", with_lang("/ui/", lang)),
+            ("Hypotheses", with_lang("/ui/global-hypotheses", lang)),
+            (hypothesis.title, None),
+        ],
+    )
     return (HTTPStatus.OK, html)
+
+
+def detail_tab(query: dict[str, list[str]]) -> str:
+    tab = query_value(query, "tab") or "facts"
+    return tab if tab in {"facts", "hypotheses", "relations", "history"} else "facts"
+
+
+def detail_tabs(base_url: str, active_tab: str, lang: str) -> str:
+    items = [
+        ("facts", "Facts"),
+        ("hypotheses", "Hypotheses"),
+        ("relations", "Relations"),
+        ("history", "History"),
+    ]
+    links = []
+    for tab, label in items:
+        class_name = "tab-link is-active" if tab == active_tab else "tab-link"
+        current = " aria-current=\"page\"" if tab == active_tab else ""
+        links.append(
+            f"<a class=\"{class_name}\" href=\"{escape(with_lang(f'{base_url}?tab={tab}', lang), quote=True)}\"{current}>{escape(label)}</a>"
+        )
+    return f"<nav class=\"tab-list\" aria-label=\"Record sections\">{''.join(links)}</nav>"
+
+
+def detail_tab_content(active_tab: str, facts: str, hypotheses: str, relations: str, history: str) -> str:
+    return {
+        "facts": facts,
+        "hypotheses": hypotheses,
+        "relations": relations,
+        "history": history,
+    }.get(active_tab, facts)
+
+
+def detail_side_panel(title: str, metadata_html: str, actions_html: str) -> str:
+    return (
+        "<aside class=\"detail-panel\">"
+        f"<h2>{escape(title)}</h2>"
+        f"{metadata_html}"
+        "<div class=\"detail-panel-actions\">"
+        "<h3>Actions</h3>"
+        f"{actions_html}"
+        "</div>"
+        "</aside>"
+    )
+
+
+def render_versions_inline(versions: list[dict[str, Any]]) -> str:
+    if not versions:
+        return empty_state("No versions yet", "This entity has not recorded any version snapshots yet.")
+    return "<div class=\"pending-list\">" + "".join(render_version_card(version) for version in versions) + "</div>"
+
+
+def focused_graph_link(entity_type: str, entity_id: str, lang: str) -> str:
+    href = with_lang(f"/ui/graph?focus_type={entity_type}&focus_id={entity_id}", lang)
+    return f"<div class=\"link-grid\"><a class=\"quick-link\" href=\"{escape(href, quote=True)}\">Open Focused Graph</a></div>"
+
+
+def confidence_badge_markup(confidence: float | None) -> str:
+    if confidence is None:
+        return badge("Confidence unknown", "neutral")
+    if confidence >= 0.75:
+        tone = "success"
+    elif confidence >= 0.4:
+        tone = "warning"
+    else:
+        tone = "danger"
+    return badge(f"Confidence {confidence:.2f}", tone)
 
 
 def render_pending_page(project: ProjectConfig, query: dict[str, list[str]], current_url: str, lang: str) -> str:
@@ -405,8 +813,14 @@ def render_pending_page(project: ProjectConfig, query: dict[str, list[str]], cur
         f"{section('Review Proposals', content, 'Confirm only what you want persisted into the knowledge base.')}"
         "</main>"
     )
-    html = html_page(f"{project.display_name} Pending Changes", body, "/ui/assets/app.css", page_class="warm-lab workspace-page", html_lang=lang)
-    return localize_markup(html, lang)
+    return workspace_page_html(
+        project,
+        "Pending Changes",
+        body,
+        current_url,
+        lang,
+        title_suffix=f"{project.display_name} Pending Changes",
+    )
 
 
 def render_audit_page(project: ProjectConfig, query: dict[str, list[str]], current_url: str, lang: str) -> str:
@@ -424,8 +838,14 @@ def render_audit_page(project: ProjectConfig, query: dict[str, list[str]], curre
         f"{section('Project Audit', audit_filter_form(entity_type, entity_id) + content, 'Review recent writes, confirmations, and provenance without leaving the workspace.')}"
         "</main>"
     )
-    html = html_page(f"{project.display_name} Audit Trail", body, "/ui/assets/app.css", page_class="warm-lab workspace-page", html_lang=lang)
-    return localize_markup(html, lang)
+    return workspace_page_html(
+        project,
+        "Audit Trail",
+        body,
+        current_url,
+        lang,
+        title_suffix=f"{project.display_name} Audit Trail",
+    )
 
 
 def render_function_history_response(project: ProjectConfig, path: str, lang: str) -> tuple[HTTPStatus, str]:
@@ -522,8 +942,19 @@ def render_history_page(
         f"{section('History', back_link + history_html, 'Each snapshot shows the stored record exactly as it was committed.')}"
         "</main>"
     )
-    html = html_page(f"{entity_label} History - {project.display_name}", body, "/ui/assets/app.css", page_class="warm-lab workspace-page", html_lang=lang)
-    return localize_markup(html, lang)
+    return workspace_page_html(
+        project,
+        page_title,
+        body,
+        entity_url,
+        lang,
+        title_suffix=f"{entity_label} History - {project.display_name}",
+        breadcrumb_items=[
+            ("Project", with_lang("/ui/", lang)),
+            ("Record", with_lang(entity_url, lang)),
+            ("History", None),
+        ],
+    )
 
 
 def render_function_form_page(
@@ -544,8 +975,7 @@ def render_function_form_page(
         f"{section('Function Form', render_function_form(action, form_data, readonly_attr), 'Keep the form focused: enough detail to be useful, nothing more.')}"
         "</main>"
     )
-    html = html_page(f"{title} - {project.display_name}", body, "/ui/assets/app.css", page_class="warm-lab workspace-page", html_lang=lang)
-    return localize_markup(html, lang)
+    return workspace_page_html(project, title, body, action, lang, title_suffix=f"{title} - {project.display_name}")
 
 
 def render_structure_form_page(
@@ -566,8 +996,7 @@ def render_structure_form_page(
         f"{section('Structure Form', render_structure_form(action, form_data, readonly_attr), 'Use one line per field member so the layout stays easy to scan and edit.')}"
         "</main>"
     )
-    html = html_page(f"{title} - {project.display_name}", body, "/ui/assets/app.css", page_class="warm-lab workspace-page", html_lang=lang)
-    return localize_markup(html, lang)
+    return workspace_page_html(project, title, body, action, lang, title_suffix=f"{title} - {project.display_name}")
 
 
 def render_global_hypothesis_form_page(
@@ -592,8 +1021,7 @@ def render_global_hypothesis_form_page(
         f"{section('Global Hypothesis Form', render_global_hypothesis_form(action, form_data, readonly_attr), 'Capture only the parts that matter to the current analytical claim.')}"
         "</main>"
     )
-    html = html_page(f"{title} - {project.display_name}", body, "/ui/assets/app.css", page_class="warm-lab workspace-page", html_lang=lang)
-    return localize_markup(html, lang)
+    return workspace_page_html(project, title, body, action, lang, title_suffix=f"{title} - {project.display_name}")
 
 
 def render_project_settings_page(
@@ -629,16 +1057,132 @@ def render_project_settings_page(
         f"{workspace_header(project, 'Project Settings', path or '/ui/settings', lang)}"
         f"{flash_html}"
         f"{section('Connection Target', shell_command(mcp_endpoint), 'Use the MCP endpoint as the primary connection target for agents.')}"
-        f"{section('Project Settings', render_project_settings_form(form_data), 'Adjust the project identity, write mode, and network endpoints without leaving the workspace.')}"
+        f"{section('Project Settings', render_project_settings_form(form_data, lang), 'Adjust the project identity, write mode, and network endpoints without leaving the workspace.')}"
         "</main>"
     )
-    html = html_page(f"Project Settings - {project.display_name}", body, "/ui/assets/app.css", page_class="warm-lab workspace-page", html_lang=lang)
-    return localize_markup(html, lang)
+    return workspace_page_html(
+        project,
+        "Project Settings",
+        body,
+        current_url,
+        lang,
+        title_suffix=f"Project Settings - {project.display_name}",
+    )
 
 
-def render_project_settings_form(form_data: dict[str, str]) -> str:
+def render_import_export_page(
+    project: ProjectConfig,
+    query: dict[str, list[str]],
+    current_url: str,
+    error_message: str | None,
+    lang: str,
+) -> str:
+    flash = query_value(query, "flash")
+    flash_html = ""
+    if error_message:
+        flash_html = flash_banner(error_message, "warning")
+    elif flash == "exported":
+        flash_html = flash_banner("Project export completed.", "success")
+    elif flash == "imported":
+        flash_html = flash_banner("Project import completed.", "success")
+
+    body = (
+        "<main class=\"workspace-shell\">"
+        f"{workspace_header(project, 'Import/Export', current_url, lang)}"
+        f"{flash_html}"
+        f"{section('Export Project', render_export_form(project, lang), 'Write a JSON bundle to a local path.')}"
+        f"{section('Import Project', render_import_form(lang), 'Read a JSON bundle from a local path. Use replace only when you mean it.')}"
+        "</main>"
+    )
+    return workspace_page_html(project, "Import/Export", body, current_url, lang, title_suffix=f"Import/Export - {project.display_name}")
+
+
+def render_backups_page(
+    project: ProjectConfig,
+    query: dict[str, list[str]],
+    current_url: str,
+    error_message: str | None,
+    lang: str,
+) -> str:
+    flash = query_value(query, "flash")
+    flash_html = ""
+    if error_message:
+        flash_html = flash_banner(error_message, "warning")
+    elif flash == "created":
+        flash_html = flash_banner("Project backup created.", "success")
+    elif flash == "restored":
+        flash_html = flash_banner("Project backup restored as a new project.", "success")
+
+    body = (
+        "<main class=\"workspace-shell\">"
+        f"{workspace_header(project, 'Backups', current_url, lang)}"
+        f"{flash_html}"
+        f"{section('Create Backup', render_backup_create_form(project, lang), 'Create a local zip archive for this project.')}"
+        f"{section('Restore Backup', render_backup_restore_form(project, lang), 'Restore into an explicit new project target. The current project is not overwritten.')}"
+        "</main>"
+    )
+    return workspace_page_html(project, "Backups", body, current_url, lang, title_suffix=f"Backups - {project.display_name}")
+
+
+def render_export_form(project: ProjectConfig, lang: str) -> str:
+    default_path = project.exports_dir / f"{project.project_id}-export.json"
     return (
-        '<form class="search-form" method="post" action="/ui/settings">'
+        f'<form class="search-form" method="post" action="{escape(with_lang("/ui/import-export/export", lang), quote=True)}">'
+        f'<label class="form-field"><span class="field-label">Output Path</span><input type="text" name="output_path" value="{escape(str(default_path), quote=True)}"></label>'
+        '<div class="form-actions">'
+        '<button class="button button-primary" type="submit">Export JSON</button>'
+        "</div>"
+        "</form>"
+    )
+
+
+def render_import_form(lang: str) -> str:
+    return (
+        f'<form class="search-form" method="post" action="{escape(with_lang("/ui/import-export/import", lang), quote=True)}">'
+        '<label class="form-field"><span class="field-label">Input Path</span><input type="text" name="input_path" value="" placeholder="path to bundle.json"></label>'
+        '<label class="checkbox-row"><input type="checkbox" name="replace_existing" value="true"> Replace existing records</label>'
+        '<div class="form-actions">'
+        '<button class="button button-primary" type="submit">Import JSON</button>'
+        "</div>"
+        "</form>"
+    )
+
+
+def render_backup_create_form(project: ProjectConfig, lang: str) -> str:
+    default_path = project.backups_dir / f"{project.project_id}-backup.zip"
+    return (
+        f'<form class="search-form" method="post" action="{escape(with_lang("/ui/backups/create", lang), quote=True)}">'
+        f'<label class="form-field"><span class="field-label">Output Path</span><input type="text" name="output_path" value="{escape(str(default_path), quote=True)}"></label>'
+        '<div class="form-actions">'
+        '<button class="button button-primary" type="submit">Create Backup</button>'
+        "</div>"
+        "</form>"
+    )
+
+
+def render_backup_restore_form(project: ProjectConfig, lang: str) -> str:
+    default_root = project.project_root.parent / f"{project.project_id}-restored"
+    return (
+        f'<form class="search-form" method="post" action="{escape(with_lang("/ui/backups/restore", lang), quote=True)}">'
+        '<div class="form-grid">'
+        '<label class="form-field"><span class="field-label">Input Path</span><input type="text" name="input_path" value="" placeholder="path to backup.zip"></label>'
+        f'<label class="form-field"><span class="field-label">Project Root</span><input type="text" name="project_root" value="{escape(str(default_root), quote=True)}"></label>'
+        f'<label class="form-field"><span class="field-label">Project ID</span><input type="text" name="project_id" value="{escape(project.project_id + "-restored", quote=True)}"></label>'
+        f'<label class="form-field"><span class="field-label">Display Name</span><input type="text" name="display_name" value="{escape(project.display_name + " Restored", quote=True)}"></label>'
+        '<label class="form-field"><span class="field-label">HTTP Port</span><input type="text" name="http_port" value=""></label>'
+        '<label class="form-field"><span class="field-label">MCP Port</span><input type="text" name="mcp_port" value=""></label>'
+        f'<label class="form-field"><span class="field-label">Write Mode</span><select name="write_mode">{project_settings_write_mode_options(project.write_mode)}</select></label>'
+        "</div>"
+        '<div class="form-actions">'
+        '<button class="button button-primary" type="submit">Restore Backup</button>'
+        "</div>"
+        "</form>"
+    )
+
+
+def render_project_settings_form(form_data: dict[str, str], lang: str) -> str:
+    return (
+        f'<form class="search-form" method="post" action="{escape(with_lang("/ui/settings", lang), quote=True)}">'
         '<div class="form-grid">'
         f'<label class="form-field"><span class="field-label">Display Name</span><input type="text" name="display_name" value="{escape(form_data["display_name"], quote=True)}"></label>'
         f'<label class="form-field"><span class="field-label">Write Mode</span><select name="write_mode">{project_settings_write_mode_options(form_data["write_mode"])}</select></label>'
@@ -657,7 +1201,7 @@ def render_project_settings_form(form_data: dict[str, str]) -> str:
         "</details>"
         '<div class="form-actions">'
         '<button class="button button-primary" type="submit">Save Settings</button>'
-        '<a class="button button-secondary" href="/ui/">Cancel</a>'
+        f'<a class="button button-secondary" href="{escape(with_lang("/ui/", lang), quote=True)}">Cancel</a>'
         "</div>"
         "</form>"
     )
@@ -679,35 +1223,25 @@ def render_not_found(project: ProjectConfig, message: str, lang: str) -> str:
         f"{empty_state('This page is not available', message)}"
         "</main>"
     )
-    html = html_page(f"{project.display_name} Not Found", body, "/ui/assets/app.css", page_class="warm-lab workspace-page", html_lang=lang)
-    return localize_markup(html, lang)
+    return workspace_page_html(project, "Not Found", body, "/ui/unknown", lang, title_suffix=f"{project.display_name} Not Found")
 
 
 def workspace_header(project: ProjectConfig, title: str, current_url: str, lang: str) -> str:
-    tone = "warning" if project.write_mode == "confirm" else "success"
     return (
         "<header class=\"workspace-header\">"
-        "<div class=\"workspace-brand\">"
-        "<a class=\"brand-mark\" href=\"/ui/\">Warm Lab</a>"
+        "<div class=\"workspace-header-main\">"
         f"<h1>{escape(title)}</h1>"
         f"<p class=\"workspace-subtitle\">{escape(project.display_name)} - {escape(project.project_id)}</p>"
         "</div>"
-        "<nav class=\"workspace-nav\">"
-        "<a href=\"/ui/\">Dashboard</a>"
-        "<a href=\"/ui/search\">Search</a>"
-        "<a href=\"/ui/pending\">Pending</a>"
-        "<a href=\"/ui/audit\">Audit</a>"
-        "<a href=\"/ui/settings\">Settings</a>"
-        f"{badge(project.write_mode.title(), tone)}"
-        f"{language_switcher(current_url, lang)}"
-        "</nav>"
+        f"<a class=\"quick-link workspace-back-link\" href=\"{escape(with_lang('/', lang), quote=True)}\">Back to Projects</a>"
         "</header>"
     )
 
 
-def metric_grid(function_count: int, structure_count: int, hypothesis_count: int, pending_count: int) -> str:
+def metric_grid(binary_count: int, function_count: int, structure_count: int, hypothesis_count: int, pending_count: int) -> str:
     return (
         "<div class=\"metric-grid\">"
+        f"{metric_card('Binaries', binary_count, 'Distinct binary IDs referenced by records.')}"
         f"{metric_card('Functions', function_count, 'Searchable function records in this workspace.')}"
         f"{metric_card('Structures', structure_count, 'Recovered layouts and type notes.')}"
         f"{metric_card('Hypotheses', hypothesis_count, 'Global analysis hypotheses.')}"
@@ -745,18 +1279,70 @@ def quick_links(project: ProjectConfig) -> str:
     )
 
 
-def search_form(q: str, entity_type: str, binary_id: str, tag: str) -> str:
+def overview_quick_entries() -> str:
+    entries = [
+        ("Functions", "/ui/functions", "Review function records and addresses."),
+        ("Structures", "/ui/structures", "Inspect recovered layouts and fields."),
+        ("Hypotheses", "/ui/global-hypotheses", "Track analysis claims separately from facts."),
+        ("Graph", "/ui/graph", "Follow relationships between entities."),
+        ("Search", "/ui/search", "Find records by name, tag, address, or text."),
+        ("Settings", "/ui/settings", "Adjust identity, write mode, and endpoints."),
+        ("Import/Export", "/ui/import-export", "Move local project data in and out."),
+        ("Backups", "/ui/backups", "Create or restore local project archives."),
+    ]
+    cards = []
+    for title, href, description in entries:
+        cards.append(
+            "<a class=\"quick-link action-card\" href=\"{0}\">"
+            "<span class=\"action-card-title\">{1}</span>"
+            "<span class=\"action-card-description\">{2}</span>"
+            "</a>".format(escape(href, quote=True), escape(title), escape(description))
+        )
+    return f"<div class=\"link-grid\">{''.join(cards)}</div>"
+
+
+def overview_storage_paths(project: ProjectConfig) -> str:
+    return key_value_grid(
+        [
+            ("DB Path", str(project.database_path)),
+            ("Exports Dir", str(project.exports_dir)),
+            ("Backups Dir", str(project.backups_dir)),
+            ("Project Root", str(project.project_root)),
+        ]
+    )
+
+
+def render_recent_updates(project: ProjectConfig, items: list[dict[str, Any]]) -> str:
+    if not items:
+        return empty_state("No recent updates yet", "Created or updated records will appear here once the project has searchable content.")
+    cards = []
+    for item in items:
+        title = str(item["title_text"]).strip() or str(item["entity_id"])
+        body = str(item["body_text"]).strip()
+        preview = body[:160] + ("..." if len(body) > 160 else "")
+        cards.append(
+            "<article class=\"mini-card\">"
+            f"<div class=\"card-topline\">{badge(human_entity_type(str(item['entity_type'])), 'accent')}{badge(str(item['updated_at']), 'neutral')}</div>"
+            f"<h3><a href=\"{escape(resolve_entity_link(project, str(item['entity_type']), str(item['entity_id'])))}\">{escape(title)}</a></h3>"
+            f"<p class=\"body-copy\">{escape(preview or 'No summary available yet.')}</p>"
+            "</article>"
+        )
+    return f"<div class=\"result-list\">{''.join(cards)}</div>"
+
+
+def search_form(q: str, entity_type: str, binary_id: str, tag: str, lang: str) -> str:
     return (
         "<form class=\"search-form\" method=\"get\" action=\"/ui/search\">"
-        f"<input type=\"text\" name=\"q\" value=\"{escape(q)}\" placeholder=\"Search for functions, tags, or hypotheses\">"
+        f"<input type=\"hidden\" name=\"lang\" value=\"{escape(lang, quote=True)}\">"
+        f"<input type=\"text\" name=\"q\" value=\"{escape(q, quote=True)}\" placeholder=\"Search for functions, tags, or hypotheses\">"
         "<div class=\"search-form-grid\">"
-        f"<input type=\"text\" name=\"binary_id\" value=\"{escape(binary_id)}\" placeholder=\"binary_id (optional)\">"
-        f"<input type=\"text\" name=\"tag\" value=\"{escape(tag)}\" placeholder=\"tag (optional)\">"
+        f"<input type=\"text\" name=\"binary_id\" value=\"{escape(binary_id, quote=True)}\" placeholder=\"binary_id (optional)\">"
+        f"<input type=\"text\" name=\"tag\" value=\"{escape(tag, quote=True)}\" placeholder=\"tag (optional)\">"
         f"<select name=\"entity_type\">{entity_type_options(entity_type)}</select>"
         "</div>"
         "<div class=\"search-form-actions\">"
         "<button class=\"button button-primary\" type=\"submit\">Search Workspace</button>"
-        "<a class=\"button button-secondary\" href=\"/ui/search\">Reset</a>"
+        f"<a class=\"button button-secondary\" href=\"{escape(with_lang('/ui/search', lang), quote=True)}\">Reset</a>"
         "</div>"
         "</form>"
     )
@@ -793,6 +1379,398 @@ def render_search_result_card(project: ProjectConfig, item: dict[str, Any]) -> s
         f"<h3><a href=\"{escape(link)}\">{escape(title)}</a></h3>"
         f"<p class=\"result-subtitle\">{escape(str(item['entity_id']))}</p>"
         f"<p class=\"body-copy\">{escape(preview or 'No summary available yet.')}</p>"
+        "</article>"
+    )
+
+
+def graph_filter_form(
+    focus_type: str,
+    focus_id: str,
+    binary_id: str,
+    entity_type: str,
+    status: str,
+    min_confidence: str,
+    hops: str,
+    lang: str,
+) -> str:
+    return (
+        "<form class=\"search-form\" method=\"get\" action=\"/ui/graph\">"
+        f"<input type=\"hidden\" name=\"lang\" value=\"{escape(lang, quote=True)}\">"
+        "<div class=\"search-form-grid\">"
+        f"<select name=\"focus_type\">{graph_entity_type_options(focus_type, 'Any focus type')}</select>"
+        f"<input type=\"text\" name=\"focus_id\" value=\"{escape(focus_id, quote=True)}\" placeholder=\"focus entity id\">"
+        f"<input type=\"text\" name=\"binary_id\" value=\"{escape(binary_id, quote=True)}\" placeholder=\"binary_id\">"
+        f"<select name=\"entity_type\">{graph_entity_type_options(entity_type, 'Any entity type')}</select>"
+        f"<select name=\"status\">{option('', 'Any status', status)}{option('new', 'New', status)}{option('probable', 'Probable', status)}{option('confirmed', 'Confirmed', status)}{option('rejected', 'Rejected', status)}</select>"
+        f"<input type=\"text\" name=\"min_confidence\" value=\"{escape(min_confidence, quote=True)}\" placeholder=\"min confidence\">"
+        f"<select name=\"hops\">{option('1', '1 hop', hops or '1')}{option('2', '2 hops', hops)}</select>"
+        "</div>"
+        "<div class=\"search-form-actions\">"
+        "<button class=\"button button-primary\" type=\"submit\">Apply Filters</button>"
+        f"<a class=\"button button-secondary\" href=\"{escape(with_lang('/ui/graph', lang), quote=True)}\">Reset</a>"
+        "</div>"
+        "</form>"
+    )
+
+
+def graph_entity_type_options(selected: str, empty_label: str) -> str:
+    return (
+        f"{option('', empty_label, selected)}"
+        f"{option('function', 'Functions', selected)}"
+        f"{option('structure', 'Structures', selected)}"
+        f"{option('global_hypothesis', 'Global Hypotheses', selected)}"
+    )
+
+
+def graph_nodes(
+    project: ProjectConfig,
+    functions: list[Any],
+    structures: list[Any],
+    hypotheses: list[Any],
+    relations: list[Any],
+) -> dict[tuple[str, str], dict[str, Any]]:
+    nodes: dict[tuple[str, str], dict[str, Any]] = {}
+    for item in functions:
+        nodes[("function", item.function_id)] = {
+            "entity_type": "function",
+            "entity_id": item.function_id,
+            "label": item.current_name,
+            "binary_id": item.binary_id,
+            "status": "",
+            "confidence": item.confidence,
+            "link": f"/ui/functions/{item.binary_id}/{item.function_id}",
+        }
+    for item in structures:
+        nodes[("structure", item.structure_id)] = {
+            "entity_type": "structure",
+            "entity_id": item.structure_id,
+            "label": item.current_name,
+            "binary_id": item.binary_id,
+            "status": "",
+            "confidence": None,
+            "link": f"/ui/structures/{item.structure_id}",
+        }
+    for item in hypotheses:
+        nodes[("global_hypothesis", item.hypothesis_id)] = {
+            "entity_type": "global_hypothesis",
+            "entity_id": item.hypothesis_id,
+            "label": item.title,
+            "binary_id": item.binary_id or "",
+            "status": item.status.value,
+            "confidence": item.confidence,
+            "link": f"/ui/global-hypotheses/{item.hypothesis_id}",
+        }
+    for relation in relations:
+        for entity_type, entity_id in (
+            (relation.from_entity_type, relation.from_entity_id),
+            (relation.to_entity_type, relation.to_entity_id),
+        ):
+            nodes.setdefault(
+                (entity_type, entity_id),
+                {
+                    "entity_type": entity_type,
+                    "entity_id": entity_id,
+                    "label": f"{human_entity_type(entity_type).rstrip('s')} {entity_id}",
+                    "binary_id": "",
+                    "status": "",
+                    "confidence": None,
+                    "link": resolve_entity_link(project, entity_type, entity_id),
+                },
+            )
+    return nodes
+
+
+def graph_edges_for_focus(relations: list[Any], focus_type: str, focus_id: str, hops: int) -> list[Any]:
+    selected: list[Any] = []
+    seen_nodes: set[tuple[str, str]] = {(focus_type, focus_id)}
+    frontier: set[tuple[str, str]] = {(focus_type, focus_id)}
+    for _ in range(hops):
+        next_frontier: set[tuple[str, str]] = set()
+        for relation in relations:
+            from_key = (relation.from_entity_type, relation.from_entity_id)
+            to_key = (relation.to_entity_type, relation.to_entity_id)
+            if from_key not in frontier and to_key not in frontier:
+                continue
+            selected.append(relation)
+            for key in (from_key, to_key):
+                if key not in seen_nodes:
+                    seen_nodes.add(key)
+                    next_frontier.add(key)
+        frontier = next_frontier
+    return selected[:80]
+
+
+def graph_node_keys(relations: list[Any]) -> set[tuple[str, str]]:
+    keys: set[tuple[str, str]] = set()
+    for relation in relations:
+        keys.add((relation.from_entity_type, relation.from_entity_id))
+        keys.add((relation.to_entity_type, relation.to_entity_id))
+    return keys
+
+
+def graph_node_keys_limited(relations: list[Any], limit: int) -> set[tuple[str, str]]:
+    ordered: list[tuple[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for relation in relations:
+        for key in (
+            (relation.from_entity_type, relation.from_entity_id),
+            (relation.to_entity_type, relation.to_entity_id),
+        ):
+            if key in seen:
+                continue
+            seen.add(key)
+            ordered.append(key)
+            if len(ordered) >= limit:
+                return set(ordered)
+    return set(ordered)
+
+
+def graph_node_matches(
+    node: dict[str, Any] | None,
+    entity_type: str,
+    binary_id: str,
+    status: str,
+    min_confidence: float | None,
+) -> bool:
+    if node is None:
+        return False
+    if entity_type and node["entity_type"] != entity_type:
+        return False
+    if binary_id and node["binary_id"] != binary_id:
+        return False
+    if status and node["entity_type"] == "global_hypothesis" and node["status"] != status:
+        return False
+    if min_confidence is not None and node["confidence"] is not None and float(node["confidence"]) < min_confidence:
+        return False
+    return True
+
+
+def render_graph_svg(
+    project: ProjectConfig,
+    nodes: dict[tuple[str, str], dict[str, Any]],
+    node_keys: set[tuple[str, str]],
+    relations: list[Any],
+    lang: str,
+) -> str:
+    ordered_keys = sorted(node_keys, key=lambda key: (key[0], key[1]))[:50]
+    if not ordered_keys:
+        return empty_state("No graph links yet", "Create relations first, or loosen one graph filter.")
+    width = 860
+    height = 520
+    center_x = width / 2
+    center_y = height / 2
+    radius_x = 320
+    radius_y = 170
+    positions: dict[tuple[str, str], tuple[float, float]] = {}
+    if len(ordered_keys) == 1:
+        positions[ordered_keys[0]] = (center_x, center_y)
+    else:
+        for index, key in enumerate(ordered_keys):
+            angle = (2 * math.pi * index) / len(ordered_keys)
+            positions[key] = (center_x + math.cos(angle) * radius_x, center_y + math.sin(angle) * radius_y)
+
+    edge_markup = []
+    for relation in relations:
+        from_key = (relation.from_entity_type, relation.from_entity_id)
+        to_key = (relation.to_entity_type, relation.to_entity_id)
+        if from_key not in positions or to_key not in positions:
+            continue
+        x1, y1 = positions[from_key]
+        x2, y2 = positions[to_key]
+        mid_x = (x1 + x2) / 2
+        mid_y = (y1 + y2) / 2
+        edge_markup.append(
+            f"<line class=\"graph-edge\" x1=\"{x1:.1f}\" y1=\"{y1:.1f}\" x2=\"{x2:.1f}\" y2=\"{y2:.1f}\"></line>"
+            f"<text class=\"graph-edge-label\" x=\"{mid_x:.1f}\" y=\"{mid_y:.1f}\">{escape(relation.relation_type)}</text>"
+        )
+
+    node_markup = []
+    for key in ordered_keys:
+        node = nodes[key]
+        x, y = positions[key]
+        label = str(node["label"])
+        short_label = label[:24] + ("..." if len(label) > 24 else "")
+        tone = str(node["entity_type"]).replace("_", "-")
+        link = with_lang(str(node["link"]), lang)
+        node_markup.append(
+            f"<a href=\"{escape(link, quote=True)}\">"
+            f"<g class=\"graph-node graph-node-{escape(tone)}\">"
+            f"<circle cx=\"{x:.1f}\" cy=\"{y:.1f}\" r=\"25\"></circle>"
+            f"<text x=\"{x:.1f}\" y=\"{(y + 43):.1f}\">{escape(short_label)}</text>"
+            "</g>"
+            "</a>"
+        )
+
+    return (
+        "<div class=\"graph-canvas\">"
+        f"<svg viewBox=\"0 0 {width} {height}\" role=\"img\" aria-label=\"Relation graph\">"
+        f"{''.join(edge_markup)}"
+        f"{''.join(node_markup)}"
+        "</svg>"
+        "</div>"
+    )
+
+
+def render_graph_side_list(
+    project: ProjectConfig,
+    nodes: dict[tuple[str, str], dict[str, Any]],
+    node_keys: set[tuple[str, str]],
+    lang: str,
+) -> str:
+    if not node_keys:
+        return empty_state("No nodes selected", "Adjust the graph filters to show linked entities.")
+    items = []
+    for key in sorted(node_keys, key=lambda item: (item[0], item[1]))[:50]:
+        node = nodes[key]
+        meta = [human_entity_type(str(node["entity_type"])), str(node["entity_id"])]
+        if node["binary_id"]:
+            meta.append(str(node["binary_id"]))
+        if node["status"]:
+            meta.append(str(node["status"]))
+        items.append(
+            "<article class=\"mini-card\">"
+            f"<div class=\"card-topline\">{badge(human_entity_type(str(node['entity_type'])), 'accent')}</div>"
+            f"<h3><a href=\"{escape(with_lang(str(node['link']), lang), quote=True)}\">{escape(str(node['label']))}</a></h3>"
+            f"<p class=\"result-subtitle\">{escape(' - '.join(meta))}</p>"
+            "</article>"
+        )
+    return "<div class=\"result-list\">" + "".join(items) + "</div>"
+
+
+def query_value(query: dict[str, list[str]], name: str) -> str:
+    return query.get(name, [""])[0].strip()
+
+
+def entity_list_filter_form(action: str, q: str, binary_id: str, tag: str, status: str, sort: str, lang: str) -> str:
+    status_field = ""
+    if action.endswith("global-hypotheses"):
+        status_field = (
+            '<select name="status">'
+            f"{option('', 'Any status', status)}"
+            f"{option('new', 'New', status)}"
+            f"{option('probable', 'Probable', status)}"
+            f"{option('confirmed', 'Confirmed', status)}"
+            f"{option('rejected', 'Rejected', status)}"
+            "</select>"
+        )
+    return (
+        f"<form class=\"search-form\" method=\"get\" action=\"{escape(action, quote=True)}\">"
+        f"<input type=\"hidden\" name=\"lang\" value=\"{escape(lang, quote=True)}\">"
+        f"<input type=\"text\" name=\"q\" value=\"{escape(q, quote=True)}\" placeholder=\"Search by name or summary\">"
+        "<div class=\"search-form-grid\">"
+        f"<input type=\"text\" name=\"binary_id\" value=\"{escape(binary_id, quote=True)}\" placeholder=\"binary_id (optional)\">"
+        f"<input type=\"text\" name=\"tag\" value=\"{escape(tag, quote=True)}\" placeholder=\"tag (optional)\">"
+        f"{status_field}"
+        '<select name="sort">'
+        f"{option('name', 'Sort by name', sort)}"
+        f"{option('updated', 'Sort by updated', sort)}"
+        "</select>"
+        "</div>"
+        "<div class=\"search-form-actions\">"
+        "<button class=\"button button-primary\" type=\"submit\">Apply Filters</button>"
+        f"<a class=\"button button-secondary\" href=\"{escape(with_lang(action, lang), quote=True)}\">Reset</a>"
+        "</div>"
+        "</form>"
+    )
+
+
+def option(value: str, label: str, selected: str) -> str:
+    selected_attr = " selected" if value == selected else ""
+    return f"<option value=\"{escape(value, quote=True)}\"{selected_attr}>{escape(label)}</option>"
+
+
+def filter_functions(items: list[Any], q: str, binary_id: str, tag: str) -> list[Any]:
+    return [
+        item
+        for item in items
+        if matches_text(q, [item.current_name, item.raw_name, item.summary, item.behavior_description, item.address])
+        and matches_value(binary_id, item.binary_id)
+        and matches_tag(tag, item.tags)
+    ]
+
+
+def filter_structures(items: list[Any], q: str, binary_id: str, tag: str) -> list[Any]:
+    return [
+        item
+        for item in items
+        if matches_text(q, [item.current_name, item.raw_name, item.summary])
+        and matches_value(binary_id, item.binary_id)
+        and matches_tag(tag, item.tags)
+    ]
+
+
+def filter_global_hypotheses(items: list[Any], q: str, binary_id: str, tag: str, status: str) -> list[Any]:
+    return [
+        item
+        for item in items
+        if matches_text(q, [item.title, item.statement])
+        and matches_value(binary_id, item.binary_id or "")
+        and matches_tag(tag, item.tags)
+        and matches_value(status, item.status.value)
+    ]
+
+
+def matches_text(query: str, values: list[str]) -> bool:
+    if not query:
+        return True
+    needle = query.casefold()
+    return any(needle in value.casefold() for value in values if value)
+
+
+def matches_value(expected: str, actual: str) -> bool:
+    return not expected or expected == actual
+
+
+def matches_tag(expected: str, tags: list[str]) -> bool:
+    return not expected or expected in tags
+
+
+def sort_records(items: list[Any], sort: str) -> list[Any]:
+    if sort == "updated":
+        return sorted(items, key=lambda item: getattr(item, "updated_at", ""), reverse=True)
+    return sorted(items, key=lambda item: getattr(item, "current_name", getattr(item, "title", "")).casefold())
+
+
+def render_function_list_row(project: ProjectConfig, item: Any) -> str:
+    badges = [badge("Function", "accent")]
+    if item.confidence is not None:
+        badges.append(badge(f"Confidence {item.confidence:.2f}", "success" if item.confidence >= 0.75 else "warning"))
+    badges.extend(badge(tag, "soft") for tag in item.tags[:3])
+    return (
+        "<article class=\"result-card list-row\">"
+        f"<div class=\"card-topline\">{''.join(badges)}</div>"
+        f"<h3><a href=\"/ui/functions/{escape(item.binary_id, quote=True)}/{escape(item.function_id, quote=True)}\">{escape(item.current_name)}</a></h3>"
+        f"<p class=\"result-subtitle\">{escape(item.binary_id)} - {escape(item.address)} - {escape(item.updated_at)}</p>"
+        f"<p class=\"body-copy\">{escape(item.summary or item.behavior_description or 'No summary available yet.')}</p>"
+        "</article>"
+    )
+
+
+def render_structure_list_row(item: Any) -> str:
+    badges = [badge("Structure", "accent"), badge(f"{len(item.fields)} fields", "neutral")]
+    badges.extend(badge(tag, "soft") for tag in item.tags[:3])
+    return (
+        "<article class=\"result-card list-row\">"
+        f"<div class=\"card-topline\">{''.join(badges)}</div>"
+        f"<h3><a href=\"/ui/structures/{escape(item.structure_id, quote=True)}\">{escape(item.current_name)}</a></h3>"
+        f"<p class=\"result-subtitle\">{escape(item.binary_id)} - {escape(item.updated_at)}</p>"
+        f"<p class=\"body-copy\">{escape(item.summary or 'No summary available yet.')}</p>"
+        "</article>"
+    )
+
+
+def render_global_hypothesis_list_row(item: Any) -> str:
+    badges = [badge("Global Hypothesis", "accent"), badge(item.status.value.title(), hypothesis_tone(item.status.value))]
+    if item.confidence is not None:
+        badges.append(badge(f"Confidence {item.confidence:.2f}", "success" if item.confidence >= 0.75 else "warning"))
+    badges.extend(badge(tag, "soft") for tag in item.tags[:3])
+    binary = item.binary_id or "Any binary"
+    return (
+        "<article class=\"result-card list-row\">"
+        f"<div class=\"card-topline\">{''.join(badges)}</div>"
+        f"<h3><a href=\"/ui/global-hypotheses/{escape(item.hypothesis_id, quote=True)}\">{escape(item.title)}</a></h3>"
+        f"<p class=\"result-subtitle\">{escape(binary)} - {escape(item.updated_at)}</p>"
+        f"<p class=\"body-copy\">{escape(item.statement or 'No statement available yet.')}</p>"
         "</article>"
     )
 
@@ -1253,12 +2231,86 @@ def submit_project_settings_form(
     return {"location": with_lang(f"/ui/settings?flash={flash}", lang)}
 
 
+def submit_import_export_export(project: ProjectConfig, form_data: dict[str, str], lang: str) -> dict[str, Any]:
+    raw_path = form_data.get("output_path", "").strip()
+    output_path = Path(raw_path) if raw_path else None
+    try:
+        ProjectTransferService().export_project(project, output_path)
+    except (OSError, ValueError) as exc:
+        query = {"flash": [""]}
+        html = render_import_export_page(project, query, "/ui/import-export", str(exc), lang)
+        return {"status": HTTPStatus.BAD_REQUEST, "html": html}
+    return {"location": with_lang("/ui/import-export?flash=exported", lang)}
+
+
+def submit_import_export_import(project: ProjectConfig, form_data: dict[str, str], lang: str) -> dict[str, Any]:
+    raw_path = form_data.get("input_path", "").strip()
+    if not raw_path:
+        html = render_import_export_page(project, {}, "/ui/import-export", "Input Path is required.", lang)
+        return {"status": HTTPStatus.BAD_REQUEST, "html": html}
+    replace_existing = form_data.get("replace_existing") == "true"
+    try:
+        ProjectTransferService().import_project(project, Path(raw_path), replace_existing=replace_existing)
+    except (OSError, ValueError, KeyError, json.JSONDecodeError, zipfile.BadZipFile) as exc:
+        html = render_import_export_page(project, {}, "/ui/import-export", str(exc), lang)
+        return {"status": HTTPStatus.BAD_REQUEST, "html": html}
+    return {"location": with_lang("/ui/import-export?flash=imported", lang)}
+
+
+def submit_backup_create(project: ProjectConfig, registry: ProjectRegistry, form_data: dict[str, str], lang: str) -> dict[str, Any]:
+    raw_path = form_data.get("output_path", "").strip()
+    output_path = Path(raw_path) if raw_path else None
+    try:
+        ProjectArchiveService(registry).create_backup(project, output_path)
+    except (OSError, ValueError) as exc:
+        html = render_backups_page(project, {}, "/ui/backups", str(exc), lang)
+        return {"status": HTTPStatus.BAD_REQUEST, "html": html}
+    return {"location": with_lang("/ui/backups?flash=created", lang)}
+
+
+def submit_backup_restore(project: ProjectConfig, registry: ProjectRegistry, form_data: dict[str, str], lang: str) -> dict[str, Any]:
+    input_path = form_data.get("input_path", "").strip()
+    project_root = form_data.get("project_root", "").strip()
+    project_id = form_data.get("project_id", "").strip()
+    display_name = form_data.get("display_name", "").strip()
+    write_mode = form_data.get("write_mode", "").strip() or None
+    if not input_path:
+        html = render_backups_page(project, {}, "/ui/backups", "Input Path is required.", lang)
+        return {"status": HTTPStatus.BAD_REQUEST, "html": html}
+    if not project_root:
+        html = render_backups_page(project, {}, "/ui/backups", "Project Root is required.", lang)
+        return {"status": HTTPStatus.BAD_REQUEST, "html": html}
+    try:
+        http_port = parse_optional_settings_port(form_data.get("http_port", ""), "HTTP Port")
+        mcp_port = parse_optional_settings_port(form_data.get("mcp_port", ""), "MCP Port")
+        ProjectArchiveService(registry).restore_backup(
+            Path(input_path),
+            Path(project_root),
+            project_id=project_id or None,
+            display_name=display_name or None,
+            http_port=http_port,
+            mcp_port=mcp_port,
+            write_mode=write_mode,
+        )
+    except (OSError, ValueError, KeyError, json.JSONDecodeError, zipfile.BadZipFile) as exc:
+        html = render_backups_page(project, {}, "/ui/backups", str(exc), lang)
+        return {"status": HTTPStatus.BAD_REQUEST, "html": html}
+    return {"location": with_lang("/ui/backups?flash=restored", lang)}
+
+
 def parse_settings_port(raw_value: str, label: str) -> int:
     value = raw_value.strip()
     try:
         return int(value)
     except ValueError as exc:
         raise ValueError(f"{label} must be a valid integer.") from exc
+
+
+def parse_optional_settings_port(raw_value: str, label: str) -> int | None:
+    value = raw_value.strip()
+    if not value:
+        return None
+    return parse_settings_port(value, label)
 
 
 def submit_function_form(project: ProjectConfig, form_data: dict[str, str], is_edit: bool, lang: str) -> dict[str, Any]:

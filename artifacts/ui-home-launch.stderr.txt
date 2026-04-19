@@ -1,35 +1,35 @@
-2026-04-18 20:47:14 INFO cli command_start command=run-ui-home
-2026-04-18 20:47:14 INFO cli server_dispatch command=run-ui-home host=127.0.0.1 port=55568
-2026-04-18 20:47:14 INFO ui_home server_start app_home=F:\dev\mcp-memory\artifacts\smoke_run_1776534428640_30912\smoke_app host=127.0.0.1 port=55568
-2026-04-18 20:47:15 INFO ui_home project_probe http_running=False mcp_running=False project_id=gui-created-project
-2026-04-18 20:47:16 INFO ui_home project_probe http_running=False mcp_running=False project_id=smoke-project
-2026-04-18 20:47:16 INFO ui_home server_message message="GET / HTTP/1.1" 200 -
-2026-04-18 20:47:16 INFO ui_home request_complete duration_ms=1444 method=GET page=/ path=/ status=200
-2026-04-18 20:47:16 INFO ui_home project_probe http_running=False mcp_running=False project_id=gui-created-project
-2026-04-18 20:47:17 INFO ui_home project_probe http_running=False mcp_running=False project_id=smoke-project
-2026-04-18 20:47:17 INFO ui_home server_message message="GET / HTTP/1.1" 200 -
-2026-04-18 20:47:17 INFO ui_home request_complete duration_ms=1450 method=GET page=/ path=/ status=200
-2026-04-18 20:47:17 INFO ui_home project_start_requested project_id=smoke-project
-2026-04-18 20:47:18 INFO ui_home project_started http_pid=2260 mcp_pid=20216 project_id=smoke-project
-2026-04-18 20:47:18 INFO ui_home server_message message="POST /projects/smoke-project/start?lang=en HTTP/1.1" 303 -
-2026-04-18 20:47:18 INFO ui_home request_complete duration_ms=612 method=POST page=/projects/smoke-project/start path=/projects/smoke-project/start?lang=en status=303
-2026-04-18 20:47:18 INFO ui_home project_probe http_running=False mcp_running=False project_id=gui-created-project
-2026-04-18 20:47:18 INFO ui_home server_message message="GET /?flash=started&project_id=smoke-project&lang=en HTTP/1.1" 200 -
-2026-04-18 20:47:18 INFO ui_home request_complete duration_ms=719 method=GET page=/ path=/?flash=started&project_id=smoke-project&lang=en status=200
-2026-04-18 20:47:18 INFO ui_home project_restart_requested project_id=smoke-project
-2026-04-18 20:47:18 INFO ui_home project_stop_requested project_id=smoke-project
-2026-04-18 20:47:19 INFO ui_home project_stopped http_pid=2260 mcp_pid=20216 project_id=smoke-project
-2026-04-18 20:47:19 INFO ui_home project_start_requested project_id=smoke-project
-2026-04-18 20:47:19 INFO ui_home project_started http_pid=23920 mcp_pid=20324 project_id=smoke-project
-2026-04-18 20:47:19 INFO ui_home server_message message="POST /projects/smoke-project/restart?lang=en HTTP/1.1" 303 -
-2026-04-18 20:47:19 INFO ui_home request_complete duration_ms=597 method=POST page=/projects/smoke-project/restart path=/projects/smoke-project/restart?lang=en status=303
-2026-04-18 20:47:20 INFO ui_home project_probe http_running=False mcp_running=False project_id=gui-created-project
-2026-04-18 20:47:20 INFO ui_home server_message message="GET /?flash=restarted&project_id=smoke-project&lang=en HTTP/1.1" 200 -
-2026-04-18 20:47:20 INFO ui_home request_complete duration_ms=720 method=GET page=/ path=/?flash=restarted&project_id=smoke-project&lang=en status=200
-2026-04-18 20:47:20 INFO ui_home project_stop_requested project_id=smoke-project
-2026-04-18 20:47:20 INFO ui_home project_stopped http_pid=23920 mcp_pid=20324 project_id=smoke-project
-2026-04-18 20:47:20 INFO ui_home server_message message="POST /projects/smoke-project/stop?lang=en HTTP/1.1" 303 -
-2026-04-18 20:47:20 INFO ui_home request_complete duration_ms=11 method=POST page=/projects/smoke-project/stop path=/projects/smoke-project/stop?lang=en status=303
-2026-04-18 20:47:21 INFO ui_home project_probe http_running=False mcp_running=False project_id=gui-created-project
-2026-04-18 20:47:21 INFO ui_home server_message message="GET /?flash=stopped&project_id=smoke-project&lang=en HTTP/1.1" 200 -
-2026-04-18 20:47:21 INFO ui_home request_complete duration_ms=719 method=GET page=/ path=/?flash=stopped&project_id=smoke-project&lang=en status=200
+2026-04-19 15:43:39 INFO cli command_start command=run-ui-home
+2026-04-19 15:43:39 INFO cli server_dispatch command=run-ui-home host=127.0.0.1 port=62335
+2026-04-19 15:43:39 INFO ui_home server_start app_home=F:\dev\mcp-memory\artifacts\smoke_run_1776602612407_25708\smoke_app host=127.0.0.1 port=62335
+2026-04-19 15:43:40 INFO ui_home project_probe http_running=False mcp_running=False project_id=gui-created-project
+2026-04-19 15:43:41 INFO ui_home project_probe http_running=False mcp_running=False project_id=smoke-project
+2026-04-19 15:43:41 INFO ui_home server_message message="GET / HTTP/1.1" 200 -
+2026-04-19 15:43:41 INFO ui_home request_complete duration_ms=1441 method=GET page=/ path=/ status=200
+2026-04-19 15:43:41 INFO ui_home project_probe http_running=False mcp_running=False project_id=gui-created-project
+2026-04-19 15:43:42 INFO ui_home project_probe http_running=False mcp_running=False project_id=smoke-project
+2026-04-19 15:43:42 INFO ui_home server_message message="GET / HTTP/1.1" 200 -
+2026-04-19 15:43:42 INFO ui_home request_complete duration_ms=1445 method=GET page=/ path=/ status=200
+2026-04-19 15:43:42 INFO ui_home project_start_requested project_id=smoke-project
+2026-04-19 15:43:43 INFO ui_home project_started http_pid=27180 mcp_pid=10040 project_id=smoke-project
+2026-04-19 15:43:43 INFO ui_home server_message message="POST /projects/smoke-project/start?lang=en HTTP/1.1" 303 -
+2026-04-19 15:43:43 INFO ui_home request_complete duration_ms=595 method=POST page=/projects/smoke-project/start path=/projects/smoke-project/start?lang=en status=303
+2026-04-19 15:43:43 INFO ui_home project_probe http_running=False mcp_running=False project_id=gui-created-project
+2026-04-19 15:43:43 INFO ui_home server_message message="GET /?flash=started&project_id=smoke-project&lang=en HTTP/1.1" 200 -
+2026-04-19 15:43:43 INFO ui_home request_complete duration_ms=724 method=GET page=/ path=/?flash=started&project_id=smoke-project&lang=en status=200
+2026-04-19 15:43:43 INFO ui_home project_restart_requested project_id=smoke-project
+2026-04-19 15:43:43 INFO ui_home project_stop_requested project_id=smoke-project
+2026-04-19 15:43:43 INFO ui_home project_stopped http_pid=27180 mcp_pid=10040 project_id=smoke-project
+2026-04-19 15:43:43 INFO ui_home project_start_requested project_id=smoke-project
+2026-04-19 15:43:44 INFO ui_home project_started http_pid=31928 mcp_pid=32672 project_id=smoke-project
+2026-04-19 15:43:44 INFO ui_home server_message message="POST /projects/smoke-project/restart?lang=en HTTP/1.1" 303 -
+2026-04-19 15:43:44 INFO ui_home request_complete duration_ms=596 method=POST page=/projects/smoke-project/restart path=/projects/smoke-project/restart?lang=en status=303
+2026-04-19 15:43:45 INFO ui_home project_probe http_running=False mcp_running=False project_id=gui-created-project
+2026-04-19 15:43:45 INFO ui_home server_message message="GET /?flash=restarted&project_id=smoke-project&lang=en HTTP/1.1" 200 -
+2026-04-19 15:43:45 INFO ui_home request_complete duration_ms=716 method=GET page=/ path=/?flash=restarted&project_id=smoke-project&lang=en status=200
+2026-04-19 15:43:45 INFO ui_home project_stop_requested project_id=smoke-project
+2026-04-19 15:43:45 INFO ui_home project_stopped http_pid=31928 mcp_pid=32672 project_id=smoke-project
+2026-04-19 15:43:45 INFO ui_home server_message message="POST /projects/smoke-project/stop?lang=en HTTP/1.1" 303 -
+2026-04-19 15:43:45 INFO ui_home request_complete duration_ms=12 method=POST page=/projects/smoke-project/stop path=/projects/smoke-project/stop?lang=en status=303
+2026-04-19 15:43:46 INFO ui_home project_probe http_running=False mcp_running=False project_id=gui-created-project
+2026-04-19 15:43:46 INFO ui_home server_message message="GET /?flash=stopped&project_id=smoke-project&lang=en HTTP/1.1" 200 -
+2026-04-19 15:43:46 INFO ui_home request_complete duration_ms=721 method=GET page=/ path=/?flash=stopped&project_id=smoke-project&lang=en status=200

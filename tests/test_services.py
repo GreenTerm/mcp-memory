@@ -118,6 +118,14 @@ class ServiceTests(unittest.TestCase):
                 mcp_port=30002,
             )
 
+    def test_project_service_delete_project_and_missing_error(self) -> None:
+        service = ProjectService(self.sandbox.registry)
+        service.delete_project("test-project")
+        self.assertIsNone(self.sandbox.registry.get_project("test-project"))
+
+        with self.assertRaises(ValueError):
+            service.delete_project("missing-project")
+
     def test_function_service_upsert_get_list(self) -> None:
         with self.sandbox.open_database() as database:
             service = FunctionService(database)

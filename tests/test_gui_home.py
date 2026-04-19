@@ -14,14 +14,18 @@ from tests.support import ProjectSandbox
 from mcp_memory.config import ProjectRegistry
 from mcp_memory.gui.home import (
     build_home_handler,
+    build_project_edit_state,
     build_project_form_state,
     effective_project_root,
     parse_project_create_form,
+    parse_project_edit_form,
     probe_project_http_health,
+    render_home_flash,
     render_home_page,
     render_project_actions,
     render_project_create_page,
     render_project_hint,
+    render_setup_page,
     serve_ui_home,
 )
 from mcp_memory.logging_utils import configure_logging, shutdown_logging
@@ -69,6 +73,9 @@ class GuiHomeTests(unittest.TestCase):
                 shutdown_logging()
         self.assertIn("Your project shelf is empty", html)
         self.assertIn("New Project", html)
+        self.assertIn("Setup Guide", html)
+        self.assertIn("/setup?lang=en", html)
+        self.assertNotIn("Warm Lab", html)
 
     def test_render_home_page_russian_language(self) -> None:
         with TemporaryDirectory() as tmp:
@@ -141,16 +148,27 @@ class GuiHomeTests(unittest.TestCase):
                     russian_html = response.read().decode("utf-8")
                 with request.urlopen(base_url + "/assets/app.css") as response:
                     css = response.read().decode("utf-8")
+                with request.urlopen(base_url + "/assets/ui.js") as response:
+                    js = response.read().decode("utf-8")
 
                 self.assertIn("Pick up your reverse-engineering workspace", html)
+                self.assertIn('data-theme="dark"', html)
+                self.assertIn('<script src="/assets/ui.js" defer></script>', html)
                 self.assertIn("Test Project", html)
+                self.assertIn("DB Path", html)
+                self.assertIn("Copy MCP config", html)
+                self.assertIn("mcp-config-test-project", html)
                 self.assertIn("Running", html)
                 self.assertIn("/ui/", html)
                 self.assertIn("New Project", html)
+                self.assertNotIn("Warm Lab", html)
                 self.assertIn("lang=ru", russian_html)
                 self.assertIn("badge-success", russian_html)
                 self.assertIn("/projects/new?lang=ru", russian_html)
                 self.assertIn("--paper", css)
+                self.assertIn("--bg", css)
+                self.assertIn("data-theme=\"light\"", css)
+                self.assertIn("mcp-memory-theme", js)
             finally:
                 health_server.shutdown()
                 health_server.server_close()
@@ -235,6 +253,81 @@ class GuiHomeTests(unittest.TestCase):
                 thread.join(timeout=5)
             sandbox.cleanup()
 
+    def test_home_handler_renders_project_card_menu_and_edit_form(self) -> None:
+        sandbox = ProjectSandbox()
+        server = None
+        thread = None
+        try:
+            handler = build_home_handler(sandbox.registry, sandbox.app_home, ProjectRuntimeManager(sandbox.app_home))
+            server = HTTPServer(("127.0.0.1", 0), handler)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base_url = f"http://127.0.0.1:{server.server_port}"
+
+            with request.urlopen(base_url + "/?lang=en") as response:
+                home_html = response.read().decode("utf-8")
+            with request.urlopen(base_url + "/projects/test-project/edit?lang=en") as response:
+                edit_html = response.read().decode("utf-8")
+
+            self.assertIn("project-card-menu", home_html)
+            self.assertIn("/projects/test-project/edit?lang=en", home_html)
+            self.assertIn("/projects/test-project/delete?lang=en", home_html)
+            self.assertIn("Edit Project", edit_html)
+            self.assertIn('action="/projects/test-project/edit?lang=en"', edit_html)
+            self.assertIn('value="Test Project"', edit_html)
+        finally:
+            if server is not None:
+                server.shutdown()
+                server.server_close()
+            if thread is not None:
+                thread.join(timeout=5)
+            sandbox.cleanup()
+
+    def test_home_handler_missing_project_and_unknown_routes(self) -> None:
+        sandbox = ProjectSandbox()
+        server = None
+        thread = None
+        try:
+            handler = build_home_handler(sandbox.registry, sandbox.app_home, ProjectRuntimeManager(sandbox.app_home))
+            server = HTTPServer(("127.0.0.1", 0), handler)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base_url = f"http://127.0.0.1:{server.server_port}"
+
+            with self.assertRaises(error.HTTPError) as missing_edit:
+                request.urlopen(base_url + "/projects/missing-project/edit?lang=en")
+            self.assertEqual(missing_edit.exception.code, 404)
+
+            with self.assertRaises(error.HTTPError) as unknown_get:
+                request.urlopen(base_url + "/missing-page")
+            self.assertEqual(unknown_get.exception.code, 404)
+
+            with request.urlopen(
+                request.Request(base_url + "/projects/missing-project/edit?lang=en", data=b"", method="POST")
+            ) as response:
+                self.assertIn("flash=failed", response.geturl())
+
+            with request.urlopen(
+                request.Request(base_url + "/projects/missing-project/delete?lang=en", data=b"", method="POST")
+            ) as response:
+                self.assertIn("flash=failed", response.geturl())
+
+            with request.urlopen(
+                request.Request(base_url + "/projects/missing-project/start?lang=en", data=b"", method="POST")
+            ) as response:
+                self.assertIn("flash=failed", response.geturl())
+
+            with self.assertRaises(error.HTTPError) as unknown_post:
+                request.urlopen(request.Request(base_url + "/missing-post", data=b"", method="POST"))
+            self.assertEqual(unknown_post.exception.code, 404)
+        finally:
+            if server is not None:
+                server.shutdown()
+                server.server_close()
+            if thread is not None:
+                thread.join(timeout=5)
+            sandbox.cleanup()
+
     def test_home_handler_creates_project_from_form(self) -> None:
         sandbox = ProjectSandbox()
         server = None
@@ -274,6 +367,245 @@ class GuiHomeTests(unittest.TestCase):
             self.assertIn("Project created successfully.", html)
             self.assertIn("Created Project", html)
             self.assertIn(">Start<", html)
+        finally:
+            if server is not None:
+                server.shutdown()
+                server.server_close()
+            if thread is not None:
+                thread.join(timeout=5)
+            sandbox.cleanup()
+
+    def test_home_handler_edit_form_validation_and_service_error(self) -> None:
+        sandbox = ProjectSandbox()
+        server = None
+        thread = None
+        try:
+            handler = build_home_handler(sandbox.registry, sandbox.app_home, ProjectRuntimeManager(sandbox.app_home))
+            server = HTTPServer(("127.0.0.1", 0), handler)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base_url = f"http://127.0.0.1:{server.server_port}"
+
+            invalid_form = parse.urlencode(
+                {
+                    "display_name": "",
+                    "http_host": "",
+                    "http_port": "bad",
+                    "mcp_host": "",
+                    "mcp_port": "0",
+                    "write_mode": "broken",
+                }
+            ).encode("utf-8")
+            with self.assertRaises(error.HTTPError) as invalid_ctx:
+                request.urlopen(
+                    request.Request(base_url + "/projects/test-project/edit?lang=en", data=invalid_form, method="POST")
+                )
+            invalid_html = invalid_ctx.exception.read().decode("utf-8")
+
+            self.assertEqual(invalid_ctx.exception.code, 400)
+            self.assertIn("Display Name is required.", invalid_html)
+            self.assertIn("HTTP Host is required.", invalid_html)
+            self.assertIn("MCP Host is required.", invalid_html)
+            self.assertIn("http_port must be a valid integer.", invalid_html)
+            self.assertIn("mcp_port must be between 1 and 65535.", invalid_html)
+            self.assertIn("Write Mode must be confirm or auto.", invalid_html)
+
+            with mock.patch("mcp_memory.gui.home.ProjectService.update_project", side_effect=ValueError("update failed")):
+                valid_form = parse.urlencode(
+                    {
+                        "display_name": "Still Valid",
+                        "http_host": "127.0.0.1",
+                        "http_port": "18770",
+                        "mcp_host": "127.0.0.1",
+                        "mcp_port": "19880",
+                        "write_mode": "confirm",
+                    }
+                ).encode("utf-8")
+                with self.assertRaises(error.HTTPError) as service_ctx:
+                    request.urlopen(
+                        request.Request(
+                            base_url + "/projects/test-project/edit?lang=en",
+                            data=valid_form,
+                            method="POST",
+                        )
+                    )
+                service_html = service_ctx.exception.read().decode("utf-8")
+
+            self.assertEqual(service_ctx.exception.code, 400)
+            self.assertIn("update failed", service_html)
+        finally:
+            if server is not None:
+                server.shutdown()
+                server.server_close()
+            if thread is not None:
+                thread.join(timeout=5)
+            sandbox.cleanup()
+
+    def test_home_handler_updates_and_deletes_project_from_card_menu(self) -> None:
+        sandbox = ProjectSandbox()
+        server = None
+        thread = None
+        runtime_manager = mock.Mock()
+        runtime_manager.get_project_runtime.return_value = ProjectRuntimeInfo("test-project", "stopped", "not running", False)
+        runtime_manager.stop_project.return_value = ProjectRuntimeInfo("test-project", "stopped", "stopped", True, None, None)
+        try:
+            handler = build_home_handler(sandbox.registry, sandbox.app_home, runtime_manager)
+            server = HTTPServer(("127.0.0.1", 0), handler)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base_url = f"http://127.0.0.1:{server.server_port}"
+
+            edit_form = parse.urlencode(
+                {
+                    "display_name": "Edited Project",
+                    "http_host": "127.0.0.2",
+                    "http_port": "18888",
+                    "mcp_host": "127.0.0.3",
+                    "mcp_port": "19999",
+                    "write_mode": "auto",
+                }
+            ).encode("utf-8")
+            with request.urlopen(
+                request.Request(base_url + "/projects/test-project/edit?lang=en", data=edit_form, method="POST")
+            ) as response:
+                updated_html = response.read().decode("utf-8")
+                updated_url = response.geturl()
+
+            updated_project = sandbox.registry.get_project("test-project")
+            self.assertIn("flash=updated", updated_url)
+            self.assertIn("Edited Project", updated_html)
+            self.assertIsNotNone(updated_project)
+            self.assertEqual(updated_project.display_name, "Edited Project")
+            self.assertEqual(updated_project.http_host, "127.0.0.2")
+            self.assertEqual(updated_project.http_port, 18888)
+            self.assertEqual(updated_project.mcp_host, "127.0.0.3")
+            self.assertEqual(updated_project.mcp_port, 19999)
+            self.assertEqual(updated_project.write_mode, "auto")
+
+            with request.urlopen(
+                request.Request(base_url + "/projects/test-project/delete?lang=en", data=b"", method="POST")
+            ) as response:
+                deleted_html = response.read().decode("utf-8")
+                deleted_url = response.geturl()
+
+            self.assertIn("flash=deleted", deleted_url)
+            self.assertIn("Project removed from the shelf.", deleted_html)
+            self.assertIsNone(sandbox.registry.get_project("test-project"))
+            runtime_manager.stop_project.assert_called_with("test-project")
+        finally:
+            if server is not None:
+                server.shutdown()
+                server.server_close()
+            if thread is not None:
+                thread.join(timeout=5)
+            sandbox.cleanup()
+
+    def test_setup_wizard_renders_and_creates_project(self) -> None:
+        sandbox = ProjectSandbox()
+        server = None
+        thread = None
+        try:
+            handler = build_home_handler(sandbox.registry, sandbox.app_home, ProjectRuntimeManager(sandbox.app_home))
+            server = HTTPServer(("127.0.0.1", 0), handler)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base_url = f"http://127.0.0.1:{server.server_port}"
+            project_root = sandbox.root / "setup-project"
+
+            with request.urlopen(base_url + "/setup?lang=en") as response:
+                setup_html = response.read().decode("utf-8")
+
+            form_data = parse.urlencode(
+                {
+                    "project_id": "setup-project",
+                    "display_name": "Setup Project",
+                    "project_root": str(project_root),
+                    "http_port": "23001",
+                    "mcp_port": "23002",
+                    "write_mode": "confirm",
+                }
+            ).encode("utf-8")
+            with request.urlopen(
+                request.Request(base_url + "/setup/project?lang=en", data=form_data, method="POST")
+            ) as response:
+                created_html = response.read().decode("utf-8")
+                final_url = response.geturl()
+
+            self.assertIn("Setup Guide", setup_html)
+            self.assertIn('action="/setup/project?lang=en"', setup_html)
+            self.assertIn("Local Home", setup_html)
+            self.assertIn("MCP Endpoint", setup_html)
+            self.assertIn("flash=created", final_url)
+            self.assertIn("/setup?", final_url)
+            self.assertIn("Project created successfully.", created_html)
+            self.assertIn("Copy MCP config", created_html)
+            self.assertIn("23002/mcp", created_html)
+            self.assertIsNotNone(sandbox.registry.get_project("setup-project"))
+        finally:
+            if server is not None:
+                server.shutdown()
+                server.server_close()
+            if thread is not None:
+                thread.join(timeout=5)
+            sandbox.cleanup()
+
+    def test_setup_wizard_preserves_russian_language_links(self) -> None:
+        sandbox = ProjectSandbox()
+        server = None
+        thread = None
+        try:
+            handler = build_home_handler(sandbox.registry, sandbox.app_home, ProjectRuntimeManager(sandbox.app_home))
+            server = HTTPServer(("127.0.0.1", 0), handler)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base_url = f"http://127.0.0.1:{server.server_port}"
+
+            with request.urlopen(base_url + "/setup?lang=ru") as response:
+                html = response.read().decode("utf-8")
+
+            self.assertIn('lang="ru"', html)
+            self.assertIn('action="/setup/project?lang=ru"', html)
+            self.assertIn('href="/?lang=ru"', html)
+        finally:
+            if server is not None:
+                server.shutdown()
+                server.server_close()
+            if thread is not None:
+                thread.join(timeout=5)
+            sandbox.cleanup()
+
+    def test_setup_wizard_rejects_invalid_project_form(self) -> None:
+        sandbox = ProjectSandbox()
+        server = None
+        thread = None
+        try:
+            handler = build_home_handler(sandbox.registry, sandbox.app_home, ProjectRuntimeManager(sandbox.app_home))
+            server = HTTPServer(("127.0.0.1", 0), handler)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base_url = f"http://127.0.0.1:{server.server_port}"
+            form_data = parse.urlencode(
+                {
+                    "project_id": "",
+                    "display_name": "",
+                    "project_root": "",
+                    "http_port": "bad",
+                    "mcp_port": "23002",
+                    "write_mode": "confirm",
+                }
+            ).encode("utf-8")
+
+            with self.assertRaises(error.HTTPError) as ctx:
+                request.urlopen(
+                    request.Request(base_url + "/setup/project?lang=en", data=form_data, method="POST")
+                )
+            html = ctx.exception.read().decode("utf-8")
+
+            self.assertEqual(ctx.exception.code, 400)
+            self.assertIn('action="/setup/project?lang=en"', html)
+            self.assertIn("Project ID is required.", html)
+            self.assertIn("Display Name is required.", html)
+            self.assertIn("http_port must be a valid integer.", html)
         finally:
             if server is not None:
                 server.shutdown()
@@ -402,6 +734,64 @@ class GuiHomeTests(unittest.TestCase):
             self.assertIn("mcp_port", invalid_state.errors)
             self.assertIn("write_mode", invalid_state.errors)
 
+    def test_parse_project_create_form_rejects_file_root(self) -> None:
+        with TemporaryDirectory() as tmp:
+            app_home = Path(tmp) / "app"
+            registry = ProjectRegistry(app_home / "app_config.json")
+            file_root = Path(tmp) / "occupied.txt"
+            file_root.write_text("not a directory", encoding="utf-8")
+
+            state = parse_project_create_form(
+                {
+                    "project_id": "file-root-project",
+                    "display_name": "File Root Project",
+                    "project_root": str(file_root),
+                    "http_port": "12000",
+                    "mcp_port": "12001",
+                    "write_mode": "confirm",
+                },
+                app_home,
+                registry,
+            )
+
+            self.assertEqual(state.errors["project_root"], "Project Root must point to a directory.")
+
+    def test_parse_project_edit_form_rejects_invalid_fields(self) -> None:
+        sandbox = ProjectSandbox()
+        try:
+            state = parse_project_edit_form(
+                sandbox.project,
+                {
+                    "display_name": "",
+                    "http_host": "",
+                    "http_port": "bad",
+                    "mcp_host": "",
+                    "mcp_port": "70000",
+                    "write_mode": "broken",
+                },
+            )
+            self.assertEqual(state.errors["display_name"], "Display Name is required.")
+            self.assertEqual(state.errors["http_host"], "HTTP Host is required.")
+            self.assertEqual(state.errors["mcp_host"], "MCP Host is required.")
+            self.assertEqual(state.errors["http_port"], "http_port must be a valid integer.")
+            self.assertEqual(state.errors["mcp_port"], "mcp_port must be between 1 and 65535.")
+            self.assertEqual(state.errors["write_mode"], "Write Mode must be confirm or auto.")
+
+            same_port_state = parse_project_edit_form(
+                sandbox.project,
+                {
+                    "display_name": "Edited",
+                    "http_host": "127.0.0.1",
+                    "http_port": "18888",
+                    "mcp_host": "127.0.0.1",
+                    "mcp_port": "18888",
+                    "write_mode": "confirm",
+                },
+            )
+            self.assertEqual(same_port_state.errors["mcp_port"], "HTTP Port and MCP Port must be different.")
+        finally:
+            sandbox.cleanup()
+
     def test_render_project_actions_and_hints_cover_runtime_variants(self) -> None:
         sandbox = ProjectSandbox()
         try:
@@ -415,12 +805,37 @@ class GuiHomeTests(unittest.TestCase):
             self.assertIn("Open Workspace", running_actions)
             self.assertIn("Stop", running_actions)
             self.assertIn("Restart", running_actions)
+            self.assertIn("Starting", render_project_actions(sandbox.project, starting, "en"))
 
             self.assertIn("outside home UI", render_project_hint(sandbox.project, sandbox.app_home, running_unmanaged, ""))
             self.assertIn("http-api.log", render_project_hint(sandbox.project, sandbox.app_home, failed, ""))
             self.assertIn("booting", render_project_hint(sandbox.project, sandbox.app_home, starting, ""))
             self.assertIn("Project created successfully.", render_project_hint(sandbox.project, sandbox.app_home, stopped, "created"))
+            self.assertIn("Project updated successfully.", render_project_hint(sandbox.project, sandbox.app_home, stopped, "updated"))
+            unknown_runtime = ProjectRuntimeInfo("test-project", "mystery", "???", False)
+            self.assertEqual(render_project_hint(sandbox.project, sandbox.app_home, unknown_runtime, "unknown"), "")
             self.assertIn("run-ui-home", render_project_hint(sandbox.project, sandbox.app_home, stopped, ""))
+        finally:
+            sandbox.cleanup()
+
+    def test_build_project_edit_state_and_home_flash_helpers(self) -> None:
+        sandbox = ProjectSandbox()
+        try:
+            state = build_project_edit_state(
+                sandbox.project,
+                values={"display_name": "Edited Name"},
+                errors={"display_name": "bad"},
+                form_error="problem",
+            )
+            self.assertEqual(state.project_id, "test-project")
+            self.assertEqual(state.values["display_name"], "Edited Name")
+            self.assertEqual(state.errors["display_name"], "bad")
+            self.assertEqual(state.form_error, "problem")
+
+            failed_flash = render_home_flash("failed", "en")
+            self.assertIn("flash-warning", failed_flash)
+            self.assertIn("Project action failed.", failed_flash)
+            self.assertEqual(render_home_flash("", "en"), "")
         finally:
             sandbox.cleanup()
 

@@ -44,6 +44,13 @@ class ProjectRegistry:
         self.save(updated)
         return updated
 
+    def remove_project(self, project_id: str) -> AppConfig:
+        config = self.load()
+        projects = [entry for entry in config.projects if entry.project_id != project_id]
+        updated = replace(config, projects=projects)
+        self.save(updated)
+        return updated
+
     def get_project(self, project_id: str) -> ProjectConfig | None:
         config = self.load()
         for project in config.projects:

@@ -2,10 +2,10 @@
   "bundle_version": 1,
   "project": {
     "project_id": "smoke-project",
-    "display_name": "Smoke Project",
+    "display_name": "Smoke Project Updated",
     "write_mode": "confirm"
   },
-  "exported_at": "2026-04-18T17:47:22.288377+00:00",
+  "exported_at": "2026-04-19T12:43:47.269250+00:00",
   "counts": {
     "functions": 3,
     "structures": 2,
@@ -39,8 +39,8 @@
         "created_by": "http-check",
         "updated_by": "http-check",
         "allow_conflict": false,
-        "created_at": "2026-04-18T17:47:10.285825+00:00",
-        "updated_at": "2026-04-18T17:47:10.285825+00:00"
+        "created_at": "2026-04-19T12:43:33.969010+00:00",
+        "updated_at": "2026-04-19T12:43:33.969010+00:00"
       },
       {
         "project_id": "smoke-project",
@@ -66,8 +66,8 @@
         "created_by": "ui-check",
         "updated_by": "ui-check",
         "allow_conflict": false,
-        "created_at": "2026-04-18T17:47:13.321440+00:00",
-        "updated_at": "2026-04-18T17:47:13.321440+00:00"
+        "created_at": "2026-04-19T12:43:38.264640+00:00",
+        "updated_at": "2026-04-19T12:43:38.264640+00:00"
       },
       {
         "project_id": "smoke-project",
@@ -115,8 +115,8 @@
         "created_by": "local-check",
         "updated_by": "local-check",
         "allow_conflict": false,
-        "created_at": "2026-04-18T17:47:09.384626+00:00",
-        "updated_at": "2026-04-18T17:47:09.384626+00:00"
+        "created_at": "2026-04-19T12:43:33.146806+00:00",
+        "updated_at": "2026-04-19T12:43:33.146806+00:00"
       }
     ],
     "structures": [
@@ -165,8 +165,8 @@
         "source_origin": "smoke-test",
         "created_by": "local-check",
         "updated_by": "local-check",
-        "created_at": "2026-04-18T17:47:09.391393+00:00",
-        "updated_at": "2026-04-18T17:47:09.391393+00:00"
+        "created_at": "2026-04-19T12:43:33.153151+00:00",
+        "updated_at": "2026-04-19T12:43:33.153151+00:00"
       },
       {
         "project_id": "smoke-project",
@@ -183,8 +183,8 @@
         "source_origin": "api",
         "created_by": "mcp-check",
         "updated_by": "mcp-check",
-        "created_at": "2026-04-18T17:47:14.175420+00:00",
-        "updated_at": "2026-04-18T17:47:14.175420+00:00"
+        "created_at": "2026-04-19T12:43:39.144601+00:00",
+        "updated_at": "2026-04-19T12:43:39.144601+00:00"
       }
     ],
     "global_hypotheses": [
@@ -210,8 +210,8 @@
         "source_origin": "smoke-test",
         "created_by": "local-check",
         "updated_by": "local-check",
-        "created_at": "2026-04-18T17:47:09.395035+00:00",
-        "updated_at": "2026-04-18T17:47:09.395035+00:00"
+        "created_at": "2026-04-19T12:43:33.156841+00:00",
+        "updated_at": "2026-04-19T12:43:33.156841+00:00"
       }
     ],
     "evidence": [
@@ -233,19 +233,19 @@
         "source_origin": "smoke-test",
         "created_by": "local-check",
         "attachment_id": null,
-        "created_at": "2026-04-18T17:47:09.397647+00:00"
+        "created_at": "2026-04-19T12:43:33.159988+00:00"
       }
     ],
     "relations": [
       {
-        "relation_id": "24c612d8-d4ce-4f41-89a3-36c55c586fa0",
+        "relation_id": "34fed817-5697-4228-a61b-ccc7bbc87fc2",
         "project_id": "smoke-project",
         "from_entity_type": "function",
         "from_entity_id": "fn_main",
         "to_entity_type": "structure",
         "to_entity_id": "struct_parser_ctx",
         "relation_type": "uses_structure",
-        "created_at": "2026-04-18T17:47:09.400274+00:00",
+        "created_at": "2026-04-19T12:43:33.162621+00:00",
         "created_by": "local-check"
       }
     ]

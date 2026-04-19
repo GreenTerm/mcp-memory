@@ -445,6 +445,7 @@ def main() -> int:
                 wait_for_text(ui_home_url + "/", ui_home_process, ui_stdout_path, ui_stderr_path)
                 home_html = read_text(ui_home_url + "/")
                 home_ru_html = read_text(ui_home_url + "/?lang=ru")
+                setup_html = read_text(ui_home_url + "/setup?lang=en")
                 create_project_form_html = read_text(ui_home_url + "/projects/new?lang=en")
                 gui_created_project_root = run_root / "gui_created_project"
                 gui_created_project_id = "gui-created-project"
@@ -461,6 +462,13 @@ def main() -> int:
                 )
                 dashboard_html = read_text(base_url + "/ui/")
                 dashboard_ru_html = read_text(base_url + "/ui/?lang=ru")
+                functions_list_html = read_text(base_url + "/ui/functions?q=main")
+                structures_list_html = read_text(base_url + "/ui/structures")
+                hypotheses_list_html = read_text(base_url + "/ui/global-hypotheses")
+                graph_html = read_text(base_url + "/ui/graph")
+                focused_graph_html = read_text(base_url + "/ui/graph?focus_type=function&focus_id=fn_main")
+                import_export_html = read_text(base_url + "/ui/import-export")
+                backups_html = read_text(base_url + "/ui/backups")
                 settings_html = read_text(base_url + "/ui/settings")
                 updated_mcp_port = allocate_port()
                 saved_settings_html = post_form(
@@ -534,18 +542,26 @@ def main() -> int:
                     "home_has_project": "Smoke Project" in home_html,
                     "home_ru_language": "Полка проектов" in home_ru_html or "Откройте нужное рабочее пространство" in home_ru_html,
                     "home_running_badge": "Running" in home_html,
+                    "setup_wizard_loaded": "Setup Guide" in setup_html and "MCP Endpoint" in setup_html,
                     "create_project_form_loaded": "Create Project" in create_project_form_html,
                     "created_project_flash_seen": "Project created successfully." in created_home_html,
                     "created_project_visible": "GUI Created Project" in created_home_html,
                     "created_project_start_visible": gui_created_project_id in created_home_html and "Start" in created_home_html,
                     "created_project_root_exists": gui_created_project_root.exists(),
-                    "dashboard_has_title": "Workspace Dashboard" in dashboard_html,
+                    "dashboard_has_title": "Project Overview" in dashboard_html,
                     "dashboard_has_mcp_endpoint": f"http://127.0.0.1:{mcp_port}/mcp" in dashboard_html,
+                    "functions_list_loaded": "Functions" in functions_list_html and "main_handler" in functions_list_html,
+                    "structures_list_loaded": "Structures" in structures_list_html,
+                    "hypotheses_list_loaded": "Global Hypotheses" in hypotheses_list_html,
+                    "graph_page_loaded": "Relation Graph" in graph_html and "<svg" in graph_html,
+                    "focused_graph_loaded": "main_handler" in focused_graph_html,
+                    "import_export_page_loaded": "Export Project" in import_export_html and "Import Project" in import_export_html,
+                    "backups_page_loaded": "Create Backup" in backups_html and "Restore Backup" in backups_html,
                     "settings_page_loaded": "Project Settings" in settings_html,
                     "settings_save_flash_seen": "Restart the project from Home UI to apply them." in saved_settings_html,
                     "settings_updated_mcp_visible": f"http://127.0.0.1:{updated_mcp_port}/mcp" in saved_settings_html,
                     "home_updated_mcp_visible": f"http://127.0.0.1:{updated_mcp_port}/mcp" in home_after_settings_html,
-                    "dashboard_ru_title": "Панель workspace" in dashboard_ru_html,
+                    "dashboard_ru_title": "Обзор проекта" in dashboard_ru_html,
                     "function_form_loaded": "Save Function" in new_function_form_html,
                     "structure_form_loaded": "Save Structure" in new_structure_form_html,
                     "search_has_result": "main_handler" in search_html,

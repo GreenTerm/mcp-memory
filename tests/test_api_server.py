@@ -209,58 +209,203 @@ class ApiServerTests(unittest.TestCase):
 
         dashboard_html = self._get_text("/ui/")
         dashboard_ru_html = self._get_text("/ui/?lang=ru")
+        functions_list_html = self._get_text("/ui/functions?q=main&binary_id=bin-main&sort=updated")
         new_function_form_html = self._get_text("/ui/functions/new")
+        search_blank_html = self._get_text("/ui/search")
         search_html = self._get_text("/ui/search?q=main_handler&entity_type=function")
         search_ru_html = self._get_text("/ui/search?q=main_handler&entity_type=function&lang=ru")
+        graph_html = self._get_text("/ui/graph")
+        focused_graph_html = self._get_text("/ui/graph?focus_type=function&focus_id=fn_main&hops=1")
+        invalid_graph_html = self._get_text("/ui/graph?hops=3")
+        invalid_confidence_graph_html = self._get_text("/ui/graph?min_confidence=high")
+        empty_graph_html = self._get_text("/ui/graph?binary_id=missing")
         function_html = self._get_text("/ui/functions/bin-main/fn_main")
+        function_relations_html = self._get_text("/ui/functions/bin-main/fn_main?tab=relations")
+        function_history_tab_html = self._get_text("/ui/functions/bin-main/fn_main?tab=history")
         function_history_html = self._get_text("/ui/functions/bin-main/fn_main/history")
         function_edit_html = self._get_text("/ui/functions/bin-main/fn_main/edit")
+        structures_list_html = self._get_text("/ui/structures?q=ctx&binary_id=bin-main")
         new_structure_form_html = self._get_text("/ui/structures/new")
         structure_html = self._get_text("/ui/structures/struct_ctx")
         structure_history_html = self._get_text("/ui/structures/struct_ctx/history")
         structure_edit_html = self._get_text("/ui/structures/struct_ctx/edit")
+        hypotheses_list_html = self._get_text("/ui/global-hypotheses?status=new")
         new_hypothesis_form_html = self._get_text("/ui/global-hypotheses/new")
         hypothesis_html = self._get_text("/ui/global-hypotheses/gh_ui")
         hypothesis_history_html = self._get_text("/ui/global-hypotheses/gh_ui/history")
         hypothesis_edit_html = self._get_text("/ui/global-hypotheses/gh_ui/edit")
         settings_html = self._get_text("/ui/settings")
+        settings_ru_html = self._get_text("/ui/settings?lang=ru")
+        import_export_html = self._get_text("/ui/import-export")
+        backups_html = self._get_text("/ui/backups")
         pending_html = self._get_text("/ui/pending")
         audit_html = self._get_text("/ui/audit")
         css = self._get_text("/ui/assets/app.css")
+        js = self._get_text("/ui/assets/ui.js")
+        with self.assertRaises(error.HTTPError) as missing_page_ctx:
+            request.urlopen(self.base_url + "/ui/missing-page")
+        not_found_html = missing_page_ctx.exception.read().decode("utf-8")
 
-        self.assertIn("Workspace Dashboard", dashboard_html)
-        self.assertIn("Панель workspace", dashboard_ru_html)
-        self.assertIn("Jump Back In", dashboard_html)
+        self.assertIn("Project Overview", dashboard_html)
+        self.assertIn('data-theme="dark"', dashboard_html)
+        self.assertIn('<script src="/ui/assets/ui.js" defer></script>', dashboard_html)
+        self.assertIn('class="app-shell"', dashboard_html)
+        self.assertIn('class="app-sidebar"', dashboard_html)
+        self.assertIn('class="sidebar-icon"', dashboard_html)
+        self.assertIn('aria-label="Toggle sidebar"', dashboard_html)
+        self.assertNotIn(">Nav</button>", dashboard_html)
+        self.assertIn('class="top-search"', dashboard_html)
+        self.assertIn('href="#main-content"', dashboard_html)
+        self.assertIn('id="main-content"', dashboard_html)
+        self.assertIn('aria-label="Search workspace"', dashboard_html)
+        self.assertIn('aria-label="Language selector"', dashboard_html)
+        self.assertIn('aria-label="Workspace navigation"', dashboard_html)
+        self.assertIn('aria-label="Breadcrumbs"', dashboard_html)
+        self.assertIn('data-theme-toggle', dashboard_html)
+        self.assertEqual(dashboard_html.count("language-switcher"), 1)
+        self.assertEqual(dashboard_html.count("Auto mode"), 1)
+        self.assertIn('class="quick-link workspace-back-link"', dashboard_html)
+        self.assertIn('href="/?lang=en"', dashboard_html)
+        self.assertNotIn('data-nav-group="home"', dashboard_html)
+        self.assertNotIn("Warm Lab", dashboard_html)
+        self.assertIn("/ui/functions", dashboard_html)
+        self.assertIn("/ui/graph", dashboard_html)
+        self.assertIn("/ui/import-export", dashboard_html)
+        self.assertIn("Обзор проекта", dashboard_ru_html)
+        self.assertIn("Project Stats", dashboard_html)
+        self.assertIn("Quick Entries", dashboard_html)
+        self.assertIn("Storage Paths", dashboard_html)
+        self.assertIn("Recent Updates", dashboard_html)
+        self.assertIn("Copy MCP config", dashboard_html)
         self.assertIn("http://127.0.0.1:19876/mcp", dashboard_html)
-        self.assertIn(">Settings<", dashboard_html)
+        self.assertIn("/ui/settings", dashboard_html)
+        self.assertIn("Functions", functions_list_html)
+        self.assertIn("main_handler", functions_list_html)
+        self.assertIn('value="main"', functions_list_html)
+        self.assertIn("/ui/functions/bin-main/fn_main", functions_list_html)
         self.assertIn("New Function", new_function_form_html)
         self.assertIn("Save Function", new_function_form_html)
+        self.assertIn('class="empty-state-body"', search_blank_html)
         self.assertIn("Search Workspace", search_html)
         self.assertIn("Поиск по workspace", search_ru_html)
         self.assertIn("main_handler", search_html)
+        self.assertNotIn("Warm Lab", search_html)
+        self.assertIn("Relation Graph", graph_html)
+        self.assertIn("Graph Filters", graph_html)
+        self.assertIn("uses_structure", graph_html)
+        self.assertIn("<svg", graph_html)
+        self.assertIn("main_handler", focused_graph_html)
+        self.assertIn("ctx_t", focused_graph_html)
+        self.assertIn("Hops must be 1 or 2.", invalid_graph_html)
+        self.assertIn("Min confidence must be a number.", invalid_confidence_graph_html)
+        self.assertIn("No graph links yet", empty_graph_html)
+        self.assertIn("Open Search", empty_graph_html)
         self.assertIn("Edit Function", function_edit_html)
+        self.assertIn('class="detail-layout"', function_html)
+        self.assertIn('class="tab-link is-active"', function_html)
+        self.assertIn("Function Metadata", function_html)
         self.assertIn("View Version History", function_html)
         self.assertIn("Edit Record", function_html)
         self.assertIn("Observed Facts", function_html)
-        self.assertIn("uses_structure", function_html)
+        self.assertIn("Open Focused Graph", function_relations_html)
+        self.assertIn("uses_structure", function_relations_html)
+        self.assertIn("Version 1", function_history_tab_html)
         self.assertIn("Function Version History", function_history_html)
         self.assertIn("Version 1", function_history_html)
+        self.assertIn("Structures", structures_list_html)
+        self.assertIn("ctx_t", structures_list_html)
+        self.assertIn("/ui/structures/struct_ctx", structures_list_html)
         self.assertIn("New Structure", new_structure_form_html)
         self.assertIn("Save Structure", new_structure_form_html)
+        self.assertIn('class="detail-layout"', structure_html)
+        self.assertIn("Structure Metadata", structure_html)
         self.assertIn("Fields", structure_html)
         self.assertIn("Edit Structure", structure_edit_html)
         self.assertIn("Structure Version History", structure_history_html)
+        self.assertIn("Global Hypotheses", hypotheses_list_html)
+        self.assertIn("UI Hypothesis", hypotheses_list_html)
+        self.assertIn("/ui/global-hypotheses/gh_ui", hypotheses_list_html)
         self.assertIn("New Global Hypothesis", new_hypothesis_form_html)
         self.assertIn("UI Hypothesis", hypothesis_html)
+        self.assertIn("Hypothesis Metadata", hypothesis_html)
         self.assertIn("Edit Global Hypothesis", hypothesis_edit_html)
         self.assertIn("Global Hypothesis Version History", hypothesis_history_html)
         self.assertIn("Project Settings", settings_html)
         self.assertIn("Save Settings", settings_html)
         self.assertIn("http://127.0.0.1:19876/mcp", settings_html)
+        self.assertIn("Export Project", import_export_html)
+        self.assertIn("Import Project", import_export_html)
+        self.assertIn("Export JSON", import_export_html)
+        self.assertIn("Create Backup", backups_html)
+        self.assertIn("Restore Backup", backups_html)
+        self.assertIn("Настройки проекта", settings_ru_html)
+        self.assertIn("Точка подключения", settings_ru_html)
+        self.assertIn("Сохранить настройки", settings_ru_html)
+        self.assertIn("HTTP хост", settings_ru_html)
+        self.assertIn("MCP хост", settings_ru_html)
+        self.assertIn("Режим: авто", settings_ru_html)
+        self.assertIn('aria-label="Выбор языка"', settings_ru_html)
+        self.assertIn('aria-label="Поиск по workspace"', settings_ru_html)
+        self.assertIn('href="/ui/?lang=ru"', settings_ru_html)
+        self.assertIn('action="/ui/settings?lang=ru"', settings_ru_html)
+        self.assertEqual(settings_ru_html.count("language-switcher"), 1)
+        self.assertEqual(settings_ru_html.count("Режим: авто"), 1)
+        self.assertNotIn("РќР°", settings_ru_html)
+        self.assertNotIn("РЎРѕ", settings_ru_html)
+        self.assertNotIn("СЃС‚СЂ", settings_ru_html)
+        self.assertNotIn("Warm Lab", function_html)
+        self.assertNotIn("Warm Lab", not_found_html)
+        self.assertIn('class="quick-link workspace-back-link"', not_found_html)
         self.assertIn("Nothing is waiting right now", pending_html)
         self.assertIn("Audit Trail", audit_html)
         self.assertIn("upsert", audit_html)
         self.assertIn("--paper", css)
+        self.assertIn("--bg", css)
+        self.assertIn("data-theme=\"light\"", css)
+        self.assertIn("@keyframes page-enter", css)
+        self.assertIn("transition: grid-template-columns", css)
+        self.assertIn(".skip-link", css)
+        self.assertIn(".sidebar-collapsed .sidebar-link", css)
+        self.assertIn(".sidebar-collapsed .app-sidebar", css)
+        self.assertIn(".graph-canvas", css)
+        self.assertIn(".workspace-back-link", css)
+        self.assertIn(".empty-state-body", css)
+        self.assertIn(".action-card-title", css)
+        self.assertIn("mcp-memory-theme", js)
+
+    def test_ui_graph_caps_rendered_nodes_for_unfocused_view(self) -> None:
+        with self.sandbox.open_database() as database:
+            for index in range(60):
+                structure_id = f"struct_cap_{index:02d}"
+                StructureService(database).upsert_structure(
+                    structure_write_from_payload(
+                        "test-project",
+                        {
+                            "binary_id": "bin-main",
+                            "structure_id": structure_id,
+                            "raw_name": structure_id,
+                            "current_name": structure_id,
+                            "summary": f"Structure {index}",
+                            "created_by": "tester",
+                            "updated_by": "tester",
+                        },
+                    )
+                )
+                RelationService(database).create_relation(
+                    RelationWrite(
+                        project_id="test-project",
+                        from_entity_type="function",
+                        from_entity_id="fn_main",
+                        to_entity_type="structure",
+                        to_entity_id=structure_id,
+                        relation_type="uses_structure",
+                        created_by="tester",
+                    )
+                )
+
+        graph_html = self._get_text("/ui/graph")
+        self.assertEqual(graph_html.count('class="graph-node graph-node-'), 50)
+        self.assertEqual(graph_html.count('class="mini-card"'), 50)
 
     def test_ui_not_found_routes_return_404(self) -> None:
         self.assertEqual(self._get_status("/ui/unknown"), 404)
@@ -462,6 +607,58 @@ class ApiServerTests(unittest.TestCase):
         )
         self.assertEqual(restored["project_id"], "restored-project")
         self.assertTrue((restored_root / "project.db").exists())
+
+    def test_ui_import_export_and_backup_flows(self) -> None:
+        export_path = self.sandbox.root / "ui-bundle.json"
+        backup_path = self.sandbox.root / "ui-backup.zip"
+        restored_root = self.sandbox.root / "ui-restored-project"
+
+        exported_html = self._post_form_text("/ui/import-export/export?lang=en", {"output_path": str(export_path)})
+        self.assertIn("Project export completed.", exported_html)
+        self.assertTrue(export_path.exists())
+
+        imported_html = self._post_form_text(
+            "/ui/import-export/import?lang=en",
+            {"input_path": str(export_path), "replace_existing": "true"},
+        )
+        self.assertIn("Project import completed.", imported_html)
+
+        invalid_import_html = self._post_form_text("/ui/import-export/import?lang=en", {"input_path": ""})
+        self.assertIn("Input Path is required.", invalid_import_html)
+
+        backup_html = self._post_form_text("/ui/backups/create?lang=en", {"output_path": str(backup_path)})
+        self.assertIn("Project backup created.", backup_html)
+        self.assertTrue(backup_path.exists())
+
+        restored_html = self._post_form_text(
+            "/ui/backups/restore?lang=en",
+            {
+                "input_path": str(backup_path),
+                "project_root": str(restored_root),
+                "project_id": "ui-restored-project",
+                "display_name": "UI Restored Project",
+                "http_port": "21000",
+                "mcp_port": "21001",
+                "write_mode": "confirm",
+            },
+        )
+        self.assertIn("Project backup restored as a new project.", restored_html)
+        self.assertTrue((restored_root / "project.db").exists())
+        self.assertIsNotNone(self.sandbox.registry.get_project("ui-restored-project"))
+
+        invalid_restore_html = self._post_form_text(
+            "/ui/backups/restore?lang=en",
+            {
+                "input_path": str(backup_path),
+                "project_root": str(self.sandbox.root / "bad-restore"),
+                "project_id": "ui-restored-project",
+                "display_name": "Duplicate",
+                "http_port": "bad",
+                "mcp_port": "",
+                "write_mode": "confirm",
+            },
+        )
+        self.assertIn("HTTP Port must be a valid integer.", invalid_restore_html)
 
     def test_invalid_json_and_validation_errors(self) -> None:
         req = request.Request(

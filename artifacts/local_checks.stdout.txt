@@ -12,44 +12,44 @@ imports=ok
 == Smoke Check ==
 cli_init_app={
   "status": "initialized",
-  "app_home": "F:\\dev\\mcp-memory\\artifacts\\smoke_run_1776534428640_30912\\smoke_app",
-  "registry_path": "F:\\dev\\mcp-memory\\artifacts\\smoke_run_1776534428640_30912\\smoke_app\\app_config.json",
+  "app_home": "F:\\dev\\mcp-memory\\artifacts\\smoke_run_1776602612407_25708\\smoke_app",
+  "registry_path": "F:\\dev\\mcp-memory\\artifacts\\smoke_run_1776602612407_25708\\smoke_app\\app_config.json",
   "project_count": 0
 }
 cli_create_project={
   "project_id": "smoke-project",
   "display_name": "Smoke Project",
-  "project_root": "F:\\dev\\mcp-memory\\artifacts\\smoke_run_1776534428640_30912\\smoke_project",
-  "database_path": "F:\\dev\\mcp-memory\\artifacts\\smoke_run_1776534428640_30912\\smoke_project\\project.db",
-  "attachments_dir": "F:\\dev\\mcp-memory\\artifacts\\smoke_run_1776534428640_30912\\smoke_project\\attachments",
-  "exports_dir": "F:\\dev\\mcp-memory\\artifacts\\smoke_run_1776534428640_30912\\smoke_project\\exports",
-  "backups_dir": "F:\\dev\\mcp-memory\\artifacts\\smoke_run_1776534428640_30912\\smoke_project\\backups",
-  "logs_dir": "F:\\dev\\mcp-memory\\artifacts\\smoke_run_1776534428640_30912\\smoke_project\\logs",
+  "project_root": "F:\\dev\\mcp-memory\\artifacts\\smoke_run_1776602612407_25708\\smoke_project",
+  "database_path": "F:\\dev\\mcp-memory\\artifacts\\smoke_run_1776602612407_25708\\smoke_project\\project.db",
+  "attachments_dir": "F:\\dev\\mcp-memory\\artifacts\\smoke_run_1776602612407_25708\\smoke_project\\attachments",
+  "exports_dir": "F:\\dev\\mcp-memory\\artifacts\\smoke_run_1776602612407_25708\\smoke_project\\exports",
+  "backups_dir": "F:\\dev\\mcp-memory\\artifacts\\smoke_run_1776602612407_25708\\smoke_project\\backups",
+  "logs_dir": "F:\\dev\\mcp-memory\\artifacts\\smoke_run_1776602612407_25708\\smoke_project\\logs",
   "http_host": "127.0.0.1",
-  "http_port": 55566,
+  "http_port": 62333,
   "mcp_host": "127.0.0.1",
-  "mcp_port": 55567,
+  "mcp_port": 62334,
   "write_mode": "confirm"
 }
 cli_list_projects=[
   {
     "project_id": "smoke-project",
     "display_name": "Smoke Project",
-    "project_root": "F:\\dev\\mcp-memory\\artifacts\\smoke_run_1776534428640_30912\\smoke_project",
-    "database_path": "F:\\dev\\mcp-memory\\artifacts\\smoke_run_1776534428640_30912\\smoke_project\\project.db",
-    "attachments_dir": "F:\\dev\\mcp-memory\\artifacts\\smoke_run_1776534428640_30912\\smoke_project\\attachments",
-    "exports_dir": "F:\\dev\\mcp-memory\\artifacts\\smoke_run_1776534428640_30912\\smoke_project\\exports",
-    "backups_dir": "F:\\dev\\mcp-memory\\artifacts\\smoke_run_1776534428640_30912\\smoke_project\\backups",
-    "logs_dir": "F:\\dev\\mcp-memory\\artifacts\\smoke_run_1776534428640_30912\\smoke_project\\logs",
+    "project_root": "F:\\dev\\mcp-memory\\artifacts\\smoke_run_1776602612407_25708\\smoke_project",
+    "database_path": "F:\\dev\\mcp-memory\\artifacts\\smoke_run_1776602612407_25708\\smoke_project\\project.db",
+    "attachments_dir": "F:\\dev\\mcp-memory\\artifacts\\smoke_run_1776602612407_25708\\smoke_project\\attachments",
+    "exports_dir": "F:\\dev\\mcp-memory\\artifacts\\smoke_run_1776602612407_25708\\smoke_project\\exports",
+    "backups_dir": "F:\\dev\\mcp-memory\\artifacts\\smoke_run_1776602612407_25708\\smoke_project\\backups",
+    "logs_dir": "F:\\dev\\mcp-memory\\artifacts\\smoke_run_1776602612407_25708\\smoke_project\\logs",
     "http_host": "127.0.0.1",
-    "http_port": 55566,
+    "http_port": 62333,
     "mcp_host": "127.0.0.1",
-    "mcp_port": 55567,
+    "mcp_port": 62334,
     "write_mode": "confirm"
   }
 ]
-project_db=F:\dev\mcp-memory\artifacts\smoke_run_1776534428640_30912\smoke_project\project.db
-project_logs_dir=F:\dev\mcp-memory\artifacts\smoke_run_1776534428640_30912\smoke_project\logs
+project_db=F:\dev\mcp-memory\artifacts\smoke_run_1776602612407_25708\smoke_project\project.db
+project_logs_dir=F:\dev\mcp-memory\artifacts\smoke_run_1776602612407_25708\smoke_project\logs
 {
   "upserted_function_id": "fn_main",
   "loaded_current_name": "main_handler",
@@ -60,7 +60,7 @@ project_logs_dir=F:\dev\mcp-memory\artifacts\smoke_run_1776534428640_30912\smoke
   "global_hypothesis_count": 1,
   "evidence_id": "evidence_fn_main_block0",
   "evidence_count": 1,
-  "relation_id": "24c612d8-d4ce-4f41-89a3-36c55c586fa0",
+  "relation_id": "34fed817-5697-4228-a61b-ccc7bbc87fc2",
   "relation_count": 1,
   "related_count": 1,
   "search_service_count": 1,
@@ -90,12 +90,25 @@ project_logs_dir=F:\dev\mcp-memory\artifacts\smoke_run_1776534428640_30912\smoke
   "home_has_project": true,
   "home_ru_language": true,
   "home_running_badge": false,
+  "setup_wizard_loaded": true,
   "create_project_form_loaded": true,
   "created_project_flash_seen": true,
   "created_project_visible": true,
   "created_project_start_visible": true,
   "created_project_root_exists": true,
   "dashboard_has_title": true,
+  "dashboard_has_mcp_endpoint": true,
+  "functions_list_loaded": true,
+  "structures_list_loaded": true,
+  "hypotheses_list_loaded": true,
+  "graph_page_loaded": true,
+  "focused_graph_loaded": true,
+  "import_export_page_loaded": true,
+  "backups_page_loaded": true,
+  "settings_page_loaded": true,
+  "settings_save_flash_seen": true,
+  "settings_updated_mcp_visible": true,
+  "home_updated_mcp_visible": true,
   "dashboard_ru_title": true,
   "function_form_loaded": true,
   "structure_form_loaded": true,
@@ -166,9 +179,9 @@ project_logs_dir=F:\dev\mcp-memory\artifacts\smoke_run_1776534428640_30912\smoke
     "backups_dir": "F:\\dev\\mcp-memory\\artifacts\\smoke_restored_project\\backups",
     "logs_dir": "F:\\dev\\mcp-memory\\artifacts\\smoke_restored_project\\logs",
     "http_host": "127.0.0.1",
-    "http_port": 55570,
+    "http_port": 62337,
     "mcp_host": "127.0.0.1",
-    "mcp_port": 55571,
+    "mcp_port": 62338,
     "write_mode": "confirm"
   }
 }
