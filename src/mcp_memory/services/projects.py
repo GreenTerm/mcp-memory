@@ -6,6 +6,7 @@ import logging
 
 from mcp_memory.config import AppConfig, ProjectConfig, ProjectRegistry
 from mcp_memory.logging_utils import get_logger, log_event
+from mcp_memory.schema import copy_schema_payload, schema_payload_from_source
 from mcp_memory.storage import bootstrap_project_database, open_database
 
 
@@ -30,6 +31,8 @@ class ProjectService:
         http_port: int,
         mcp_port: int,
         write_mode: str = "confirm",
+        schema_path: Path | None = None,
+        schema_template: str = "general_knowledge",
     ) -> ProjectConfig:
         existing = self._registry.get_project(project_id)
         if existing is not None:
@@ -59,6 +62,9 @@ class ProjectService:
         logs_dir = project_root / "logs"
         for directory in (attachments_dir, exports_dir, backups_dir, logs_dir):
             directory.mkdir(parents=True, exist_ok=True)
+        project_schema_path = project_root / "schema.json"
+        schema_payload = schema_payload_from_source(schema_path, schema_template)
+        copy_schema_payload(project_schema_path, schema_payload)
 
         config = ProjectConfig(
             project_id=project_id,
@@ -69,6 +75,7 @@ class ProjectService:
             exports_dir=exports_dir,
             backups_dir=backups_dir,
             logs_dir=logs_dir,
+            schema_path=project_schema_path,
             http_port=http_port,
             mcp_port=mcp_port,
             write_mode=write_mode,
@@ -90,6 +97,7 @@ class ProjectService:
             http_port=config.http_port,
             mcp_port=config.mcp_port,
             write_mode=config.write_mode,
+            schema_path=config.schema_path,
         )
         return config
 

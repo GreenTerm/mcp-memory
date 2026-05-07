@@ -7,6 +7,8 @@ $outputPath = Join-Path $artifactsDir "coverage.txt"
 $jsonPath = Join-Path $artifactsDir "coverage.json"
 $xmlPath = Join-Path $artifactsDir "coverage.xml"
 New-Item -ItemType Directory -Force -Path $artifactsDir | Out-Null
+$env:TEMP = $artifactsDir
+$env:TMP = $artifactsDir
 
 if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
     @(
@@ -17,18 +19,8 @@ if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
     exit 1
 }
 
-$pythonCmd = (Get-Command python -ErrorAction SilentlyContinue).Source
+$pythonCmd = "python"
 $env:PYTHONPATH = Join-Path $repoRoot "src"
-
-& $pythonCmd -c "import coverage" 2>$null
-if ($LASTEXITCODE -ne 0) {
-    @(
-        "The 'coverage' package is not installed."
-        "Install it with: python -m pip install coverage"
-    ) | Set-Content -Encoding UTF8 $outputPath
-    Write-Host "Saved result to $outputPath"
-    exit 1
-}
 
 "Running coverage with $pythonCmd" | Set-Content -Encoding UTF8 $outputPath
 
@@ -64,8 +56,6 @@ function Invoke-PythonStep {
     $psi.RedirectStandardOutput = $true
     $psi.RedirectStandardError = $true
     $psi.CreateNoWindow = $true
-    $psi.Environment["PYTHONPATH"] = Join-Path $repoRoot "src"
-
     $process = [System.Diagnostics.Process]::new()
     $process.StartInfo = $psi
     [void]$process.Start()

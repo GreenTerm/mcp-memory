@@ -12,6 +12,7 @@ from urllib.parse import parse_qs, urlparse
 from mcp_memory.config import ProjectConfig, ProjectRegistry
 from mcp_memory.logging_utils import configure_logging, get_logger, log_event, start_request_log
 from mcp_memory.runtime import ProjectRuntimeInfo, ProjectRuntimeManager
+from mcp_memory.schema import list_bundled_schema_templates
 from mcp_memory.services import ProjectService
 
 from .i18n import language_switcher, localize_markup, resolve_language, translate_text
@@ -139,6 +140,7 @@ def build_home_handler(
                     http_port=state.values["http_port"],
                     mcp_port=state.values["mcp_port"],
                     write_mode=state.values["write_mode"],
+                    schema_template=state.values["schema_template"],
                 )
                 if state.errors or state.form_error:
                     log_event(
@@ -165,6 +167,7 @@ def build_home_handler(
                         http_port=int(state.values["http_port"]),
                         mcp_port=int(state.values["mcp_port"]),
                         write_mode=state.values["write_mode"],
+                        schema_template=state.values["schema_template"],
                     )
                 except ValueError as exc:
                     state.form_error = str(exc)
@@ -309,6 +312,7 @@ def build_project_form_state(values: dict[str, str] | None = None, errors: dict[
         "http_port": DEFAULT_HTTP_PORT,
         "mcp_port": DEFAULT_MCP_PORT,
         "write_mode": DEFAULT_WRITE_MODE,
+        "schema_template": "general_knowledge",
     }
     if values:
         merged.update(values)
@@ -352,6 +356,7 @@ def parse_project_create_form(payload: dict[str, str], app_home: Path, registry:
             "http_port": payload.get("http_port", DEFAULT_HTTP_PORT).strip() or DEFAULT_HTTP_PORT,
             "mcp_port": payload.get("mcp_port", DEFAULT_MCP_PORT).strip() or DEFAULT_MCP_PORT,
             "write_mode": payload.get("write_mode", DEFAULT_WRITE_MODE).strip() or DEFAULT_WRITE_MODE,
+            "schema_template": payload.get("schema_template", "general_knowledge").strip() or "general_knowledge",
         }
     )
 
@@ -379,6 +384,8 @@ def parse_project_create_form(payload: dict[str, str], app_home: Path, registry:
 
     if state.values["write_mode"] not in {"confirm", "auto"}:
         state.errors["write_mode"] = "Write Mode must be confirm or auto."
+    if state.values["schema_template"] not in set(list_bundled_schema_templates()):
+        state.errors["schema_template"] = "Schema Template must be one of the bundled templates."
 
     if state.values["project_id"] and not state.errors.get("project_id"):
         effective_root = effective_project_root(app_home, state.values["project_id"], state.values["project_root"])
@@ -390,7 +397,7 @@ def parse_project_create_form(payload: dict[str, str], app_home: Path, registry:
             )
 
     state.open_advanced = state.open_advanced or any(
-        key in state.errors for key in ("http_port", "mcp_port", "write_mode")
+        key in state.errors for key in ("http_port", "mcp_port", "write_mode", "schema_template")
     )
     return state
 
@@ -675,6 +682,7 @@ def render_project_create_page(
         f"{render_form_field('http_port', 'HTTP Port', state)}"
         f"{render_form_field('mcp_port', 'MCP Port', state)}"
         f"{render_write_mode_field(state, lang)}"
+        f"{render_schema_template_field(state, lang)}"
         "</div>"
         "</details>"
         '<div class="form-actions">'
@@ -802,6 +810,7 @@ def render_setup_project_form(state: ProjectCreateFormState, lang: str, project_
         f"{render_form_field('http_port', 'HTTP Port', state)}"
         f"{render_form_field('mcp_port', 'MCP Port', state)}"
         f"{render_write_mode_field(state, lang)}"
+        f"{render_schema_template_field(state, lang)}"
         "</div>"
         "</details>"
         '<div class="form-actions">'
@@ -903,6 +912,24 @@ def render_write_mode_field(state: ProjectCreateFormState, lang: str) -> str:
         f'<option value="confirm"{confirm_selected}>confirm</option>'
         f'<option value="auto"{auto_selected}>auto</option>'
         "</select>"
+        f"{error_html}"
+        "</label>"
+    )
+
+
+def render_schema_template_field(state: ProjectCreateFormState, lang: str) -> str:
+    selected = state.values.get("schema_template", "general_knowledge")
+    error_message = state.errors.get("schema_template", "")
+    error_class = " field-error" if error_message else ""
+    error_html = f'<p class="field-error-text">{escape(error_message)}</p>' if error_message else ""
+    options = "".join(
+        f'<option value="{escape(name, quote=True)}"{" selected" if selected == name else ""}>{escape(name)}</option>'
+        for name in list_bundled_schema_templates()
+    )
+    return (
+        f'<label class="form-field{error_class}">'
+        f'<span class="field-label">{escape(translate_text(lang, "Schema Template"))}</span>'
+        f'<select name="schema_template">{options}</select>'
         f"{error_html}"
         "</label>"
     )

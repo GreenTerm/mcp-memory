@@ -1,113 +1,163 @@
 # mcp-memory
 
-`mcp-memory` - локальная offline-first база знаний для reverse engineering. Проект хранит функции, структуры, гипотезы, evidence, связи, историю изменений и pending changes в SQLite и дает к ним доступ через CLI, JSON HTTP API, MCP HTTP endpoint и server-rendered web UI.
+`mcp-memory` is a local offline-first schema-driven knowledge base for people and agents.
 
-Система ориентирована на простой Windows-local запуск без облаков, внешних баз данных, фоновых сервисов и runtime-зависимостей. Для тестового покрытия используется только optional dependency `coverage`.
+Projects are stored as isolated Windows-local workspaces with SQLite, files on disk, a JSON HTTP API, an MCP Streamable HTTP endpoint, and a server-rendered web UI. The current vNext model is generic: each project has a portable `schema.json` that defines its entity types, fields, search metadata, and relation types.
 
-## Возможности
+## Features
 
-- изолированные workspaces для нескольких проектов
-- SQLite-хранилище на проект с `project.db`, `attachments/`, `exports/`, `backups/`, `logs/`
-- CLI для создания проектов, импорта, экспорта, backup/restore и pending changes
-- JSON HTTP API для локальной автоматизации
-- MCP Streamable HTTP endpoint для агентов
-- MCP tools для чтения, поиска, записи, evidence, relations, import/export и backup/restore
-- MCP prompts для агентского workflow
-- server-rendered web UI: project shelf, workspace dashboard, search, graph, entity lists, detail pages, settings, import/export, backups
-- режимы записи `confirm` и `auto`
-- audit trail и version history
-- русская и английская локализация UI
+- Project-local `schema.json`
+- Bundled schema templates:
+  - `general_knowledge`
+  - `reverse_engineering`
+  - `infrastructure_deployment`
+  - `research_notes`
+- Generic records with UUID `record_id` and optional unique slugs
+- Typed relations between records
+- Evidence and attachment references for any record
+- SQLite FTS search driven by schema metadata
+- Confirm/auto write modes with pending changes
+- Audit rows and version snapshots for generic changes
+- Soft archive for records
+- Generic JSON export/import with schema included
+- Workspace zip backup/restore with schema included
+- Legacy importer from the old fixed RE database shape
+- Generic HTTP API, MCP tools, CLI, and server-rendered GUI
 
-## Требования
+The project is designed for simple local deployment. It avoids cloud services, external databases, background daemons, and heavy frontend stacks.
+
+## Requirements
 
 - Windows
-- Python `3.10+`
+- Python 3.10+
 
-Установить проект из корня репозитория:
+Install from the repository root:
 
 ```powershell
 python -m pip install -e .
 ```
 
-Для локальных checks и coverage:
+For tests and coverage:
 
 ```powershell
 python -m pip install -e .[dev]
 ```
 
-Без editable install можно запускать через `PYTHONPATH`:
+Without editable install, use `PYTHONPATH`:
 
 ```powershell
 $env:PYTHONPATH = (Resolve-Path .\src)
 python -m mcp_memory.cli --help
 ```
 
-## Быстрый старт
+## Offline Dependency Workflow
 
-1. Создать app home и registry:
+Dependencies are intentionally small and can be prepared for an offline machine with `pip download`.
+
+Example from an online Windows machine:
+
+```powershell
+python -m pip download `
+  --dest .\wheelhouse `
+  --only-binary=:all: `
+  --platform win_amd64 `
+  --python-version 310 `
+  .
+```
+
+Then copy `wheelhouse` and install offline:
+
+```powershell
+python -m pip install --no-index --find-links .\wheelhouse mcp-memory
+```
+
+The GUI uses Jinja2. It is a normal pip-installable wheel and does not require a service or network access at runtime.
+
+## Quick Start
+
+Initialize the global app registry:
 
 ```powershell
 mcp-memory init-app
 ```
 
-По умолчанию app home выбирается так:
+App home resolution order:
 
 1. `MCP_MEMORY_HOME`
 2. `%LOCALAPPDATA%\mcp-memory`
 3. `.\.mcp-memory`
 
-2. Создать проект:
-
-```powershell
-mcp-memory create-project sample --name "Sample Project"
-```
-
-С явными путями и портами:
+Create a generic project from a bundled schema:
 
 ```powershell
 mcp-memory create-project sample `
   --name "Sample Project" `
-  --project-root F:\work\sample-project `
-  --http-port 8765 `
-  --mcp-port 9876 `
+  --schema-template general_knowledge `
   --write-mode confirm
 ```
 
-3. Посмотреть проекты:
+Create a project from an explicit schema file:
 
 ```powershell
-mcp-memory list-projects
+mcp-memory create-project sample `
+  --name "Sample Project" `
+  --schema F:\schemas\my-project.schema.json
 ```
 
-4. Запустить web UI для полки проектов:
+Run the home UI:
 
 ```powershell
 mcp-memory run-ui-home
 ```
 
-После этого доступны:
+Default endpoints:
 
-- home UI: `http://127.0.0.1:8764/`
-- project workspace UI: `http://127.0.0.1:8765/ui/`
+- Home UI: `http://127.0.0.1:8764/`
+- Project workspace UI: `http://127.0.0.1:8765/ui/`
 - HTTP API health: `http://127.0.0.1:8765/health`
 - MCP health: `http://127.0.0.1:9876/health`
 - MCP endpoint: `http://127.0.0.1:9876/mcp`
 
-Home UI умеет запускать, останавливать и перезапускать project HTTP/MCP процессы. Если нужен ручной запуск:
+Manual project servers:
 
 ```powershell
 mcp-memory run-http-api sample
 mcp-memory run-mcp sample
 ```
 
+## Schema Commands
+
+```powershell
+mcp-memory show-schema sample
+mcp-memory validate-schema --project-id sample
+mcp-memory validate-schema --schema F:\schemas\schema.json
+mcp-memory update-schema sample --schema F:\schemas\schema.json
+```
+
+Schema v1 supports:
+
+- `entity_types`
+- fields with widgets: `text`, `textarea`, `number`, `bool`, `enum`, `tags`, `json`, `datetime`, `url`, `path`
+- `required`
+- `title_field`
+- `summary_field`
+- `slug_field`
+- `search_fields`
+- `tag_fields`
+- `relation_types` with allowed `from` and `to` entity types
+
 ## CLI
 
-Основные команды:
+Main commands:
 
 ```powershell
 mcp-memory init-app
 mcp-memory create-project <project_id> --name "<display_name>"
 mcp-memory list-projects
+
+mcp-memory show-schema <project_id>
+mcp-memory validate-schema --project-id <project_id>
+mcp-memory update-schema <project_id> --schema schema.json
 
 mcp-memory run-http-api <project_id> [--host 127.0.0.1] [--port 8765]
 mcp-memory run-mcp <project_id> [--host 127.0.0.1] [--port 9876]
@@ -115,6 +165,7 @@ mcp-memory run-ui-home [--host 127.0.0.1] [--port 8764]
 
 mcp-memory export-json <project_id> [--output bundle.json]
 mcp-memory import-json <project_id> --input bundle.json [--replace-existing]
+mcp-memory import-legacy-db <project_id> --input old-project.db [--source-project-id old] [--replace-existing]
 mcp-memory backup-project <project_id> [--output backup.zip]
 mcp-memory restore-project --input backup.zip --project-root F:\restored
 
@@ -123,80 +174,23 @@ mcp-memory confirm-change <project_id> <pending_change_id>
 mcp-memory reject-change <project_id> <pending_change_id>
 ```
 
-Long-running entrypoints поддерживают `--log-level`:
+## HTTP API
 
-```powershell
-mcp-memory --log-level DEBUG run-http-api sample
-mcp-memory --log-level INFO run-mcp sample
-mcp-memory --log-level INFO run-ui-home
-```
+Generic routes:
 
-## Web UI
-
-Home UI:
-
-- показывает зарегистрированные проекты
-- показывает статус `running` / `offline`
-- запускает `Start`, `Stop`, `Restart`
-- дает `Open Workspace`
-- показывает HTTP/MCP endpoints
-- копирует MCP config
-- поддерживает меню карточки проекта с `Edit` и `Delete`
-
-Workspace UI:
-
-- компактный dashboard проекта
-- sidebar с иконками и collapse-анимацией
-- topbar с поиском, темой, режимом записи и языком
-- pages: functions, structures, hypotheses, search, graph, import/export, backups, settings
-- detail pages с facts, hypotheses, relations, history и audit links
-- формы создания и редактирования сущностей
-- empty states внутри единых card/section wrappers
-
-Основные routes:
-
-```text
-/ui/
-/ui/search
-/ui/functions
-/ui/functions/new
-/ui/functions/{binary_id}/{function_id}
-/ui/structures
-/ui/structures/new
-/ui/structures/{structure_id}
-/ui/global-hypotheses
-/ui/global-hypotheses/new
-/ui/global-hypotheses/{hypothesis_id}
-/ui/graph
-/ui/import-export
-/ui/backups
-/ui/settings
-/ui/pending
-/ui/audit
-```
-
-## JSON HTTP API
-
-HTTP API предназначен для локальной автоматизации и простых клиентов.
-
-Основные routes:
-
-- `GET /health`
-- `GET /project/config`
-- `GET /functions?binary_id=...`
-- `GET /functions/{binary_id}/{function_id}`
-- `POST /functions`
-- `GET /structures`
-- `GET /structures/{structure_id}`
-- `POST /structures`
-- `GET /global-hypotheses`
-- `GET /global-hypotheses/{hypothesis_id}`
-- `POST /global-hypotheses`
-- `GET /evidence?entity_type=...&entity_id=...`
-- `POST /evidence`
-- `GET /relations?entity_type=...&entity_id=...`
+- `GET /schema`
+- `PUT /schema`
+- `GET /entity-types`
+- `GET /records?entity_type=note`
+- `GET /records/{entity_type}/{record_id_or_slug}`
+- `POST /records/{entity_type}`
+- `PUT /records/{entity_type}/{record_id_or_slug}`
+- `POST /records/{entity_type}/{record_id_or_slug}/archive`
 - `POST /relations`
-- `GET /related?entity_type=...&entity_id=...&hops=1`
+- `GET /relations`
+- `GET /related`
+- `POST /evidence`
+- `GET /evidence`
 - `POST /search`
 - `GET /pending-changes`
 - `POST /pending-changes/{id}/confirm`
@@ -206,72 +200,40 @@ HTTP API предназначен для локальной автоматиза
 - `POST /backup`
 - `POST /restore`
 
-Пример поиска:
+Create a record:
+
+```powershell
+Invoke-RestMethod `
+  -Method Post `
+  -Uri http://127.0.0.1:8765/records/note `
+  -ContentType "application/json; charset=utf-8" `
+  -Body '{"payload":{"slug":"first-note","title":"First Note","body":"hello agents"},"created_by":"user"}'
+```
+
+Search:
 
 ```powershell
 Invoke-RestMethod `
   -Method Post `
   -Uri http://127.0.0.1:8765/search `
   -ContentType "application/json; charset=utf-8" `
-  -Body '{"q":"main handler","entity_types":["function"],"limit":10}'
+  -Body '{"q":"agents","entity_types":["note"],"limit":10}'
 ```
 
-## MCP
+## MCP Tools
 
-MCP endpoint проекта:
-
-```text
-http://127.0.0.1:<mcp-port>/mcp
-```
-
-По умолчанию:
-
-```text
-http://127.0.0.1:9876/mcp
-```
-
-Endpoint реализован как MCP Streamable HTTP совместимый transport без новых runtime-зависимостей:
-
-- `POST /mcp` принимает JSON-RPC requests
-- `initialize` возвращает `Mcp-Session-Id`
-- `notifications/initialized` и другие notifications без `id` возвращают `202 Accepted`
-- `Mcp-Session-Id` проверяется, неизвестная session возвращает `404`
-- legacy requests без session header принимаются для совместимости
-- `Accept: application/json, text/event-stream` поддерживается
-- ответы отдаются как UTF-8 JSON
-- `GET /mcp` и `DELETE /mcp` возвращают `405 Method Not Allowed`
-- `GET /health` остается обычной health-проверкой
-
-Пример config для MCP-клиента:
-
-```json
-{
-  "servers": {
-    "mcp-memory-sample": {
-      "transport": "http",
-      "url": "http://127.0.0.1:9876/mcp"
-    }
-  }
-}
-```
-
-Для Codex Desktop достаточно указать HTTP URL проекта. Если серверный код или настройки портов менялись, перезапусти project MCP server и сам MCP-клиент, чтобы handshake прошел заново.
-
-### MCP tools
-
-Текущий MCP server публикует:
+Generic tools:
 
 - `get_project_config`
+- `get_schema`
+- `list_entity_types`
 - `search_records`
 - `get_record`
-- `get_related`
-- `create_function`
-- `update_function`
-- `create_structure`
-- `update_structure`
-- `create_hypothesis`
-- `add_evidence`
+- `upsert_record`
+- `archive_record`
 - `create_relation`
+- `get_related`
+- `add_evidence`
 - `list_pending_changes`
 - `confirm_change`
 - `reject_change`
@@ -280,108 +242,89 @@ Endpoint реализован как MCP Streamable HTTP совместимый 
 - `backup_project`
 - `restore_project`
 
-### MCP resources
+In `confirm` mode, write tools return a pending change. Call `list_pending_changes`, review the payload, then call `confirm_change`.
 
-Resources capability включена для совместимости с MCP-клиентами:
+## Web UI
 
-- `resources/list` возвращает `{"resources": []}`
-- `resources/templates/list` возвращает `{"resourceTemplates": []}`
+Home UI:
 
-Сейчас данные проекта экспортируются через tools, а не через resources.
+- lists registered projects
+- starts, stops, and restarts project HTTP/MCP processes
+- creates projects from schema templates
+- shows endpoints and MCP config
 
-### MCP prompts
+Workspace UI:
 
-Prompts capability включена и статична:
+- generic dashboard
+- entity type browser
+- generic record list/detail/create/edit
+- schema-generated forms
+- search
+- relation graph
+- evidence forms
+- schema editor and basic schema builder actions
+- pending changes
+- import/export
+- backups
+- settings
 
-- `agent_workspace_guide` - общий workflow агента по проекту
-- `record_function_analysis` - как создавать и обновлять function records
-- `record_structure_analysis` - как записывать structures и fields
-- `record_hypothesis_evidence` - как разделять факты, гипотезы, evidence и relations
-- `search_and_graph_workflow` - как искать записи и строить контекст через graph/relations
-
-`prompts/get` возвращает `messages` в MCP-формате `role/content` и динамически добавляет `project_id`, `display_name`, `write_mode`, HTTP endpoint и MCP endpoint.
-
-## Режимы записи
-
-`write_mode` задается в project config:
-
-- `confirm`: write-операции создают pending change, затем пользователь или агент вызывает `confirm_change` или `reject_change`
-- `auto`: write-операции сразу применяются к SQLite
-
-Режим влияет на HTTP API, MCP tools и HTML forms.
-
-## Поиск и graph
-
-Поиск использует exact matching, tags и SQLite FTS5. Relations используются для graph и `get_related`.
-
-Важная оговорка: FTS-запросы со строками через дефис могут интерпретироваться SQLite как выражение. Для значений вроде `gui-seed` лучше искать по словам без дефиса (`gui seed`) или по `tag`, пока escaping FTS-запросов не вынесен в отдельный bugfix.
-
-Graph показывает только реальные relations. Если записи есть, но graph пустой, нужно создать связи через `create_relation`, HTTP API или UI.
-
-## Структура проекта на диске
-
-Project workspace:
+Important routes:
 
 ```text
-<project-root>/
-  project.db
-  attachments/
-  exports/
-  backups/
-  logs/
+/ui/
+/ui/entities
+/ui/records
+/ui/records/{entity_type}/new
+/ui/records/{entity_type}/{record_id_or_slug}
+/ui/search
+/ui/graph
+/ui/schema
+/ui/import-export
+/ui/backups
+/ui/settings
+/ui/pending
+/ui/audit
 ```
 
-App home:
+## Legacy Import
 
-```text
-<app-home>/
-  app_config.json
-  logs/
+Old fixed reverse-engineering databases can be imported into a generic project:
+
+```powershell
+mcp-memory create-project imported-re `
+  --name "Imported RE" `
+  --schema-template reverse_engineering
+
+mcp-memory import-legacy-db imported-re `
+  --input F:\old-project\project.db `
+  --source-project-id old-project `
+  --replace-existing
 ```
 
-Runtime logs пишутся plain text:
+Mappings:
 
-```text
-timestamp level component event key=value ...
+- old `functions` -> generic `function` records
+- old `structures` -> generic `structure` records
+- old global hypotheses -> generic `hypothesis` records
+- old evidence -> generic evidence attached to imported records
+- old relations -> generic typed relations when both endpoints are imported
+
+The importer migrates current state only. It does not preserve old audit, version, pending, duplicate, or conflict history.
+
+## Verification
+
+Run the full test suite:
+
+```powershell
+$env:TEMP=(Resolve-Path .\artifacts).Path
+$env:TMP=$env:TEMP
+python -X utf8 -m unittest discover -s tests -v
 ```
 
-Основные log files:
-
-- project-local: `logs/cli.log`, `logs/http-api.log`, `logs/mcp.log`
-- app-home: `logs/ui-home.log`
-
-## Локальная проверка
-
-Основной script:
+Run the local smoke check:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\run_local_checks.ps1
 ```
 
-Он запускает smoke-check, HTTP/MCP/UI проверки, runtime log проверки и coverage. Результаты сохраняются в `artifacts/`.
-
-Ключевые файлы:
-
-- `artifacts/local_checks.txt`
-- `artifacts/local_checks.stdout.txt`
-- `artifacts/coverage.txt`
-- `artifacts/coverage.json`
-
-Текущий порог coverage: не ниже `95%`.
-
-## Developer docs
-
-- [docs/modules.md](docs/modules.md)
-- [docs/redesign-plan.md](docs/redesign-plan.md)
-- [docs/future-plans.md](docs/future-plans.md)
-- [docs/design-prompt.md](docs/design-prompt.md)
-
-## Ограничения
-
-- проект локальный, без multi-user auth
-- storage только SQLite
-- нет облачной синхронизации
-- нет external services
-- UI не SPA и не heavy frontend app
-- semantic embeddings не реализованы
-- resources/prompts MCP не заменяют tools: данные проекта сейчас доступны через tools
+Smoke output is written under `artifacts/`.

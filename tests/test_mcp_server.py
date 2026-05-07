@@ -90,6 +90,86 @@ class McpServerTests(unittest.TestCase):
         self.assertEqual(status, HTTPStatus.OK)
         tool_names = {item["name"] for item in json.loads(body.decode("utf-8"))["result"]["tools"]}
         self.assertIn("search_records", tool_names)
+        self.assertIn("upsert_record", tool_names)
+
+    def test_generic_mcp_tools_create_search_read_and_archive_record(self) -> None:
+        tools = self._rpc("tools/list", {}, request_id=2)["result"]["tools"]
+        tool_names = {item["name"] for item in tools}
+        self.assertIn("get_schema", tool_names)
+        self.assertIn("list_entity_types", tool_names)
+        self.assertNotIn("create_function", tool_names)
+        by_name = {item["name"]: item for item in tools}
+        self.assertEqual(by_name["upsert_record"]["inputSchema"]["required"], ["entity_type", "payload"])
+        self.assertIn("required field", by_name["upsert_record"]["inputSchema"]["properties"]["payload"]["description"])
+        self.assertEqual(
+            by_name["add_evidence"]["inputSchema"]["required"],
+            ["entity_type", "record_id", "evidence_type", "description"],
+        )
+
+        created = self._call_tool(
+            "upsert_record",
+            {
+                "entity_type": "note",
+                "payload": {
+                    "slug": "mcp-note",
+                    "title": "MCP Note",
+                    "summary": "Created through MCP",
+                    "body": "mcp searchable text",
+                    "tags": ["mcp"],
+                },
+                "created_by": "tester",
+                "updated_by": "tester",
+            },
+        )["result"]["structuredContent"]
+        self.assertEqual(created["slug"], "mcp-note")
+
+        search = self._call_tool("search_records", {"q": "searchable", "entity_types": ["note"]})
+        self.assertEqual(len(search["result"]["structuredContent"]["items"]), 1)
+
+        loaded = self._call_tool("get_record", {"entity_type": "note", "record_id": "mcp-note"})
+        self.assertEqual(loaded["result"]["structuredContent"]["title"], "MCP Note")
+
+        archived = self._call_tool("archive_record", {"entity_type": "note", "record_id": "mcp-note", "archived_by": "tester"})
+        self.assertEqual(archived["result"]["structuredContent"]["status"], "archived")
+
+    def test_generic_mcp_relation_evidence_and_pending_tools(self) -> None:
+        first = self._call_tool("upsert_record", {"entity_type": "note", "payload": {"slug": "mcp-first", "title": "First"}})["result"]["structuredContent"]
+        second = self._call_tool("upsert_record", {"entity_type": "note", "payload": {"slug": "mcp-second", "title": "Second"}})["result"]["structuredContent"]
+        relation = self._call_tool(
+            "create_relation",
+            {
+                "from_entity_type": "note",
+                "from_record_id": first["record_id"],
+                "to_entity_type": "note",
+                "to_record_id": second["record_id"],
+                "relation_type": "related_to",
+                "created_by": "tester",
+            },
+        )["result"]["structuredContent"]
+        self.assertEqual(relation["relation_type"], "related_to")
+        related = self._call_tool("get_related", {"entity_type": "note", "record_id": first["record_id"]})
+        self.assertEqual(len(related["result"]["structuredContent"]["items"]), 1)
+
+        evidence = self._call_tool(
+            "add_evidence",
+            {
+                "entity_type": "note",
+                "record_id": first["record_id"],
+                "evidence_type": "excerpt",
+                "description": "MCP evidence",
+                "created_by": "tester",
+            },
+        )["result"]["structuredContent"]
+        self.assertEqual(evidence["description"], "MCP evidence")
+
+        self.sandbox.project.write_mode = "confirm"
+        pending = self._call_tool("upsert_record", {"entity_type": "note", "payload": {"slug": "queued-mcp", "title": "Queued MCP"}})["result"]["structuredContent"]
+        self.assertEqual(pending["status"], "pending")
+        listed = self._call_tool("list_pending_changes", {})
+        self.assertEqual(len(listed["result"]["structuredContent"]["items"]), 1)
+        confirmed = self._call_tool("confirm_change", {"pending_change_id": pending["pending_change_id"], "confirmed_by": "tester"})
+        self.assertEqual(confirmed["result"]["structuredContent"]["pending_change"]["status"], "confirmed")
+        self.assertEqual(confirmed["result"]["structuredContent"]["applied"]["slug"], "queued-mcp")
 
     def test_mcp_list_methods_return_empty_collections(self) -> None:
         self.assertEqual(self._rpc("resources/list", {}, request_id=20)["result"], {"resources": []})
@@ -140,6 +220,13 @@ class McpServerTests(unittest.TestCase):
         self.assertIn("get_related", text)
         self.assertIn("confirm_change", text)
         self.assertIn("gui-seed", text)
+        self.assertIn("Active project schema", text)
+        self.assertIn("entity_type=note", text)
+        self.assertIn("required payload fields: title", text)
+        self.assertIn("upsert_record: entity_type, payload", text)
+        self.assertIn("add_evidence: entity_type, record_id, evidence_type, description", text)
+        self.assertIn('"record_id"', text)
+        self.assertNotIn('"entity_id"', text)
 
     def test_prompts_get_validates_unknown_prompt_and_arguments(self) -> None:
         unknown = self._rpc("prompts/get", {"name": "missing_prompt"}, request_id=25)
@@ -179,8 +266,12 @@ class McpServerTests(unittest.TestCase):
     def test_tools_list_and_calls(self) -> None:
         listed = self._rpc("tools/list", {}, request_id=2)
         tool_names = {item["name"] for item in listed["result"]["tools"]}
+        self.assertIn("get_schema", tool_names)
+        self.assertIn("list_entity_types", tool_names)
         self.assertIn("search_records", tool_names)
-        self.assertIn("create_function", tool_names)
+        self.assertIn("upsert_record", tool_names)
+        self.assertIn("archive_record", tool_names)
+        self.assertNotIn("create_function", tool_names)
         self.assertIn("export_json", tool_names)
         self.assertIn("backup_project", tool_names)
         self.assertIn("confirm_change", tool_names)
@@ -188,42 +279,48 @@ class McpServerTests(unittest.TestCase):
         config = self._call_tool("get_project_config", {})
         self.assertEqual(config["result"]["structuredContent"]["project"]["project_id"], "test-project")
 
-        search = self._call_tool("search_records", {"q": "main_handler", "entity_types": ["function"]})
-        self.assertEqual(len(search["result"]["structuredContent"]["items"]), 1)
-
-        record = self._call_tool("get_record", {"entity_type": "function", "entity_id": "fn_main", "binary_id": "bin-main"})
-        self.assertEqual(record["result"]["structuredContent"]["function_id"], "fn_main")
-
         created = self._call_tool(
-            "create_function",
+            "upsert_record",
             {
-                "binary_id": "bin-main",
-                "function_id": "fn_helper",
-                "address": "0x401100",
-                "raw_name": "sub_401100",
-                "current_name": "helper_worker",
-                "summary": "Helper",
-                "behavior_description": "Does helper work",
+                "entity_type": "note",
+                "payload": {
+                    "slug": "mcp-helper",
+                    "title": "MCP Helper",
+                    "summary": "Helper",
+                    "body": "Does helper work",
+                    "tags": ["tool"],
+                },
                 "created_by": "tester",
                 "updated_by": "tester",
             },
         )
-        self.assertEqual(created["result"]["structuredContent"]["function_id"], "fn_helper")
+        created_record = created["result"]["structuredContent"]
+        self.assertEqual(created_record["slug"], "mcp-helper")
+
+        search = self._call_tool("search_records", {"q": "helper", "entity_types": ["note"]})
+        self.assertEqual(len(search["result"]["structuredContent"]["items"]), 1)
+
+        record = self._call_tool("get_record", {"entity_type": "note", "record_id": "mcp-helper"})
+        self.assertEqual(record["result"]["structuredContent"]["title"], "MCP Helper")
+        second = self._call_tool(
+            "upsert_record",
+            {"entity_type": "note", "payload": {"slug": "mcp-linked", "title": "MCP Linked"}, "created_by": "tester"},
+        )["result"]["structuredContent"]
 
         relation = self._call_tool(
             "create_relation",
             {
-                "from_entity_type": "function",
-                "from_entity_id": "fn_main",
-                "to_entity_type": "function",
-                "to_entity_id": "fn_helper",
-                "relation_type": "calls",
+                "from_entity_type": "note",
+                "from_record_id": created_record["record_id"],
+                "to_entity_type": "note",
+                "to_record_id": second["record_id"],
+                "relation_type": "related_to",
                 "created_by": "tester",
             },
         )
-        self.assertEqual(relation["result"]["structuredContent"]["relation_type"], "calls")
+        self.assertEqual(relation["result"]["structuredContent"]["relation_type"], "related_to")
 
-        related = self._call_tool("get_related", {"entity_type": "function", "entity_id": "fn_main", "hops": 1})
+        related = self._call_tool("get_related", {"entity_type": "note", "record_id": created_record["record_id"], "hops": 1})
         self.assertEqual(len(related["result"]["structuredContent"]["items"]), 1)
 
         export_path = self.sandbox.root / "bundle.json"
@@ -232,10 +329,10 @@ class McpServerTests(unittest.TestCase):
 
         exported = self._call_tool("export_json", {"output_path": str(export_path)})
         self.assertTrue(export_path.exists())
-        self.assertEqual(exported["result"]["structuredContent"]["counts"]["functions"], 2)
+        self.assertEqual(exported["result"]["structuredContent"]["counts"]["records"], 2)
 
         imported = self._call_tool("import_json", {"input_path": str(export_path), "replace_existing": True})
-        self.assertEqual(imported["result"]["structuredContent"]["counts"]["functions"], 2)
+        self.assertEqual(imported["result"]["structuredContent"]["counts"]["records"], 2)
 
         backed_up = self._call_tool("backup_project", {"output_path": str(backup_path)})
         self.assertTrue(backup_path.exists())
@@ -260,15 +357,10 @@ class McpServerTests(unittest.TestCase):
     def test_confirm_mode_tools_queue_and_apply_pending_changes(self) -> None:
         self.sandbox.project.write_mode = "confirm"
         created = self._call_tool(
-            "create_function",
+            "upsert_record",
             {
-                "binary_id": "bin-main",
-                "function_id": "fn_pending",
-                "address": "0x401300",
-                "raw_name": "sub_401300",
-                "current_name": "pending_mcp",
-                "summary": "Summary",
-                "behavior_description": "Behavior",
+                "entity_type": "note",
+                "payload": {"slug": "pending-mcp", "title": "Pending MCP"},
                 "created_by": "tester",
                 "updated_by": "tester",
             },
@@ -282,17 +374,17 @@ class McpServerTests(unittest.TestCase):
         confirmed = self._call_tool("confirm_change", {"pending_change_id": pending_change_id, "confirmed_by": "tester"})
         self.assertEqual(confirmed["result"]["structuredContent"]["pending_change"]["status"], "confirmed")
 
-        record = self._call_tool("get_record", {"entity_type": "function", "entity_id": "fn_pending", "binary_id": "bin-main"})
-        self.assertEqual(record["result"]["structuredContent"]["function_id"], "fn_pending")
+        record = self._call_tool("get_record", {"entity_type": "note", "record_id": "pending-mcp"})
+        self.assertEqual(record["result"]["structuredContent"]["title"], "Pending MCP")
 
         pending_relation = self._call_tool(
             "create_relation",
             {
-                "from_entity_type": "function",
-                "from_entity_id": "fn_main",
-                "to_entity_type": "function",
-                "to_entity_id": "fn_pending",
-                "relation_type": "calls",
+                "from_entity_type": "note",
+                "from_record_id": record["result"]["structuredContent"]["record_id"],
+                "to_entity_type": "note",
+                "to_record_id": record["result"]["structuredContent"]["record_id"],
+                "relation_type": "related_to",
                 "created_by": "tester",
             },
         )
@@ -364,23 +456,19 @@ class McpServerTests(unittest.TestCase):
 
     def test_additional_tool_handlers(self) -> None:
         created_structure = self._call_tool(
-            "create_structure",
+            "upsert_record",
             {
-                "binary_id": "bin-main",
-                "structure_id": "struct_extra",
-                "raw_name": "extra_t",
-                "current_name": "extra_t",
-                "summary": "Summary",
+                "entity_type": "note",
+                "payload": {"slug": "struct-extra", "title": "Extra Structure", "summary": "Summary"},
                 "created_by": "tester",
                 "updated_by": "tester",
             },
         )
         created_hypothesis = self._call_tool(
-            "create_hypothesis",
+            "upsert_record",
             {
-                "hypothesis_id": "gh_extra",
-                "title": "Title",
-                "statement": "Statement",
+                "entity_type": "note",
+                "payload": {"slug": "gh-extra", "title": "Title", "body": "Statement"},
                 "created_by": "tester",
                 "updated_by": "tester",
             },
@@ -389,17 +477,17 @@ class McpServerTests(unittest.TestCase):
             "add_evidence",
             {
                 "evidence_id": "e_extra",
-                "entity_type": "function",
-                "entity_id": "fn_main",
+                "entity_type": "note",
+                "record_id": created_structure["result"]["structuredContent"]["record_id"],
                 "evidence_type": "block",
                 "description": "Description",
                 "created_by": "tester",
             },
         )
         all_pending = self._call_tool("list_pending_changes", {"status": "all"})
-        self.assertEqual(created_structure["result"]["structuredContent"]["structure_id"], "struct_extra")
-        self.assertEqual(created_hypothesis["result"]["structuredContent"]["hypothesis_id"], "gh_extra")
-        self.assertEqual(added_evidence["result"]["structuredContent"]["evidence_id"], "e_extra")
+        self.assertEqual(created_structure["result"]["structuredContent"]["slug"], "struct-extra")
+        self.assertEqual(created_hypothesis["result"]["structuredContent"]["slug"], "gh-extra")
+        self.assertEqual(added_evidence["result"]["structuredContent"]["description"], "Description")
         self.assertEqual(all_pending["result"]["structuredContent"]["items"], [])
 
     def test_serve_project_mcp_api_constructs_server(self) -> None:

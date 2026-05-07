@@ -20,10 +20,14 @@ from mcp_memory.domain import (
 )
 from mcp_memory.services.evidence import EvidenceService
 from mcp_memory.services.functions import FunctionService
+from mcp_memory.services.generic_evidence import GenericEvidenceService, GenericEvidenceWrite
+from mcp_memory.services.generic_relations import GenericRelationService, GenericRelationWrite
 from mcp_memory.services.hypotheses import GlobalHypothesisService
 from mcp_memory.services.relations import RelationService, RelationWrite
+from mcp_memory.services.records import RecordService, RecordWrite
 from mcp_memory.services.structures import StructureService
 from mcp_memory.logging_utils import get_logger, log_event
+from mcp_memory.schema import ProjectSchema, copy_schema_payload, load_project_schema
 from mcp_memory.storage import Database, open_database
 
 
@@ -46,8 +50,8 @@ class ProjectTransferService:
             "project_exported",
             project_id=project.project_id,
             output_path=final_path,
-            function_count=bundle["counts"]["functions"],
-            structure_count=bundle["counts"]["structures"],
+            record_count=bundle["counts"]["records"],
+            relation_count=bundle["counts"]["relations"],
         )
         return {
             "output_path": str(final_path),
@@ -56,33 +60,45 @@ class ProjectTransferService:
 
     def export_bundle(self, project: ProjectConfig) -> dict[str, Any]:
         with open_database(project.database_path) as database:
-            functions = [asdict(item) for item in FunctionService(database).list_project_functions(project.project_id)]
-            structures = [asdict(item) for item in StructureService(database).list_project_structures(project.project_id)]
-            global_hypotheses = [asdict(item) for item in GlobalHypothesisService(database).list_hypotheses(project.project_id)]
-            evidence = [asdict(item) for item in EvidenceService(database).list_project_evidence(project.project_id)]
-            relations = [asdict(item) for item in RelationService(database).list_project_relations(project.project_id)]
+            records = [asdict(item) for item in RecordService(database, project).list_records(include_archived=True, limit=100000)]
+            record_keys = {(item["entity_type"], item["record_id"]) for item in records}
+            relations = [
+                asdict(item)
+                for item in GenericRelationService(database, project).list_relations()
+                if (item.from_entity_type, item.from_record_id) in record_keys and (item.to_entity_type, item.to_record_id) in record_keys
+            ]
+            evidence = [
+                item
+                for item in self._generic_evidence_rows(database, project.project_id)
+                if (item["entity_type"], item["record_id"]) in record_keys
+            ]
+            attachment_paths = {item["attachment_path"] for item in evidence if item.get("attachment_path")}
+            attachments = [
+                item
+                for item in self._attachment_rows(database, project.project_id)
+                if item["relative_path"] in attachment_paths
+            ]
 
         return {
-            "bundle_version": 1,
+            "bundle_version": 2,
             "project": {
                 "project_id": project.project_id,
                 "display_name": project.display_name,
                 "write_mode": project.write_mode,
             },
+            "schema": load_project_schema(project.schema_path).to_dict(),
             "exported_at": datetime.now(timezone.utc).isoformat(),
             "counts": {
-                "functions": len(functions),
-                "structures": len(structures),
-                "global_hypotheses": len(global_hypotheses),
+                "records": len(records),
                 "evidence": len(evidence),
                 "relations": len(relations),
+                "attachments": len(attachments),
             },
             "records": {
-                "functions": functions,
-                "structures": structures,
-                "global_hypotheses": global_hypotheses,
+                "items": records,
                 "evidence": evidence,
                 "relations": relations,
+                "attachments": attachments,
             },
         }
 
@@ -103,9 +119,167 @@ class ProjectTransferService:
         input_path: Path | None = None,
     ) -> dict[str, Any]:
         bundle_version = int(bundle.get("bundle_version", 0))
-        if bundle_version != 1:
+        if bundle_version == 1:
+            return self._import_legacy_v1_bundle(project, bundle, replace_existing=replace_existing, input_path=input_path)
+        if bundle_version != 2:
             raise ValueError(f"Unsupported bundle_version: {bundle_version}")
 
+        records = bundle.get("records")
+        if not isinstance(records, dict):
+            raise ValueError("Bundle records must be an object")
+        schema_payload = bundle.get("schema")
+        if not isinstance(schema_payload, dict):
+            raise ValueError("Bundle schema must be an object")
+        ProjectSchema.from_dict(schema_payload)
+        copy_schema_payload(project.schema_path, schema_payload)
+
+        with open_database(project.database_path) as database:
+            if replace_existing:
+                self._clear_project_data(database, project.project_id)
+
+            record_service = RecordService(database, project)
+            relation_service = GenericRelationService(database, project)
+            evidence_service = GenericEvidenceService(database, project)
+            record_items = records.get("items", [])
+            evidence_items = records.get("evidence", [])
+            relation_items = records.get("relations", [])
+
+            for item in record_items:
+                record = record_service.upsert_record(self._record_write(item))
+                if str(item.get("status", "active")) == "archived":
+                    record_service.archive_record(record.entity_type, record.record_id, archived_by=str(item.get("updated_by", "import")))
+            for item in relation_items:
+                relation_service.create_relation(self._generic_relation_write(item))
+            for item in evidence_items:
+                evidence_service.create_evidence(self._generic_evidence_write(item))
+
+        log_event(
+            self._logger,
+            logging.INFO,
+            "project_imported",
+            project_id=project.project_id,
+            input_path=input_path,
+            replace_existing=replace_existing,
+            record_count=len(record_items),
+            relation_count=len(relation_items),
+        )
+        return {
+            "input_path": None if input_path is None else str(input_path),
+            "replace_existing": replace_existing,
+            "counts": {
+                "records": len(record_items),
+                "evidence": len(evidence_items),
+                "relations": len(relation_items),
+                "attachments": len(records.get("attachments", [])),
+            },
+        }
+
+    def _clear_project_data(self, database: Database, project_id: str) -> None:
+        connection = database.transaction()
+        connection.execute("DELETE FROM duplicate_candidates WHERE project_id = ?", (project_id,))
+        connection.execute("DELETE FROM entity_versions WHERE project_id = ?", (project_id,))
+        connection.execute("DELETE FROM audit_log WHERE project_id = ?", (project_id,))
+        connection.execute("DELETE FROM relations WHERE project_id = ?", (project_id,))
+        connection.execute("DELETE FROM evidence WHERE project_id = ?", (project_id,))
+        connection.execute("DELETE FROM attachments WHERE project_id = ?", (project_id,))
+        connection.execute("DELETE FROM entity_facts WHERE project_id = ?", (project_id,))
+        connection.execute("DELETE FROM entity_tags WHERE project_id = ?", (project_id,))
+        connection.execute("DELETE FROM tags WHERE project_id = ?", (project_id,))
+        connection.execute("DELETE FROM hypotheses WHERE project_id = ?", (project_id,))
+        connection.execute("DELETE FROM functions WHERE project_id = ?", (project_id,))
+        connection.execute("DELETE FROM structures WHERE project_id = ?", (project_id,))
+        connection.execute("DELETE FROM search_documents_fts WHERE project_id = ?", (project_id,))
+        connection.execute("DELETE FROM search_documents WHERE project_id = ?", (project_id,))
+        connection.execute("DELETE FROM records WHERE project_id = ?", (project_id,))
+        connection.commit()
+
+    def _generic_evidence_rows(self, database: Database, project_id: str) -> list[dict[str, Any]]:
+        rows = database.connection.execute(
+            """
+            SELECT e.*, a.relative_path, a.media_type, a.size_bytes
+            FROM evidence e
+            LEFT JOIN attachments a ON a.attachment_id = e.attachment_id
+            WHERE e.project_id = ?
+            ORDER BY e.created_at
+            """,
+            (project_id,),
+        ).fetchall()
+        return [
+            {
+                "evidence_id": str(row["evidence_id"]),
+                "entity_type": str(row["entity_type"]),
+                "record_id": str(row["entity_id"]),
+                "evidence_type": str(row["evidence_type"]),
+                "description": str(row["description"]),
+                "excerpt": None if row["excerpt"] is None else str(row["excerpt"]),
+                "attachment_path": None if row["relative_path"] is None else str(row["relative_path"]),
+                "media_type": None if row["media_type"] is None else str(row["media_type"]),
+                "size_bytes": None if row["size_bytes"] is None else int(row["size_bytes"]),
+                "source_origin": str(row["source_origin"]),
+                "created_by": str(row["created_by"]),
+            }
+            for row in rows
+        ]
+
+    def _attachment_rows(self, database: Database, project_id: str) -> list[dict[str, Any]]:
+        rows = database.connection.execute(
+            "SELECT attachment_id, relative_path, media_type, size_bytes, created_at, created_by FROM attachments WHERE project_id = ? ORDER BY created_at",
+            (project_id,),
+        ).fetchall()
+        return [
+            {
+                "attachment_id": str(row["attachment_id"]),
+                "relative_path": str(row["relative_path"]),
+                "media_type": None if row["media_type"] is None else str(row["media_type"]),
+                "size_bytes": None if row["size_bytes"] is None else int(row["size_bytes"]),
+                "created_at": str(row["created_at"]),
+                "created_by": str(row["created_by"]),
+            }
+            for row in rows
+        ]
+
+    def _record_write(self, payload: dict[str, Any]) -> RecordWrite:
+        return RecordWrite(
+            entity_type=str(payload["entity_type"]),
+            record_id=str(payload["record_id"]),
+            payload=dict(payload.get("payload", {})),
+            source_origin=str(payload.get("source_origin", "import")),
+            created_by=str(payload.get("created_by", "import")),
+            updated_by=str(payload.get("updated_by", "import")),
+        )
+
+    def _generic_relation_write(self, payload: dict[str, Any]) -> GenericRelationWrite:
+        return GenericRelationWrite(
+            from_entity_type=str(payload["from_entity_type"]),
+            from_record_id=str(payload["from_record_id"]),
+            to_entity_type=str(payload["to_entity_type"]),
+            to_record_id=str(payload["to_record_id"]),
+            relation_type=str(payload["relation_type"]),
+            created_by=str(payload.get("created_by", "import")),
+        )
+
+    def _generic_evidence_write(self, payload: dict[str, Any]) -> GenericEvidenceWrite:
+        return GenericEvidenceWrite(
+            evidence_id=str(payload["evidence_id"]),
+            entity_type=str(payload["entity_type"]),
+            record_id=str(payload["record_id"]),
+            evidence_type=str(payload["evidence_type"]),
+            description=str(payload["description"]),
+            excerpt=None if payload.get("excerpt") is None else str(payload["excerpt"]),
+            attachment_path=None if payload.get("attachment_path") is None else str(payload["attachment_path"]),
+            media_type=None if payload.get("media_type") is None else str(payload["media_type"]),
+            size_bytes=None if payload.get("size_bytes") is None else int(payload["size_bytes"]),
+            created_by=str(payload.get("created_by", "import")),
+            source_origin=str(payload.get("source_origin", "import")),
+        )
+
+    def _import_legacy_v1_bundle(
+        self,
+        project: ProjectConfig,
+        bundle: dict[str, Any],
+        replace_existing: bool,
+        input_path: Path | None,
+    ) -> dict[str, Any]:
         records = bundle.get("records")
         if not isinstance(records, dict):
             raise ValueError("Bundle records must be an object")
@@ -137,16 +311,6 @@ class ProjectTransferService:
             for item in relations:
                 relation_service.create_relation(self._relation_write(project.project_id, item))
 
-        log_event(
-            self._logger,
-            logging.INFO,
-            "project_imported",
-            project_id=project.project_id,
-            input_path=input_path,
-            replace_existing=replace_existing,
-            function_count=len(functions),
-            structure_count=len(structures),
-        )
         return {
             "input_path": None if input_path is None else str(input_path),
             "replace_existing": replace_existing,
@@ -158,24 +322,6 @@ class ProjectTransferService:
                 "relations": len(relations),
             },
         }
-
-    def _clear_project_data(self, database: Database, project_id: str) -> None:
-        connection = database.transaction()
-        connection.execute("DELETE FROM duplicate_candidates WHERE project_id = ?", (project_id,))
-        connection.execute("DELETE FROM entity_versions WHERE project_id = ?", (project_id,))
-        connection.execute("DELETE FROM audit_log WHERE project_id = ?", (project_id,))
-        connection.execute("DELETE FROM relations WHERE project_id = ?", (project_id,))
-        connection.execute("DELETE FROM evidence WHERE project_id = ?", (project_id,))
-        connection.execute("DELETE FROM attachments WHERE project_id = ?", (project_id,))
-        connection.execute("DELETE FROM entity_facts WHERE project_id = ?", (project_id,))
-        connection.execute("DELETE FROM entity_tags WHERE project_id = ?", (project_id,))
-        connection.execute("DELETE FROM tags WHERE project_id = ?", (project_id,))
-        connection.execute("DELETE FROM hypotheses WHERE project_id = ?", (project_id,))
-        connection.execute("DELETE FROM functions WHERE project_id = ?", (project_id,))
-        connection.execute("DELETE FROM structures WHERE project_id = ?", (project_id,))
-        connection.execute("DELETE FROM search_documents_fts WHERE project_id = ?", (project_id,))
-        connection.execute("DELETE FROM search_documents WHERE project_id = ?", (project_id,))
-        connection.commit()
 
     def _default_export_path(self, project: ProjectConfig) -> Path:
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")

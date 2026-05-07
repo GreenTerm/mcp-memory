@@ -1,0 +1,26 @@
+{
+  "schema_version": "1",
+  "entity_types": [
+    {
+      "name": "note",
+      "label": "Note",
+      "description": "General knowledge note.",
+      "fields": [
+        {"name": "slug", "label": "Slug", "widget": "text"},
+        {"name": "title", "label": "Title", "widget": "text"},
+        {"name": "summary", "label": "Summary", "widget": "textarea"},
+        {"name": "body", "label": "Body", "widget": "textarea"},
+        {"name": "tags", "label": "Tags", "widget": "tags"}
+      ],
+      "required": ["title"],
+      "title_field": "title",
+      "summary_field": "summary",
+      "slug_field": "slug",
+      "search_fields": ["title", "summary", "body"],
+      "tag_fields": ["tags"]
+    }
+  ],
+  "relation_types": [
+    {"name": "related_to", "label": "Related To", "from": ["*"], "to": ["*"], "directed": false}
+  ]
+}

@@ -6,8 +6,8 @@ Instructions for Codex in this repository. These notes should be treated as pers
 
 - This repository is for a local offline-first RE knowledge base on Python.
 - Prioritize simple local deployment on Windows over architectural purity.
-- Favor SQLite, stdlib, and a minimal dependency footprint.
-- Backend, MCP, and the server-rendered GUI are now implemented; preserve the stdlib-first shape unless a task explicitly asks for a broader redesign.
+- Favor SQLite, stdlib, and a minimal offline-deployable dependency footprint.
+- Backend, MCP, and the server-rendered GUI are now implemented; preserve the simple local architecture, but allow small offline-deployable dependencies when they clearly reduce maintenance cost.
 - Avoid cloud dependencies, external databases, and heavy frontend stacks unless explicitly requested.
 
 ## Working Style
@@ -96,12 +96,131 @@ These guidelines are working if: fewer unnecessary changes in diffs, fewer rewri
 - Design search so exact/FTS-based retrieval works without embeddings.
 - Make optional features degradable: if a subsystem is not configured, core CRUD and search should still work cleanly.
 
+## Refactoring Preparation
+
+This project is entering a refactoring-friendly phase. Prefer changes that make module boundaries clearer without changing behavior.
+
+### Refactoring Goals
+
+- Reduce coupling between transport/UI layers and core business logic.
+- Keep `services/` as the primary behavior boundary.
+- Move duplicated request/form/tool payload conversion toward small shared helpers only when duplication is already causing real maintenance cost.
+- Preserve current user-visible behavior unless the task explicitly asks for behavior changes.
+- Prefer incremental extraction over broad rewrites.
+
+### Refactoring Rules
+
+Before refactoring a module:
+
+- Identify the current behavior surface: CLI, HTTP API, MCP, GUI, storage, tests, docs.
+- Write down what must remain unchanged.
+- Add or adjust focused tests before moving behavior when the existing tests do not pin it down.
+- Make one boundary clearer at a time.
+- Avoid mixing behavior changes, renames, formatting churn, and extraction in the same diff.
+
+### Desired Boundaries
+
+- `domain/`: dataclasses, enums, simple data shapes. No SQLite, HTTP, MCP, or HTML concerns.
+- `storage/`: database connection, migrations, schema bootstrap. No transport/UI behavior.
+- `services/`: validation, business rules, audit/version history, search indexing, pending-change application, import/export, backup/restore.
+- `api/`: HTTP routing, JSON parsing, status codes, serialization, service calls.
+- `mcp/`: JSON-RPC/MCP protocol handling, tool schemas, MCP result formatting, service calls.
+- `gui/`: server-rendered HTML, form parsing, redirects, localization, service calls.
+- `cli/`: argument parsing, command output, process startup, service calls.
+
+If a lower layer starts importing from a higher layer, pause and reconsider the design.
+
+### Refactoring Safety
+
+- Keep public behavior stable across:
+  - CLI commands
+  - HTTP routes and response shapes
+  - MCP tools, prompts, and session behavior
+  - GUI routes, forms, and redirects
+  - SQLite migration/bootstrap behavior
+- When changing entity write behavior, check all adapters: HTTP payload builders, MCP tool handlers, GUI form builders, pending-change confirmation, import/export, tests.
+- Do not introduce dependency injection frameworks, plugin systems, service containers, or broad interface layers unless explicitly requested.
+- Prefer plain Python functions/classes and small adapter helpers.
+
+### Refactoring Anti-Patterns
+
+Avoid these unless explicitly requested:
+
+- Replacing stdlib HTTP servers with web frameworks.
+- Introducing a frontend framework or build pipeline.
+- Moving business rules into HTTP/MCP/GUI handlers.
+- Adding abstract base classes for single implementations.
+- Adding global service registries or dependency containers.
+- Rewriting large files only to improve organization.
+- Changing database schema and transport behavior in the same refactor.
+- Renaming public commands, routes, tools, fields, or tables as part of cleanup.
+
+### Test Expectations For Refactors
+
+For narrow internal refactors:
+
+- Run focused unit tests for the touched area.
+
+For changes that cross adapter boundaries:
+
+- Run full unittest discovery.
+- Run `scripts/run_local_checks.ps1` when HTTP/MCP/GUI/runtime behavior may be affected.
+
+Coverage should stay at or above the current project threshold.
+
+## GUI Refactoring Direction
+
+The current GUI is server-rendered and should remain server-rendered.
+
+If HTML string composition becomes difficult to maintain:
+
+- Prefer introducing a small template layer over adding a frontend framework.
+- `Jinja2` is the preferred candidate for templates.
+- Keep route handling in Python stdlib HTTP servers unless explicitly asked otherwise.
+- Move page markup into templates incrementally, one page or shared component at a time.
+- Keep existing routes, forms, query parameters, redirects, language switching, and write-mode behavior stable.
+- Do not convert the GUI into an SPA.
+
 ## Dependency Rules
 
-- Prefer stdlib first.
-- Add third-party packages only when they materially reduce complexity or improve correctness.
-- Any added dependency should be easy to pre-download and install offline with `pip download`.
-- Avoid dependencies that imply cloud coupling, background services, or external daemons.
+- Prefer stdlib first, but allow small, mature dependencies when they materially reduce code complexity, improve correctness, or make refactoring safer.
+
+A dependency is acceptable only if:
+
+- It can be installed offline from wheels downloaded ahead of time.
+- It supports Windows and Python 3.10+.
+- It can be fetched with a workflow like `python -m pip download --platform win_amd64 --python-version 310 --only-binary=:all: --dest vendor/wheels <package>`.
+- It can later be installed with `python -m pip install --no-index --find-links vendor/wheels <package>`.
+- It does not require external services, background daemons, cloud accounts, native system packages, or network access at runtime.
+- It has a stable API and a modest transitive dependency tree.
+- It is added for a concrete simplification, not speculative future flexibility.
+
+Avoid dependencies that:
+
+- Require compilation during install.
+- Lack Windows wheels.
+- Pull in large frontend stacks, databases, task queues, telemetry, or cloud SDKs.
+- Add hidden runtime networking.
+- Make local manual deployment harder.
+
+When adding a dependency:
+
+- Explain why stdlib is no longer the simplest maintainable choice.
+- Check wheel availability for Windows/Python 3.10+.
+- Pin or constrain the dependency in `pyproject.toml`.
+- Update README/offline install docs if needed.
+- Add or update tests around behavior that now depends on the package.
+
+## Preferred Dependency Candidates
+
+These are acceptable directions when they simplify existing code:
+
+- Template rendering: prefer `Jinja2` if GUI HTML construction becomes hard to maintain.
+- Data validation/parsing: consider stdlib dataclasses first; add a dependency only if validation duplication becomes a real maintenance problem.
+- Testing helpers: keep `unittest` unless a dependency clearly improves maintainability without making offline setup heavier.
+- Packaging/offline install helpers: keep simple pip wheel workflows; do not add package managers or environment managers as project requirements.
+
+For server-rendered GUI refactoring, `Jinja2` is the preferred template dependency candidate. It is mature, commonly available as wheels, works offline, and can replace brittle string-built HTML while preserving the current no-frontend-build architecture.
 
 ## Change Discipline
 

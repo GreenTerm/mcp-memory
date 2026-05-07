@@ -1,0 +1,43 @@
+{
+  "schema_version": "1",
+  "entity_types": [
+    {
+      "name": "server",
+      "label": "Server",
+      "fields": [
+        {"name": "slug", "label": "Slug", "widget": "text"},
+        {"name": "hostname", "label": "Hostname", "widget": "text"},
+        {"name": "environment", "label": "Environment", "widget": "enum", "options": ["dev", "staging", "prod"]},
+        {"name": "summary", "label": "Summary", "widget": "textarea"},
+        {"name": "tags", "label": "Tags", "widget": "tags"}
+      ],
+      "required": ["hostname"],
+      "title_field": "hostname",
+      "summary_field": "summary",
+      "slug_field": "slug",
+      "search_fields": ["hostname", "environment", "summary"],
+      "tag_fields": ["tags"]
+    },
+    {
+      "name": "project",
+      "label": "Project",
+      "fields": [
+        {"name": "slug", "label": "Slug", "widget": "text"},
+        {"name": "name", "label": "Name", "widget": "text"},
+        {"name": "owner", "label": "Owner", "widget": "text"},
+        {"name": "summary", "label": "Summary", "widget": "textarea"},
+        {"name": "tags", "label": "Tags", "widget": "tags"}
+      ],
+      "required": ["name"],
+      "title_field": "name",
+      "summary_field": "summary",
+      "slug_field": "slug",
+      "search_fields": ["name", "owner", "summary"],
+      "tag_fields": ["tags"]
+    }
+  ],
+  "relation_types": [
+    {"name": "deployed_on", "label": "Deployed On", "from": ["project"], "to": ["server"], "directed": true},
+    {"name": "depends_on", "label": "Depends On", "from": ["project"], "to": ["project"], "directed": true}
+  ]
+}

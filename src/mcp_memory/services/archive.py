@@ -9,6 +9,7 @@ from typing import Any
 
 from mcp_memory.config import ProjectConfig, ProjectRegistry
 from mcp_memory.logging_utils import get_logger, log_event
+from mcp_memory.storage import open_database
 
 
 class ProjectArchiveService:
@@ -28,6 +29,7 @@ class ProjectArchiveService:
                 "mcp_host": project.mcp_host,
                 "mcp_port": project.mcp_port,
                 "write_mode": project.write_mode,
+                "schema_path": "schema.json",
             },
             "created_at": datetime.now().isoformat(),
         }
@@ -86,6 +88,8 @@ class ProjectArchiveService:
                 if not member.startswith("project/"):
                     continue
                 relative = Path(member).relative_to("project")
+                if relative.is_absolute() or ".." in relative.parts:
+                    raise ValueError(f"Unsafe backup member path: {member}")
                 destination = project_root / relative
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 with archive.open(member, "r") as source_file:
@@ -100,6 +104,7 @@ class ProjectArchiveService:
             exports_dir=project_root / "exports",
             backups_dir=project_root / "backups",
             logs_dir=project_root / "logs",
+            schema_path=project_root / str(source_project.get("schema_path", "schema.json")),
             http_host=str(source_project.get("http_host", "127.0.0.1")),
             http_port=int(http_port if http_port is not None else source_project.get("http_port", 8765)),
             mcp_host=str(source_project.get("mcp_host", "127.0.0.1")),
@@ -108,6 +113,8 @@ class ProjectArchiveService:
         )
         for directory in (config.attachments_dir, config.exports_dir, config.backups_dir, config.logs_dir):
             directory.mkdir(parents=True, exist_ok=True)
+        if config.project_id != str(source_project["project_id"]):
+            self._rewrite_project_id(config.database_path, str(source_project["project_id"]), config.project_id)
         self._registry.upsert_project(config)
         log_event(
             self._logger,
@@ -122,3 +129,34 @@ class ProjectArchiveService:
     def _default_backup_path(self, project: ProjectConfig) -> Path:
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         return project.backups_dir / f"{project.project_id}-{timestamp}.zip"
+
+    def _rewrite_project_id(self, database_path: Path, old_project_id: str, new_project_id: str) -> None:
+        tables = [
+            "records",
+            "functions",
+            "structures",
+            "hypotheses",
+            "evidence",
+            "attachments",
+            "relations",
+            "entity_facts",
+            "tags",
+            "entity_tags",
+            "duplicate_candidates",
+            "entity_versions",
+            "audit_log",
+            "pending_changes",
+            "search_documents",
+            "search_documents_fts",
+        ]
+        with open_database(database_path) as database:
+            connection = database.transaction()
+            for table in tables:
+                exists = connection.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type IN ('table', 'view') AND name = ?",
+                    (table,),
+                ).fetchone()
+                if exists is None:
+                    continue
+                connection.execute(f"UPDATE {table} SET project_id = ? WHERE project_id = ?", (new_project_id, old_project_id))
+            connection.commit()

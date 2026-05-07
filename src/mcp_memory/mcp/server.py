@@ -4,23 +4,18 @@ import json
 import logging
 import traceback
 import uuid
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, is_dataclass
+from enum import Enum
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import urlparse
 
-from mcp_memory.api.server import (
-    _apply_or_queue_evidence,
-    _apply_or_queue_function,
-    _apply_or_queue_global_hypothesis,
-    _apply_or_queue_relation,
-    _apply_or_queue_structure,
-    serialize,
-)
 from mcp_memory.config import ProjectConfig, ProjectRegistry
 from mcp_memory.logging_utils import configure_logging, get_logger, log_event, start_request_log
+from mcp_memory.protocol import GetRecordQuery, GetRelatedQuery, GetSchemaQuery, ListEntityTypesQuery, ProjectDispatcher, SearchRecordsQuery
+from mcp_memory.schema import ProjectSchema, load_project_schema
 from mcp_memory.services import (
     EvidenceValidationError,
     FunctionService,
@@ -37,6 +32,11 @@ from mcp_memory.services import (
     SearchService,
     StructureService,
     StructureValidationError,
+    GenericWorkflowService,
+    GenericPendingValidationError,
+    GenericRelationValidationError,
+    GenericEvidenceValidationError,
+    RecordValidationError,
 )
 from mcp_memory.storage import open_database
 
@@ -59,6 +59,20 @@ class PromptSpec:
 
 class McpRequestError(ValueError):
     """Raised when an MCP request is malformed."""
+
+
+def serialize(value: Any) -> Any:
+    if is_dataclass(value):
+        return serialize(asdict(value))
+    if isinstance(value, Enum):
+        return value.value
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, dict):
+        return {key: serialize(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [serialize(item) for item in value]
+    return value
 
 
 def serve_project_mcp_api(
@@ -277,6 +291,10 @@ def build_handler(
                 EvidenceValidationError,
                 RelationValidationError,
                 PendingChangeValidationError,
+                GenericPendingValidationError,
+                GenericRelationValidationError,
+                GenericEvidenceValidationError,
+                RecordValidationError,
                 McpRequestError,
                 KeyError,
                 ValueError,
@@ -356,7 +374,7 @@ def _build_prompts() -> dict[str, PromptSpec]:
     common_arguments = [
         {"name": "task", "description": "Current analysis task or user goal.", "required": False},
         {"name": "binary_id", "description": "Binary/workspace identifier to prefer in examples.", "required": False},
-        {"name": "focus_entity", "description": "Entity id or address the agent should focus on.", "required": False},
+        {"name": "focus_entity", "description": "Record id or slug the agent should focus on.", "required": False},
     ]
     return {
         "agent_workspace_guide": PromptSpec(
@@ -395,7 +413,7 @@ def _build_prompts() -> dict[str, PromptSpec]:
 def _prompt_context(project: ProjectConfig, arguments: dict[str, str]) -> str:
     task = arguments.get("task", "").strip() or "No task argument provided."
     binary_id = arguments.get("binary_id", "").strip() or "<binary_id>"
-    focus_entity = arguments.get("focus_entity", "").strip() or "<entity_id_or_address>"
+    focus_entity = arguments.get("focus_entity", "").strip() or "<record_id_or_slug>"
     write_mode_note = (
         "Writes are applied immediately."
         if project.write_mode == "auto"
@@ -421,115 +439,179 @@ def _json_example(payload: dict[str, Any]) -> str:
     return json.dumps(payload, ensure_ascii=False, indent=2)
 
 
+def _schema_agent_reference(project: ProjectConfig) -> str:
+    schema = load_project_schema(project.schema_path)
+    lines = ["Active project schema:"]
+    for entity in schema.entity_types:
+        fields = ", ".join(f"{field.name}({field.widget})" for field in entity.fields) or "<none>"
+        required = ", ".join(entity.required) or "<none>"
+        slug = entity.slug_field or "<none>"
+        title = entity.title_field or "<none>"
+        summary = entity.summary_field or "<none>"
+        search = ", ".join(entity.search_fields) or "<none>"
+        tags = ", ".join(entity.tag_fields) or "<none>"
+        lines.extend(
+            [
+                f"- entity_type={entity.name} label={entity.label}",
+                f"  required payload fields: {required}",
+                f"  all payload fields: {fields}",
+                f"  title_field={title}; summary_field={summary}; slug_field={slug}",
+                f"  search_fields={search}; tag_fields={tags}",
+            ]
+        )
+    if schema.relation_types:
+        lines.append("Allowed relation types:")
+        for relation in schema.relation_types:
+            from_types = ", ".join(relation.from_types)
+            to_types = ", ".join(relation.to_types)
+            direction = "directed" if relation.directed else "undirected"
+            lines.append(f"- {relation.name}: from [{from_types}] to [{to_types}], {direction}")
+    else:
+        lines.append("Allowed relation types: <none>")
+    return "\n".join(lines)
+
+
+def _first_entity(schema: ProjectSchema) -> str:
+    return schema.entity_types[0].name
+
+
+def _example_payload_for_entity(schema: ProjectSchema, entity_type: str) -> dict[str, Any]:
+    entity = schema.entity(entity_type)
+    payload: dict[str, Any] = {}
+    for field in entity.fields:
+        if field.widget == "tags":
+            value: Any = ["agent-note"]
+        elif field.widget == "number":
+            value = 1
+        elif field.widget == "bool":
+            value = True
+        elif field.widget == "json":
+            value = {"source": "agent"}
+        elif field.widget == "enum":
+            value = field.options[0] if field.options else "value"
+        elif field.name == entity.slug_field:
+            value = f"{entity.name}-example"
+        elif field.name == entity.title_field or field.name in entity.required:
+            value = f"{entity.label} example"
+        elif field.name == entity.summary_field:
+            value = f"Short summary for {entity.label.lower()}."
+        else:
+            value = f"{field.label} value"
+        payload[field.name] = value
+    for required_field in entity.required:
+        payload.setdefault(required_field, f"{required_field} value")
+    return payload
+
+
 def _render_agent_workspace_guide(project: ProjectConfig, arguments: dict[str, str]) -> str:
-    binary_id = arguments.get("binary_id", "").strip() or "bin-main"
-    focus_entity = arguments.get("focus_entity", "").strip() or "fn_main"
+    schema = load_project_schema(project.schema_path)
+    entity_type = _first_entity(schema)
+    focus_entity = arguments.get("focus_entity", "").strip() or f"{entity_type}-example"
     return f"""{_prompt_context(project, arguments)}
 
-Use this server as a local offline-first reverse engineering memory.
+Use this server as a local offline-first schema-first knowledge base. The project schema defines which entity types exist and which payload fields are required.
+
+{_schema_agent_reference(project)}
 
 Recommended workflow:
 1. Call get_project_config first and check write_mode.
-2. Search before writing: use search_records with q, tag, address, binary_id, and entity_types.
-3. Read exact records with get_record before updating them.
+2. Call get_schema or list_entity_types before writing. Never invent entity types or relation types outside the schema.
+3. Search before writing: use search_records with q, tag, entity_types, and limit.
+4. Read exact records with get_record before updating them.
 4. Expand local context with get_related for 1-2 hops.
-5. Keep facts, hypotheses, evidence, and relations separate.
+5. Keep records, evidence, and relations separate. Put claims in records; attach supporting excerpts/files with add_evidence; connect records with create_relation.
 6. In confirm mode, create/update tools return pending changes. Confirm with confirm_change only after reviewing list_pending_changes.
 7. In auto mode, create/update tools commit immediately.
 
+Required top-level fields by write tool:
+- upsert_record: entity_type, payload. Payload must include every required field listed above for that entity type. record_id is optional on create and generated as UUID when omitted. If the entity has slug_field, that payload field is optional but must be unique when present.
+- archive_record: entity_type, record_id.
+- add_evidence: entity_type, record_id, evidence_type, description.
+- create_relation: from_entity_type, from_record_id, to_entity_type, to_record_id, relation_type. relation_type must be allowed by the schema for the from/to entity pair.
+- confirm_change/reject_change: pending_change_id.
+- import_json: input_path.
+- restore_project: input_path, project_root.
+
 Safe search example:
-{_json_example({"q": "loader", "entity_types": ["function"], "binary_id": binary_id, "limit": 20})}
+{_json_example({"q": "startup", "entity_types": [entity_type], "limit": 20})}
 
 Focused read example:
-{_json_example({"entity_type": "function", "entity_id": focus_entity, "binary_id": binary_id})}
+{_json_example({"entity_type": entity_type, "record_id": focus_entity})}
+
+Create/update example:
+{_json_example({
+    "entity_type": entity_type,
+    "payload": _example_payload_for_entity(schema, entity_type),
+    "created_by": "agent",
+    "updated_by": "agent",
+})}
 
 FTS warning: avoid raw hyphenated query text such as gui-seed. Search individual words like gui seed, or use tag='gui-seed' until FTS escaping is fixed."""
 
 
 def _render_function_prompt(project: ProjectConfig, arguments: dict[str, str]) -> str:
-    binary_id = arguments.get("binary_id", "").strip() or "bin-main"
-    focus_entity = arguments.get("focus_entity", "").strip() or "fn_example"
+    schema = load_project_schema(project.schema_path)
+    entity_type = "function" if any(item.name == "function" for item in schema.entity_types) else _first_entity(schema)
     return f"""{_prompt_context(project, arguments)}
 
-Use create_function to create or replace a function analysis record. Use update_function for the same payload when the intent is explicitly an update.
+Use upsert_record to create or update analysis records. The old fixed create_function/update_function tools are not part of the generic MCP surface.
 
-Required fields: binary_id, function_id, address, raw_name, current_name, summary, behavior_description. Include created_by and updated_by for audit clarity.
+{_schema_agent_reference(project)}
 
-Good function payload:
+For upsert_record, required top-level fields are entity_type and payload. The payload must include the required payload fields listed for that entity type above. Include created_by and updated_by for audit clarity.
+
+Good upsert_record payload:
 {_json_example({
-    "binary_id": binary_id,
-    "function_id": focus_entity,
-    "address": "0x401000",
-    "raw_name": "sub_401000",
-    "current_name": "load_project_config",
-    "summary": "Loads local project configuration and validates paths.",
-    "behavior_description": "Reads project metadata, normalizes paths, and prepares runtime endpoints.",
-    "important_variables": ["project_root", "database_path"],
-    "used_apis": ["CreateFileW", "ReadFile"],
-    "strings": ["project.db", "mcp"],
-    "constants": ["0x401000"],
-    "confidence": 0.82,
-    "tags": ["config", "loader"],
-    "observed_facts": [{"fact": "The function reads project configuration paths.", "source_origin": "agent"}],
-    "hypotheses": [{"statement": "This function runs before HTTP and MCP startup.", "status": "new", "confidence": 0.66}],
-    "source_origin": "agent",
+    "entity_type": entity_type,
+    "payload": _example_payload_for_entity(schema, entity_type),
     "created_by": "agent",
     "updated_by": "agent",
-    "allow_conflict": True,
 })}
 
 If write_mode is confirm, capture pending_change_id and ask for/perform confirm_change only after review."""
 
 
 def _render_structure_prompt(project: ProjectConfig, arguments: dict[str, str]) -> str:
-    binary_id = arguments.get("binary_id", "").strip() or "bin-main"
-    focus_entity = arguments.get("focus_entity", "").strip() or "PROJECT_CONTEXT"
+    schema = load_project_schema(project.schema_path)
+    entity_type = "structure" if any(item.name == "structure" for item in schema.entity_types) else _first_entity(schema)
     return f"""{_prompt_context(project, arguments)}
 
-Use create_structure or update_structure for recovered data layouts. Keep field offsets stable and include comments when field purpose is inferred.
+Use upsert_record for recovered layouts or any other schema-defined entity. The old fixed create_structure/update_structure tools are not part of the generic MCP surface.
 
-Required fields: binary_id, structure_id, raw_name, current_name, summary. Fields are optional but should include name, offset, data_type, optional size, and comment.
+{_schema_agent_reference(project)}
 
-Good structure payload:
+For upsert_record, required top-level fields are entity_type and payload. The payload must include the required payload fields listed for that entity type above.
+
+Good upsert_record payload:
 {_json_example({
-    "binary_id": binary_id,
-    "structure_id": focus_entity,
-    "raw_name": "_PROJECT_CONTEXT_raw",
-    "current_name": "PROJECT_CONTEXT",
-    "summary": "Holds local project paths and runtime endpoint configuration.",
-    "fields": [
-        {"name": "flags", "offset": "0x0", "data_type": "uint32_t", "size": 4, "comment": "Runtime flags."},
-        {"name": "database_path", "offset": "0x8", "data_type": "wchar_t *", "size": 8, "comment": "Path to project.db."},
-    ],
-    "tags": ["config", "structure"],
-    "observed_facts": [{"fact": "The structure stores a database path pointer.", "source_origin": "agent"}],
-    "hypotheses": [{"statement": "This structure is shared by HTTP and MCP startup paths.", "status": "new", "confidence": 0.7}],
-    "source_origin": "agent",
+    "entity_type": entity_type,
+    "payload": _example_payload_for_entity(schema, entity_type),
     "created_by": "agent",
     "updated_by": "agent",
 })}
 
-Link structures to functions with create_relation relation_type='uses_structure' when a function reads or writes the layout."""
+Link records with create_relation only using relation types allowed by the active schema."""
 
 
 def _render_hypothesis_evidence_prompt(project: ProjectConfig, arguments: dict[str, str]) -> str:
-    binary_id = arguments.get("binary_id", "").strip() or "bin-main"
-    focus_entity = arguments.get("focus_entity", "").strip() or "fn_example"
+    schema = load_project_schema(project.schema_path)
+    entity_type = "hypothesis" if any(item.name == "hypothesis" for item in schema.entity_types) else _first_entity(schema)
+    focus_entity = arguments.get("focus_entity", "").strip() or f"{entity_type}-example"
     return f"""{_prompt_context(project, arguments)}
 
-Use observed_facts for directly observed statements. Use hypotheses for interpretations that may change. Use add_evidence for concrete support such as blocks, excerpts, xrefs, or attachments. Use create_relation for graph edges between entities.
+Use records for claims and notes, add_evidence for concrete support such as blocks, excerpts, xrefs, or attachments, and create_relation for graph edges between records.
 
-Global hypothesis example:
+{_schema_agent_reference(project)}
+
+Required top-level fields:
+- upsert_record: entity_type, payload. Payload must include the required fields for the chosen entity type.
+- add_evidence: entity_type, record_id, evidence_type, description.
+- create_relation: from_entity_type, from_record_id, to_entity_type, to_record_id, relation_type.
+
+Record example:
 {_json_example({
-    "hypothesis_id": "hyp_runtime_startup_order",
-    "title": "Runtime starts HTTP before MCP",
-    "statement": "The local launcher appears to validate HTTP health before exposing the MCP endpoint.",
-    "status": "new",
-    "confidence": 0.64,
-    "binary_id": binary_id,
-    "tags": ["runtime", "startup"],
-    "observed_facts": [{"fact": "HTTP health is checked during startup logs.", "source_origin": "agent"}],
-    "source_origin": "agent",
+    "entity_type": entity_type,
+    "payload": _example_payload_for_entity(schema, entity_type),
     "created_by": "agent",
     "updated_by": "agent",
 })}
@@ -537,63 +619,80 @@ Global hypothesis example:
 Evidence example:
 {_json_example({
     "evidence_id": "ev_startup_log_001",
-    "entity_type": "function",
-    "entity_id": focus_entity,
+    "entity_type": entity_type,
+    "record_id": focus_entity,
     "evidence_type": "log",
-    "description": "Startup log shows HTTP health before MCP tool calls.",
+    "description": "Startup log excerpt that supports this record.",
     "excerpt": "GET /health ... POST /mcp",
     "created_by": "agent",
 })}
 
 Relation example:
 {_json_example({
-    "from_entity_type": "function",
-    "from_entity_id": focus_entity,
-    "to_entity_type": "global_hypothesis",
-    "to_entity_id": "hyp_runtime_startup_order",
-    "relation_type": "supports",
+    "from_entity_type": entity_type,
+    "from_record_id": focus_entity,
+    "to_entity_type": entity_type,
+    "to_record_id": focus_entity,
+    "relation_type": schema.relation_types[0].name if schema.relation_types else "related_to",
     "created_by": "agent",
 })}"""
 
 
 def _render_search_graph_prompt(project: ProjectConfig, arguments: dict[str, str]) -> str:
-    binary_id = arguments.get("binary_id", "").strip() or "bin-main"
-    focus_entity = arguments.get("focus_entity", "").strip() or "fn_main"
+    schema = load_project_schema(project.schema_path)
+    entity_type = _first_entity(schema)
+    focus_entity = arguments.get("focus_entity", "").strip() or f"{entity_type}-example"
     return f"""{_prompt_context(project, arguments)}
 
 Use search_records for discovery, get_record for exact reads, and get_related for graph expansion. Prefer a small loop: search -> read -> related -> read linked records -> write only what is supported.
 
+{_schema_agent_reference(project)}
+
 Search examples:
 {_json_example({"q": "Synthetic", "limit": 50})}
 {_json_example({"tag": "gui-seed", "limit": 50})}
-{_json_example({"address": "0x401000", "binary_id": binary_id, "entity_types": ["function"], "limit": 10})}
+{_json_example({"q": "startup", "entity_types": [entity_type], "limit": 10})}
 
 Graph context examples:
-{_json_example({"entity_type": "function", "entity_id": focus_entity, "hops": 1})}
-{_json_example({"entity_type": "function", "entity_id": focus_entity, "hops": 2})}
+{_json_example({"entity_type": entity_type, "record_id": focus_entity, "hops": 1})}
+{_json_example({"entity_type": entity_type, "record_id": focus_entity, "hops": 2})}
 
-When adding graph edges, use relation types that describe the analysis claim: calls, uses_structure, supports, refutes, aliases, dispatches_to, owns, reads, writes."""
+When adding graph edges, use only relation types allowed by the active schema."""
 
 
 def _build_tools() -> dict[str, ToolSpec]:
+    return _build_generic_tools()
+
+
+def _build_generic_tools() -> dict[str, ToolSpec]:
     return {
         "get_project_config": ToolSpec(
             name="get_project_config",
-            description="Return the active project configuration and connection details.",
+            description="Return active project configuration and local endpoints.",
             input_schema={"type": "object", "properties": {}, "additionalProperties": False},
             handler=_tool_get_project_config,
         ),
+        "get_schema": ToolSpec(
+            name="get_schema",
+            description="Return the active project schema.",
+            input_schema={"type": "object", "properties": {}, "additionalProperties": False},
+            handler=_tool_get_schema,
+        ),
+        "list_entity_types": ToolSpec(
+            name="list_entity_types",
+            description="List entity types from the active project schema.",
+            input_schema={"type": "object", "properties": {}, "additionalProperties": False},
+            handler=_tool_list_entity_types,
+        ),
         "search_records": ToolSpec(
             name="search_records",
-            description="Search project records using exact matches and SQLite FTS.",
+            description="Search generic project records using SQLite FTS.",
             input_schema={
                 "type": "object",
                 "properties": {
                     "q": {"type": "string"},
                     "entity_types": {"type": "array", "items": {"type": "string"}},
-                    "binary_id": {"type": "string"},
                     "tag": {"type": "string"},
-                    "address": {"type": "string"},
                     "limit": {"type": "integer"},
                 },
                 "additionalProperties": False,
@@ -602,88 +701,109 @@ def _build_tools() -> dict[str, ToolSpec]:
         ),
         "get_record": ToolSpec(
             name="get_record",
-            description="Fetch a function, structure, or global hypothesis record by identifier.",
+            description="Fetch a generic record by entity type and UUID or slug.",
             input_schema={
                 "type": "object",
                 "properties": {
                     "entity_type": {"type": "string"},
-                    "entity_id": {"type": "string"},
-                    "binary_id": {"type": "string"},
+                    "record_id": {"type": "string"},
+                    "include_archived": {"type": "boolean"},
                 },
-                "required": ["entity_type", "entity_id"],
+                "required": ["entity_type", "record_id"],
                 "additionalProperties": False,
             },
             handler=_tool_get_record,
         ),
-        "get_related": ToolSpec(
-            name="get_related",
-            description="Traverse relations for an entity by one or two hops.",
+        "upsert_record": ToolSpec(
+            name="upsert_record",
+            description="Create or update a generic record. In confirm mode, returns a pending change.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "entity_type": {"type": "string", "description": "Schema entity type name."},
+                    "record_id": {"type": "string", "description": "Optional UUID or existing record id/slug to update."},
+                    "payload": {
+                        "type": "object",
+                        "description": "Record fields. Must include every required field from get_schema for this entity_type.",
+                    },
+                    "source_origin": {"type": "string"},
+                    "created_by": {"type": "string"},
+                    "updated_by": {"type": "string"},
+                },
+                "required": ["entity_type", "payload"],
+                "additionalProperties": False,
+            },
+            handler=_tool_upsert_record,
+        ),
+        "archive_record": ToolSpec(
+            name="archive_record",
+            description="Soft-archive a generic record. In confirm mode, returns a pending change.",
             input_schema={
                 "type": "object",
                 "properties": {
                     "entity_type": {"type": "string"},
-                    "entity_id": {"type": "string"},
+                    "record_id": {"type": "string"},
+                    "archived_by": {"type": "string"},
+                },
+                "required": ["entity_type", "record_id"],
+                "additionalProperties": False,
+            },
+            handler=_tool_archive_record,
+        ),
+        "get_related": ToolSpec(
+            name="get_related",
+            description="Traverse generic typed relations for a record by one or two hops.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "entity_type": {"type": "string"},
+                    "record_id": {"type": "string"},
                     "hops": {"type": "integer"},
                 },
-                "required": ["entity_type", "entity_id"],
+                "required": ["entity_type", "record_id"],
                 "additionalProperties": False,
             },
             handler=_tool_get_related,
         ),
-        "create_function": ToolSpec(
-            name="create_function",
-            description="Create or update a function record.",
-            input_schema={"type": "object", "properties": {}, "additionalProperties": True},
-            handler=_tool_create_function,
-        ),
-        "update_function": ToolSpec(
-            name="update_function",
-            description="Update an existing function record.",
-            input_schema={"type": "object", "properties": {}, "additionalProperties": True},
-            handler=_tool_create_function,
-        ),
-        "create_structure": ToolSpec(
-            name="create_structure",
-            description="Create or update a structure record.",
-            input_schema={"type": "object", "properties": {}, "additionalProperties": True},
-            handler=_tool_create_structure,
-        ),
-        "update_structure": ToolSpec(
-            name="update_structure",
-            description="Update an existing structure record.",
-            input_schema={"type": "object", "properties": {}, "additionalProperties": True},
-            handler=_tool_create_structure,
-        ),
-        "create_hypothesis": ToolSpec(
-            name="create_hypothesis",
-            description="Create or update a global hypothesis record.",
-            input_schema={"type": "object", "properties": {}, "additionalProperties": True},
-            handler=_tool_create_hypothesis,
-        ),
         "add_evidence": ToolSpec(
             name="add_evidence",
-            description="Attach evidence to an entity.",
-            input_schema={"type": "object", "properties": {}, "additionalProperties": True},
+            description="Attach evidence to a generic record.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "entity_type": {"type": "string"},
+                    "record_id": {"type": "string"},
+                    "evidence_id": {"type": "string"},
+                    "evidence_type": {"type": "string"},
+                    "description": {"type": "string"},
+                    "excerpt": {"type": "string"},
+                    "source_url": {"type": "string"},
+                    "attachment_refs": {"type": "array", "items": {"type": "object"}},
+                    "created_by": {"type": "string"},
+                },
+                "required": ["entity_type", "record_id", "evidence_type", "description"],
+                "additionalProperties": False,
+            },
             handler=_tool_add_evidence,
         ),
         "create_relation": ToolSpec(
             name="create_relation",
-            description="Create a relation between two entities.",
+            description="Create a typed relation between two generic records.",
             input_schema={
                 "type": "object",
                 "properties": {
                     "from_entity_type": {"type": "string"},
-                    "from_entity_id": {"type": "string"},
+                    "from_record_id": {"type": "string"},
                     "to_entity_type": {"type": "string"},
-                    "to_entity_id": {"type": "string"},
+                    "to_record_id": {"type": "string"},
                     "relation_type": {"type": "string"},
                     "created_by": {"type": "string"},
                 },
                 "required": [
                     "from_entity_type",
-                    "from_entity_id",
+                    "from_record_id",
                     "to_entity_type",
-                    "to_entity_id",
+                    "to_record_id",
                     "relation_type",
                 ],
                 "additionalProperties": False,
@@ -796,37 +916,42 @@ def _tool_get_project_config(project: ProjectConfig, registry: ProjectRegistry, 
     }
 
 
+def _tool_get_schema(project: ProjectConfig, registry: ProjectRegistry, arguments: dict[str, Any]) -> dict[str, Any]:
+    _ = registry
+    _ = arguments
+    with open_database(project.database_path) as database:
+        return ProjectDispatcher(database, project).dispatch(GetSchemaQuery()).data
+
+
+def _tool_list_entity_types(project: ProjectConfig, registry: ProjectRegistry, arguments: dict[str, Any]) -> dict[str, Any]:
+    _ = registry
+    _ = arguments
+    with open_database(project.database_path) as database:
+        return {"items": ProjectDispatcher(database, project).dispatch(ListEntityTypesQuery()).data}
+
+
 def _tool_search_records(project: ProjectConfig, registry: ProjectRegistry, arguments: dict[str, Any]) -> dict[str, Any]:
     _ = registry
     with open_database(project.database_path) as database:
-        items = SearchService(database).search(
-            SearchQuery(
-                project_id=project.project_id,
-                query_text=str(arguments.get("q", "")).strip(),
+        result = ProjectDispatcher(database, project).dispatch(
+            SearchRecordsQuery(
+                q=str(arguments.get("q", "")).strip(),
                 entity_types=[str(item) for item in arguments.get("entity_types", [])] or None,
-                binary_id=None if arguments.get("binary_id") is None else str(arguments["binary_id"]),
                 tag=None if arguments.get("tag") is None else str(arguments["tag"]),
-                address=None if arguments.get("address") is None else str(arguments["address"]),
                 limit=int(arguments.get("limit", 10)),
             )
         )
-    return {"items": items}
+    return result.data
 
 
 def _tool_get_record(project: ProjectConfig, registry: ProjectRegistry, arguments: dict[str, Any]) -> Any:
     _ = registry
     entity_type = str(arguments["entity_type"])
-    entity_id = str(arguments["entity_id"])
+    record_id = str(arguments["record_id"])
     with open_database(project.database_path) as database:
-        if entity_type == "function":
-            binary_id = str(arguments["binary_id"])
-            record = FunctionService(database).get_function(project.project_id, binary_id, entity_id)
-        elif entity_type == "structure":
-            record = StructureService(database).get_structure(project.project_id, entity_id)
-        elif entity_type == "global_hypothesis":
-            record = GlobalHypothesisService(database).get_hypothesis(project.project_id, entity_id)
-        else:
-            raise McpRequestError(f"Unsupported entity_type: {entity_type}")
+        record = ProjectDispatcher(database, project).dispatch(
+            GetRecordQuery(entity_type, record_id, include_archived=bool(arguments.get("include_archived", False)))
+        ).data
     if record is None:
         raise McpRequestError("Record not found")
     return serialize(record)
@@ -835,50 +960,76 @@ def _tool_get_record(project: ProjectConfig, registry: ProjectRegistry, argument
 def _tool_get_related(project: ProjectConfig, registry: ProjectRegistry, arguments: dict[str, Any]) -> dict[str, Any]:
     _ = registry
     with open_database(project.database_path) as database:
-        items = RelationService(database).traverse_related(
-            project.project_id,
-            str(arguments["entity_type"]),
-            str(arguments["entity_id"]),
-            int(arguments.get("hops", 1)),
+        result = ProjectDispatcher(database, project).dispatch(
+            GetRelatedQuery(str(arguments["entity_type"]), str(arguments["record_id"]), int(arguments.get("hops", 1)))
         )
-    return {"items": items}
+    return result.data
 
 
-def _tool_create_function(project: ProjectConfig, registry: ProjectRegistry, arguments: dict[str, Any]) -> Any:
+def _tool_upsert_record(project: ProjectConfig, registry: ProjectRegistry, arguments: dict[str, Any]) -> Any:
+    _ = registry
+    payload = arguments.get("payload", arguments)
+    if not isinstance(payload, dict):
+        raise McpRequestError("payload must be an object")
+    workflow_payload = {
+        "entity_type": str(arguments["entity_type"]),
+        "record_id": arguments.get("record_id"),
+        "payload": payload,
+        "source_origin": str(arguments.get("source_origin", "mcp")),
+        "created_by": str(arguments.get("created_by", "mcp")),
+        "updated_by": str(arguments.get("updated_by", arguments.get("created_by", "mcp"))),
+    }
+    with open_database(project.database_path) as database:
+        result = GenericWorkflowService(database, project).apply_or_queue(
+            "upsert_record",
+            workflow_payload,
+            created_by=str(arguments.get("created_by", "mcp")),
+        )
+    return result.data if hasattr(result, "data") else result
+
+
+def _tool_archive_record(project: ProjectConfig, registry: ProjectRegistry, arguments: dict[str, Any]) -> Any:
     _ = registry
     with open_database(project.database_path) as database:
-        return _apply_or_queue_function(project, database, arguments)["body"]
-
-
-def _tool_create_structure(project: ProjectConfig, registry: ProjectRegistry, arguments: dict[str, Any]) -> Any:
-    _ = registry
-    with open_database(project.database_path) as database:
-        return _apply_or_queue_structure(project, database, arguments)["body"]
-
-
-def _tool_create_hypothesis(project: ProjectConfig, registry: ProjectRegistry, arguments: dict[str, Any]) -> Any:
-    _ = registry
-    with open_database(project.database_path) as database:
-        return _apply_or_queue_global_hypothesis(project, database, arguments)["body"]
+        result = GenericWorkflowService(database, project).apply_or_queue(
+            "archive_record",
+            {
+                "entity_type": str(arguments["entity_type"]),
+                "record_id_or_slug": str(arguments["record_id"]),
+                "archived_by": str(arguments.get("archived_by", "mcp")),
+            },
+            created_by=str(arguments.get("archived_by", "mcp")),
+        )
+    return result.data if hasattr(result, "data") else result
 
 
 def _tool_add_evidence(project: ProjectConfig, registry: ProjectRegistry, arguments: dict[str, Any]) -> Any:
     _ = registry
     with open_database(project.database_path) as database:
-        return _apply_or_queue_evidence(project, database, arguments)["body"]
+        result = GenericWorkflowService(database, project).apply_or_queue(
+            "add_evidence",
+            arguments,
+            created_by=str(arguments.get("created_by", "mcp")),
+        )
+    return result.data if hasattr(result, "data") else result
 
 
 def _tool_create_relation(project: ProjectConfig, registry: ProjectRegistry, arguments: dict[str, Any]) -> Any:
     _ = registry
     with open_database(project.database_path) as database:
-        return _apply_or_queue_relation(project, database, arguments)["body"]
+        result = GenericWorkflowService(database, project).apply_or_queue(
+            "create_relation",
+            arguments,
+            created_by=str(arguments.get("created_by", "mcp")),
+        )
+    return result.data if hasattr(result, "data") else result
 
 
 def _tool_list_pending_changes(project: ProjectConfig, registry: ProjectRegistry, arguments: dict[str, Any]) -> dict[str, Any]:
     _ = registry
     status = None if arguments.get("status") == "all" else arguments.get("status", "pending")
     with open_database(project.database_path) as database:
-        items = PendingChangeService(database).list_pending_changes(project.project_id, status=status)
+        items = GenericWorkflowService(database, project).list_pending_changes(status=status)
     return {"items": serialize(items)}
 
 
@@ -886,8 +1037,7 @@ def _tool_confirm_change(project: ProjectConfig, registry: ProjectRegistry, argu
     _ = registry
     with open_database(project.database_path) as database:
         return serialize(
-            PendingChangeService(database).confirm_change(
-                project.project_id,
+            GenericWorkflowService(database, project).confirm_change(
                 str(arguments["pending_change_id"]),
                 confirmed_by=str(arguments.get("confirmed_by", "mcp")),
                 actor_type="agent",
@@ -899,8 +1049,7 @@ def _tool_reject_change(project: ProjectConfig, registry: ProjectRegistry, argum
     _ = registry
     with open_database(project.database_path) as database:
         return serialize(
-            PendingChangeService(database).reject_change(
-                project.project_id,
+            GenericWorkflowService(database, project).reject_change(
                 str(arguments["pending_change_id"]),
                 rejected_by=str(arguments.get("rejected_by", "mcp")),
             )

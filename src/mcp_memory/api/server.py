@@ -15,6 +15,16 @@ from mcp_memory.config import ProjectConfig, ProjectRegistry
 from mcp_memory.gui.workspace import render_workspace_response, workspace_asset_response, workspace_post_action
 from mcp_memory.domain import EvidenceWrite, FunctionWrite, GlobalHypothesisWrite, HypothesisItem, ObservedFact, StructureMember, StructureWrite
 from mcp_memory.logging_utils import configure_logging, get_logger, log_event, start_request_log
+from mcp_memory.protocol import (
+    GetRelatedQuery,
+    GetRecordQuery,
+    GetSchemaQuery,
+    ListEntityTypesQuery,
+    ListRecordsQuery,
+    ProjectDispatcher,
+    SearchRecordsQuery,
+)
+from mcp_memory.schema import SchemaValidationError, load_project_schema
 from mcp_memory.services import (
     EvidenceService,
     EvidenceValidationError,
@@ -33,6 +43,14 @@ from mcp_memory.services import (
     SearchService,
     StructureService,
     StructureValidationError,
+    GenericRelationService,
+    GenericEvidenceService,
+    GenericWorkflowService,
+    GenericPendingValidationError,
+    GenericRelationValidationError,
+    GenericEvidenceValidationError,
+    RecordService,
+    RecordValidationError,
 )
 from mcp_memory.storage import open_database
 
@@ -85,6 +103,87 @@ def build_handler(
 
                 if path == "/health":
                     self._send_json({"status": "ok", "project_id": project.project_id})
+                    return
+
+                if path == "/schema":
+                    self._send_json(load_project_schema(project.schema_path).to_dict())
+                    return
+
+                if path == "/entity-types":
+                    with open_database(project.database_path) as database:
+                        result = ProjectDispatcher(database, project).dispatch(ListEntityTypesQuery())
+                    self._send_json({"items": serialize(result.data)})
+                    return
+
+                if path == "/records":
+                    entity_type = self._optional_query_value(query, "entity_type")
+                    include_archived = self._optional_query_value(query, "include_archived") == "true"
+                    limit = int(self._optional_query_value(query, "limit") or "100")
+                    with open_database(project.database_path) as database:
+                        result = ProjectDispatcher(database, project).dispatch(
+                            ListRecordsQuery(entity_type=entity_type, include_archived=include_archived, limit=limit)
+                        )
+                    self._send_json(serialize(result.data))
+                    return
+
+                if path.startswith("/records/"):
+                    parts = [segment for segment in path.split("/") if segment]
+                    if len(parts) != 3:
+                        self._send_error_json(HTTPStatus.NOT_FOUND, "not_found", "Unknown record route")
+                        return
+                    _, entity_type, record_id_or_slug = parts
+                    include_archived = self._optional_query_value(query, "include_archived") == "true"
+                    with open_database(project.database_path) as database:
+                        result = ProjectDispatcher(database, project).dispatch(
+                            GetRecordQuery(entity_type, record_id_or_slug, include_archived=include_archived)
+                        )
+                    if result.data is None:
+                        self._send_error_json(HTTPStatus.NOT_FOUND, "not_found", "Record not found")
+                        return
+                    self._send_json(serialize(result.data))
+                    return
+
+                if path == "/relations":
+                    entity_type = self._optional_query_value(query, "entity_type")
+                    record_id = self._optional_query_value(query, "record_id")
+                    direction = self._optional_query_value(query, "direction") or "both"
+                    with open_database(project.database_path) as database:
+                        items = GenericRelationService(database, project).list_relations(entity_type, record_id, direction)
+                    self._send_json({"items": serialize(items)})
+                    return
+
+                if path == "/related":
+                    entity_type = self._required_query_value(query, "entity_type")
+                    record_id = self._optional_query_value(query, "record_id")
+                    if record_id is None and self._optional_query_value(query, "entity_id") is not None:
+                        entity_id = self._required_query_value(query, "entity_id")
+                        hops = int(self._optional_query_value(query, "hops") or "1")
+                        with open_database(project.database_path) as database:
+                            data = RelationService(database).traverse_related(project.project_id, entity_type, entity_id, hops)
+                        self._send_json({"items": data})
+                        return
+                    if record_id is None:
+                        raise ValueError("Missing required query parameter: record_id")
+                    hops = int(self._optional_query_value(query, "hops") or "1")
+                    with open_database(project.database_path) as database:
+                        result = ProjectDispatcher(database, project).dispatch(GetRelatedQuery(entity_type, record_id, hops))
+                    self._send_json(serialize(result.data))
+                    return
+
+                if path == "/evidence":
+                    entity_type = self._required_query_value(query, "entity_type")
+                    record_id = self._optional_query_value(query, "record_id")
+                    if record_id is None and self._optional_query_value(query, "entity_id") is not None:
+                        entity_id = self._required_query_value(query, "entity_id")
+                        with open_database(project.database_path) as database:
+                            data = EvidenceService(database).list_evidence(project.project_id, entity_type, entity_id)
+                        self._send_json({"items": serialize(data)})
+                        return
+                    if record_id is None:
+                        raise ValueError("Missing required query parameter: record_id")
+                    with open_database(project.database_path) as database:
+                        items = GenericEvidenceService(database, project).list_evidence(entity_type, record_id)
+                    self._send_json({"items": serialize(items)})
                     return
 
                 if path == "/project/config":
@@ -172,7 +271,7 @@ def build_handler(
                     if status == "all":
                         status = None
                     with open_database(project.database_path) as database:
-                        data = PendingChangeService(database).list_pending_changes(project.project_id, status=status)
+                        data = GenericWorkflowService(database, project).list_pending_changes(status=status)
                     self._send_json({"items": serialize(data)})
                     return
 
@@ -186,7 +285,14 @@ def build_handler(
                     return
 
                 self._send_error_json(HTTPStatus.NOT_FOUND, "not_found", "Unknown route")
-            except (RelationValidationError, ValueError) as exc:
+            except (
+                RelationValidationError,
+                GenericRelationValidationError,
+                GenericEvidenceValidationError,
+                RecordValidationError,
+                SchemaValidationError,
+                ValueError,
+            ) as exc:
                 log_event(
                     request_logger,
                     logging.WARNING,
@@ -231,6 +337,81 @@ def build_handler(
                 if payload is None:
                     return
 
+                if path == "/search":
+                    with open_database(project.database_path) as database:
+                        result = ProjectDispatcher(database, project).dispatch(
+                            SearchRecordsQuery(
+                                q=str(payload.get("q", "")).strip(),
+                                entity_types=[str(item) for item in payload.get("entity_types", [])] or None,
+                                tag=None if payload.get("tag") is None else str(payload["tag"]),
+                                limit=int(payload.get("limit", 10)),
+                            )
+                        )
+                    self._send_json(serialize(result.data))
+                    return
+
+                if path.startswith("/records/") and path.endswith("/archive"):
+                    parts = [segment for segment in path.split("/") if segment]
+                    if len(parts) != 4:
+                        self._send_error_json(HTTPStatus.NOT_FOUND, "not_found", "Unknown record archive route")
+                        return
+                    _, entity_type, record_id_or_slug, _ = parts
+                    result = self._generic_workflow(
+                        "archive_record",
+                        {
+                            "entity_type": entity_type,
+                            "record_id_or_slug": record_id_or_slug,
+                            "archived_by": str(payload.get("archived_by", "api")),
+                        },
+                        created_by=str(payload.get("archived_by", "api")),
+                    )
+                    self._send_json(serialize(result), status=HTTPStatus.ACCEPTED if project.write_mode == "confirm" else HTTPStatus.OK)
+                    return
+
+                if path.startswith("/records/"):
+                    parts = [segment for segment in path.split("/") if segment]
+                    if len(parts) != 2:
+                        self._send_error_json(HTTPStatus.NOT_FOUND, "not_found", "Unknown record route")
+                        return
+                    _, entity_type = parts
+                    record_payload = payload.get("payload", payload)
+                    if not isinstance(record_payload, dict):
+                        raise ValueError("payload must be an object")
+                    result = self._generic_workflow(
+                        "upsert_record",
+                        {
+                            "entity_type": entity_type,
+                            "record_id": payload.get("record_id"),
+                            "payload": record_payload,
+                            "source_origin": str(payload.get("source_origin", "api")),
+                            "created_by": str(payload.get("created_by", "api")),
+                            "updated_by": str(payload.get("updated_by", payload.get("created_by", "api"))),
+                        },
+                        created_by=str(payload.get("created_by", "api")),
+                    )
+                    self._send_json(serialize(result), status=HTTPStatus.ACCEPTED if project.write_mode == "confirm" else HTTPStatus.CREATED)
+                    return
+
+                if path == "/relations":
+                    if "from_record_id" not in payload and "from_entity_id" in payload:
+                        with open_database(project.database_path) as database:
+                            result = _apply_or_queue_relation(project, database, payload)
+                        self._send_json(serialize(result["body"]), status=result["status"])
+                        return
+                    result = self._generic_workflow("create_relation", payload, created_by=str(payload.get("created_by", "api")))
+                    self._send_json(serialize(result), status=HTTPStatus.ACCEPTED if project.write_mode == "confirm" else HTTPStatus.CREATED)
+                    return
+
+                if path == "/evidence":
+                    if "record_id" not in payload and "entity_id" in payload:
+                        with open_database(project.database_path) as database:
+                            result = _apply_or_queue_evidence(project, database, payload)
+                        self._send_json(serialize(result["body"]), status=result["status"])
+                        return
+                    result = self._generic_workflow("add_evidence", payload, created_by=str(payload.get("created_by", "api")))
+                    self._send_json(serialize(result), status=HTTPStatus.ACCEPTED if project.write_mode == "confirm" else HTTPStatus.CREATED)
+                    return
+
                 if path == "/functions":
                     with open_database(project.database_path) as database:
                         result = _apply_or_queue_function(project, database, payload)
@@ -264,40 +445,15 @@ def build_handler(
                 if path.startswith("/pending-changes/") and path.endswith("/confirm"):
                     pending_change_id = _pending_change_id_from_path(path, "confirm")
                     with open_database(project.database_path) as database:
-                        result = PendingChangeService(database).confirm_change(
-                            project.project_id,
-                            pending_change_id,
-                            confirmed_by=str(payload.get("confirmed_by", "api")),
-                            actor_type="user",
-                        )
+                        result = _confirm_pending_change(project, database, pending_change_id, str(payload.get("confirmed_by", "api")))
                     self._send_json(serialize(result), status=HTTPStatus.CREATED)
                     return
 
                 if path.startswith("/pending-changes/") and path.endswith("/reject"):
                     pending_change_id = _pending_change_id_from_path(path, "reject")
                     with open_database(project.database_path) as database:
-                        result = PendingChangeService(database).reject_change(
-                            project.project_id,
-                            pending_change_id,
-                            rejected_by=str(payload.get("rejected_by", "api")),
-                        )
+                        result = _reject_pending_change(project, database, pending_change_id, str(payload.get("rejected_by", "api")))
                     self._send_json(serialize(result), status=HTTPStatus.CREATED)
-                    return
-
-                if path == "/search":
-                    with open_database(project.database_path) as database:
-                        results = SearchService(database).search(
-                            SearchQuery(
-                                project_id=project.project_id,
-                                query_text=str(payload.get("q", "")).strip(),
-                                entity_types=[str(item) for item in payload.get("entity_types", [])] or None,
-                                binary_id=None if payload.get("binary_id") is None else str(payload["binary_id"]),
-                                tag=None if payload.get("tag") is None else str(payload["tag"]),
-                                address=None if payload.get("address") is None else str(payload["address"]),
-                                limit=int(payload.get("limit", 10)),
-                            )
-                        )
-                    self._send_json({"items": results})
                     return
 
                 if path == "/export/json":
@@ -346,6 +502,11 @@ def build_handler(
                 EvidenceValidationError,
                 RelationValidationError,
                 PendingChangeValidationError,
+                GenericPendingValidationError,
+                GenericRelationValidationError,
+                GenericEvidenceValidationError,
+                RecordValidationError,
+                SchemaValidationError,
                 KeyError,
                 ValueError,
             ) as exc:
@@ -377,6 +538,70 @@ def build_handler(
 
         def log_message(self, format: str, *args: object) -> None:
             log_event(request_logger, logging.INFO, "server_message", project_id=project.project_id, message=format % args if args else format)
+
+        def do_PUT(self) -> None:
+            request_log = start_request_log("PUT", self.path)
+            self._response_status = HTTPStatus.OK
+            parsed = urlparse(self.path)
+            path = parsed.path
+            try:
+                payload = self._read_json_body()
+                if payload is None:
+                    return
+                if path == "/schema":
+                    from mcp_memory.schema import ProjectSchema, copy_schema_payload
+
+                    ProjectSchema.from_dict(payload)
+                    copy_schema_payload(project.schema_path, payload)
+                    self._send_json({"status": "updated", "schema_path": str(project.schema_path)})
+                    return
+                if path.startswith("/records/"):
+                    parts = [segment for segment in path.split("/") if segment]
+                    if len(parts) != 3:
+                        self._send_error_json(HTTPStatus.NOT_FOUND, "not_found", "Unknown record route")
+                        return
+                    _, entity_type, record_id_or_slug = parts
+                    record_payload = payload.get("payload", payload)
+                    if not isinstance(record_payload, dict):
+                        raise ValueError("payload must be an object")
+                    with open_database(project.database_path) as database:
+                        existing = RecordService(database, project).get_record(entity_type, record_id_or_slug, include_archived=True)
+                    record_id = record_id_or_slug if existing is None else existing.record_id
+                    result = self._generic_workflow(
+                        "upsert_record",
+                        {
+                            "entity_type": entity_type,
+                            "record_id": record_id,
+                            "payload": record_payload,
+                            "source_origin": str(payload.get("source_origin", "api")),
+                            "created_by": str(payload.get("created_by", "api")),
+                            "updated_by": str(payload.get("updated_by", payload.get("created_by", "api"))),
+                        },
+                        created_by=str(payload.get("updated_by", payload.get("created_by", "api"))),
+                    )
+                    self._send_json(serialize(result), status=HTTPStatus.ACCEPTED if project.write_mode == "confirm" else HTTPStatus.OK)
+                    return
+                self._send_error_json(HTTPStatus.NOT_FOUND, "not_found", "Unknown route")
+            except (GenericPendingValidationError, RecordValidationError, SchemaValidationError, KeyError, ValueError) as exc:
+                self._send_error_json(HTTPStatus.BAD_REQUEST, "validation_error", str(exc))
+            except Exception:
+                log_event(
+                    request_logger,
+                    logging.ERROR,
+                    "request_exception",
+                    project_id=project.project_id,
+                    method="PUT",
+                    path=path,
+                    error=traceback.format_exc(),
+                )
+                self._send_error_json(HTTPStatus.INTERNAL_SERVER_ERROR, "internal_error", "Internal server error")
+            finally:
+                request_log.finish(request_logger, "request_complete", int(self._response_status), project_id=project.project_id)
+
+        def _generic_workflow(self, operation: str, payload: dict[str, Any], created_by: str) -> Any:
+            with open_database(project.database_path) as database:
+                result = GenericWorkflowService(database, project).apply_or_queue(operation, payload, created_by=created_by)
+                return result.data if hasattr(result, "data") else result
 
         def _read_json_body(self) -> dict[str, Any] | None:
             content_length = int(self.headers.get("Content-Length", "0"))
@@ -459,6 +684,27 @@ def _pending_change_id_from_path(path: str, action: str) -> str:
     if not pending_change_id:
         raise ValueError("Missing pending change id")
     return pending_change_id
+
+
+def _confirm_pending_change(project: ProjectConfig, database: Any, pending_change_id: str, confirmed_by: str) -> Any:
+    generic_workflow = GenericWorkflowService(database, project)
+    pending = generic_workflow.get_pending_change(pending_change_id)
+    if pending is not None and pending.operation in {"upsert_record", "archive_record", "create_relation", "add_evidence"}:
+        return generic_workflow.confirm_change(pending_change_id, confirmed_by=confirmed_by, actor_type="user")
+    return PendingChangeService(database).confirm_change(
+        project.project_id,
+        pending_change_id,
+        confirmed_by=confirmed_by,
+        actor_type="user",
+    )
+
+
+def _reject_pending_change(project: ProjectConfig, database: Any, pending_change_id: str, rejected_by: str) -> Any:
+    generic_workflow = GenericWorkflowService(database, project)
+    pending = generic_workflow.get_pending_change(pending_change_id)
+    if pending is not None and pending.operation in {"upsert_record", "archive_record", "create_relation", "add_evidence"}:
+        return generic_workflow.reject_change(pending_change_id, rejected_by=rejected_by)
+    return PendingChangeService(database).reject_change(project.project_id, pending_change_id, rejected_by=rejected_by)
 
 
 def _queue_pending_change(

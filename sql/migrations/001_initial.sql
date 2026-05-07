@@ -12,6 +12,31 @@ CREATE TABLE IF NOT EXISTS project_meta (
   updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS records (
+  project_id TEXT NOT NULL,
+  entity_type TEXT NOT NULL,
+  record_id TEXT NOT NULL,
+  slug TEXT,
+  title TEXT NOT NULL,
+  summary TEXT NOT NULL,
+  payload_json TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'active',
+  schema_version TEXT NOT NULL,
+  source_origin TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  created_by TEXT NOT NULL,
+  updated_by TEXT NOT NULL,
+  PRIMARY KEY (project_id, entity_type, record_id)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_records_slug
+  ON records(project_id, entity_type, slug)
+  WHERE slug IS NOT NULL AND slug != '';
+
+CREATE INDEX IF NOT EXISTS idx_records_type_status
+  ON records(project_id, entity_type, status, updated_at);
+
 CREATE TABLE IF NOT EXISTS binaries (
   binary_id TEXT PRIMARY KEY,
   project_id TEXT NOT NULL,

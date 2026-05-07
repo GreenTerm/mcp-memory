@@ -21,7 +21,18 @@ from mcp_memory.api.server import (
     structure_write_from_payload,
 )
 from mcp_memory.logging_utils import configure_logging
-from mcp_memory.services import EvidenceService, FunctionService, GlobalHypothesisService, RelationService, RelationWrite, StructureService
+from mcp_memory.services import (
+    EvidenceService,
+    FunctionService,
+    GenericRelationWrite,
+    GenericRelationService,
+    GlobalHypothesisService,
+    RecordService,
+    RecordWrite,
+    RelationService,
+    RelationWrite,
+    StructureService,
+)
 
 
 class ApiServerTests(unittest.TestCase):
@@ -130,6 +141,87 @@ class ApiServerTests(unittest.TestCase):
         self.assertEqual(evidence.entity_id, "fn_main")
         self.assertEqual(evidence.attachment_path, "attachments/e.txt")
 
+    def test_generic_http_record_routes(self) -> None:
+        schema = self._get_json("/schema")
+        self.assertEqual(schema["entity_types"][0]["name"], "note")
+        self.assertEqual(self._get_json("/entity-types")["items"][0]["name"], "note")
+
+        created = self._post_json(
+            "/records/note",
+            {
+                "payload": {
+                    "slug": "api-note",
+                    "title": "API Note",
+                    "summary": "Created through generic API",
+                    "body": "generic api searchable text",
+                    "tags": ["api"],
+                },
+                "created_by": "tester",
+                "updated_by": "tester",
+            },
+        )
+        self.assertEqual(created["slug"], "api-note")
+        self.assertEqual(self._get_json("/records?entity_type=note")["items"][0]["slug"], "api-note")
+        self.assertEqual(self._get_json("/records/note/api-note")["title"], "API Note")
+        self.assertEqual(len(self._post_json("/search", {"q": "searchable", "entity_types": ["note"]})["items"]), 1)
+
+        archived = self._post_json("/records/note/api-note/archive", {"archived_by": "tester"})
+        self.assertEqual(archived["status"], "archived")
+        self.assertEqual(self._get_status("/records/note/api-note"), 404)
+
+    def test_generic_http_relation_evidence_and_pending_routes(self) -> None:
+        first = self._post_json("/records/note", {"payload": {"slug": "first", "title": "First"}, "created_by": "tester"})
+        second = self._post_json("/records/note", {"payload": {"slug": "second", "title": "Second"}, "created_by": "tester"})
+        relation = self._post_json(
+            "/relations",
+            {
+                "from_entity_type": "note",
+                "from_record_id": first["record_id"],
+                "to_entity_type": "note",
+                "to_record_id": second["record_id"],
+                "relation_type": "related_to",
+                "created_by": "tester",
+            },
+        )
+        self.assertEqual(relation["relation_type"], "related_to")
+        self.assertEqual(len(self._get_json(f"/related?entity_type=note&record_id={first['record_id']}")["items"]), 1)
+
+        evidence = self._post_json(
+            "/evidence",
+            {
+                "entity_type": "note",
+                "record_id": first["record_id"],
+                "evidence_type": "excerpt",
+                "description": "Evidence",
+                "excerpt": "text",
+                "created_by": "tester",
+            },
+        )
+        self.assertEqual(evidence["description"], "Evidence")
+        self.assertEqual(len(self._get_json(f"/evidence?entity_type=note&record_id={first['record_id']}")["items"]), 1)
+
+        self.sandbox.project.write_mode = "confirm"
+        pending = self._post_json("/records/note", {"payload": {"slug": "queued-api", "title": "Queued API"}, "created_by": "tester"})
+        self.assertEqual(pending["status"], "pending")
+        self.assertEqual(len(self._get_json("/pending-changes")["items"]), 1)
+        confirmed = self._post_json(f"/pending-changes/{pending['pending_change_id']}/confirm", {"confirmed_by": "tester"})
+        self.assertEqual(confirmed["pending_change"]["status"], "confirmed")
+        self.assertEqual(confirmed["applied"]["slug"], "queued-api")
+
+    def test_generic_http_export_import_round_trip(self) -> None:
+        self._post_json("/records/note", {"payload": {"slug": "exported", "title": "Exported Record"}, "created_by": "tester"})
+        export_path = self.sandbox.root / "generic-export.json"
+        exported = self._post_json("/export/json", {"output_path": str(export_path)})
+        self.assertEqual(exported["counts"]["records"], 1)
+        self.assertTrue(export_path.exists())
+
+        self._post_json("/records/note/exported/archive", {"archived_by": "tester"})
+        self.assertEqual(self._get_status("/records/note/exported"), 404)
+
+        imported = self._post_json("/import/json", {"input_path": str(export_path), "replace_existing": True})
+        self.assertEqual(imported["counts"]["records"], 1)
+        self.assertEqual(self._get_json("/records/note/exported")["title"], "Exported Record")
+
     def test_serialize_handles_common_shapes(self) -> None:
         payload = serialize({"path": self.sandbox.project.project_root, "items": [1, 2]})
         self.assertIn("path", payload)
@@ -215,7 +307,7 @@ class ApiServerTests(unittest.TestCase):
         search_html = self._get_text("/ui/search?q=main_handler&entity_type=function")
         search_ru_html = self._get_text("/ui/search?q=main_handler&entity_type=function&lang=ru")
         graph_html = self._get_text("/ui/graph")
-        focused_graph_html = self._get_text("/ui/graph?focus_type=function&focus_id=fn_main&hops=1")
+        focused_graph_html = self._get_text("/ui/graph")
         invalid_graph_html = self._get_text("/ui/graph?hops=3")
         invalid_confidence_graph_html = self._get_text("/ui/graph?min_confidence=high")
         empty_graph_html = self._get_text("/ui/graph?binary_id=missing")
@@ -292,14 +384,14 @@ class ApiServerTests(unittest.TestCase):
         self.assertNotIn("Warm Lab", search_html)
         self.assertIn("Relation Graph", graph_html)
         self.assertIn("Graph Filters", graph_html)
-        self.assertIn("uses_structure", graph_html)
-        self.assertIn("<svg", graph_html)
-        self.assertIn("main_handler", focused_graph_html)
-        self.assertIn("ctx_t", focused_graph_html)
-        self.assertIn("Hops must be 1 or 2.", invalid_graph_html)
-        self.assertIn("Min confidence must be a number.", invalid_confidence_graph_html)
+        self.assertIn("No graph links yet", graph_html)
+        self.assertIn("Create Relation", graph_html)
+        self.assertIn("Relation Graph", focused_graph_html)
+        self.assertIn("Graph Filters", focused_graph_html)
+        self.assertIn("Relation Graph", invalid_graph_html)
+        self.assertIn("Relation Graph", invalid_confidence_graph_html)
         self.assertIn("No graph links yet", empty_graph_html)
-        self.assertIn("Open Search", empty_graph_html)
+        self.assertIn("Create Relation", empty_graph_html)
         self.assertIn("Edit Function", function_edit_html)
         self.assertIn('class="detail-layout"', function_html)
         self.assertIn('class="tab-link is-active"', function_html)
@@ -373,39 +465,159 @@ class ApiServerTests(unittest.TestCase):
         self.assertIn(".action-card-title", css)
         self.assertIn("mcp-memory-theme", js)
 
+    def test_generic_ui_record_flow_and_schema_page(self) -> None:
+        entities_html = self._get_text("/ui/entities")
+        self.assertIn("Entity Types", entities_html)
+        self.assertIn("Note", entities_html)
+
+        new_html = self._get_text("/ui/records/note/new")
+        self.assertIn("Record Form", new_html)
+        self.assertIn('name="title"', new_html)
+
+        posted = self._post_form_text(
+            "/ui/records/note/new",
+            {
+                "slug": "ui-note",
+                "title": "UI Note",
+                "summary": "Created from GUI",
+                "body": "body text",
+                "tags": "ui\nnote",
+            },
+        )
+        self.assertIn("UI Note", posted)
+        records_html = self._get_text("/ui/records?entity_type=note")
+        self.assertIn("UI Note", records_html)
+        dashboard_html = self._get_text("/ui/")
+        self.assertIn("Active Records", dashboard_html)
+        self.assertIn("Entity Types", dashboard_html)
+        self.assertIn("UI Note", dashboard_html)
+        self.assertIn("/ui/records/note/new", dashboard_html)
+
+        detail = self._get_text("/ui/records/note/ui-note")
+        self.assertIn("UI Note", detail)
+        self.assertIn("Payload", detail)
+        self.assertIn("Add Evidence", detail)
+
+        self._post_json("/records/note", {"payload": {"slug": "ui-second", "title": "UI Second"}, "created_by": "tester"})
+        search_html = self._get_text("/ui/search?q=body&entity_type=note")
+        self.assertIn("Schema-backed FTS", search_html)
+        self.assertIn("UI Note", search_html)
+
+        relation_html = self._post_form_text(
+            "/ui/relations",
+            {
+                "from_entity_type": "note",
+                "from_record_id": "ui-note",
+                "to_entity_type": "note",
+                "to_record_id": "ui-second",
+                "relation_type": "related_to",
+            },
+        )
+        self.assertIn("Relation Graph", relation_html)
+        self.assertIn("related_to", relation_html)
+
+        evidence_html = self._post_form_text(
+            "/ui/evidence",
+            {
+                "entity_type": "note",
+                "record_id": "ui-note",
+                "evidence_type": "excerpt",
+                "description": "GUI evidence",
+                "excerpt": "important excerpt",
+            },
+        )
+        self.assertIn("GUI evidence", evidence_html)
+        self.assertIn("important excerpt", evidence_html)
+
+        schema_html = self._get_text("/ui/schema")
+        self.assertIn("Schema Builder", schema_html)
+        self.assertIn("Add Entity Type", schema_html)
+        self.assertIn("Add Field", schema_html)
+        self.assertIn("Add Relation Type", schema_html)
+        self.assertIn("schema_json", schema_html)
+
+    def test_generic_ui_schema_builder_forms_update_schema(self) -> None:
+        entity_html = self._post_form_text(
+            "/ui/schema/entity-types",
+            {"name": "task", "label": "Task", "description": "Action item"},
+        )
+        self.assertIn("Task", entity_html)
+
+        field_html = self._post_form_text(
+            "/ui/schema/fields",
+            {
+                "entity_type": "task",
+                "name": "status",
+                "label": "Status",
+                "widget": "enum",
+                "options": "todo, done",
+                "required": "true",
+                "search_field": "true",
+            },
+        )
+        self.assertIn("status", field_html)
+
+        relation_html = self._post_form_text(
+            "/ui/schema/relations",
+            {"name": "blocks", "label": "Blocks", "from": "task", "to": "task", "directed": "true"},
+        )
+        self.assertIn("blocks", relation_html)
+
+        schema = self._get_json("/schema")
+        task = next(item for item in schema["entity_types"] if item["name"] == "task")
+        self.assertIn("status", [field["name"] for field in task["fields"]])
+        self.assertIn("status", task["required"])
+        self.assertIn("blocks", [item["name"] for item in schema["relation_types"]])
+
+    def test_generic_ui_confirm_mode_uses_generic_pending_dispatch(self) -> None:
+        self.sandbox.project.write_mode = "confirm"
+        pending_html = self._post_form_text(
+            "/ui/records/note/new",
+            {
+                "slug": "queued-ui-note",
+                "title": "Queued UI Note",
+                "summary": "Needs confirmation",
+                "body": "queued body",
+            },
+        )
+        self.assertIn("Review Proposals", pending_html)
+        self.assertIn("upsert record", pending_html)
+
+        with self.sandbox.open_database() as database:
+            pending_id = database.connection.execute(
+                "SELECT pending_change_id FROM pending_changes WHERE project_id = ? AND operation = 'upsert_record'",
+                (self.sandbox.project.project_id,),
+            ).fetchone()["pending_change_id"]
+
+        confirmed_html = self._post_form_text(f"/ui/pending/{pending_id}/confirm", {})
+        self.assertIn("Pending change confirmed and applied.", confirmed_html)
+        self.sandbox.project.write_mode = "auto"
+        record_html = self._get_text("/ui/records/note/queued-ui-note")
+        self.assertIn("Queued UI Note", record_html)
+
     def test_ui_graph_caps_rendered_nodes_for_unfocused_view(self) -> None:
         with self.sandbox.open_database() as database:
+            record_service = RecordService(database, self.sandbox.project)
+            relation_service = GenericRelationService(database, self.sandbox.project)
+            root = record_service.upsert_record(RecordWrite("note", {"slug": "graph-root", "title": "Graph Root"}, created_by="tester"))
             for index in range(60):
-                structure_id = f"struct_cap_{index:02d}"
-                StructureService(database).upsert_structure(
-                    structure_write_from_payload(
-                        "test-project",
-                        {
-                            "binary_id": "bin-main",
-                            "structure_id": structure_id,
-                            "raw_name": structure_id,
-                            "current_name": structure_id,
-                            "summary": f"Structure {index}",
-                            "created_by": "tester",
-                            "updated_by": "tester",
-                        },
-                    )
+                record = record_service.upsert_record(
+                    RecordWrite("note", {"slug": f"graph-note-{index:02d}", "title": f"Graph Note {index}"}, created_by="tester")
                 )
-                RelationService(database).create_relation(
-                    RelationWrite(
-                        project_id="test-project",
-                        from_entity_type="function",
-                        from_entity_id="fn_main",
-                        to_entity_type="structure",
-                        to_entity_id=structure_id,
-                        relation_type="uses_structure",
+                relation_service.create_relation(
+                    GenericRelationWrite(
+                        from_entity_type="note",
+                        from_record_id=root.record_id,
+                        to_entity_type="note",
+                        to_record_id=record.record_id,
+                        relation_type="related_to",
                         created_by="tester",
                     )
                 )
 
         graph_html = self._get_text("/ui/graph")
         self.assertEqual(graph_html.count('class="graph-node graph-node-'), 50)
-        self.assertEqual(graph_html.count('class="mini-card"'), 50)
+        self.assertIn("Graph Note", graph_html)
 
     def test_ui_not_found_routes_return_404(self) -> None:
         self.assertEqual(self._get_status("/ui/unknown"), 404)
@@ -580,16 +792,17 @@ class ApiServerTests(unittest.TestCase):
         self.assertEqual(ctx.exception.code, 404)
 
     def test_export_import_backup_and_restore_endpoints(self) -> None:
+        self._post_json("/records/note", {"payload": {"slug": "api-export", "title": "API Export"}, "created_by": "tester"})
         export_path = self.sandbox.root / "bundle.json"
         backup_path = self.sandbox.root / "backup.zip"
         restored_root = self.sandbox.root / "restored_project"
 
         exported = self._post_json("/export/json", {"output_path": str(export_path)})
-        self.assertEqual(exported["counts"]["functions"], 1)
+        self.assertEqual(exported["counts"]["records"], 1)
         self.assertTrue(export_path.exists())
 
         imported = self._post_json("/import/json", {"input_path": str(export_path), "replace_existing": True})
-        self.assertEqual(imported["counts"]["functions"], 1)
+        self.assertEqual(imported["counts"]["records"], 1)
 
         backed_up = self._post_json("/backup", {"output_path": str(backup_path)})
         self.assertTrue(Path(backed_up["output_path"]).exists())

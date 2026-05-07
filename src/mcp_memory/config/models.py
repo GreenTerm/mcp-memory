@@ -14,6 +14,7 @@ class ProjectConfig:
     exports_dir: Path
     backups_dir: Path
     logs_dir: Path
+    schema_path: Path = field(default_factory=lambda: Path("schema.json"))
     http_host: str = "127.0.0.1"
     http_port: int = 8765
     mcp_host: str = "127.0.0.1"
@@ -38,6 +39,7 @@ class ProjectConfig:
             exports_dir=Path(str(payload["exports_dir"])),
             backups_dir=Path(str(payload["backups_dir"])),
             logs_dir=Path(str(payload["logs_dir"])),
+            schema_path=Path(str(payload.get("schema_path", Path(str(payload["project_root"])) / "schema.json"))),
             http_host=str(payload.get("http_host", "127.0.0.1")),
             http_port=int(payload.get("http_port", 8765)),
             mcp_host=str(payload.get("mcp_host", "127.0.0.1")),
@@ -70,4 +72,3 @@ class AppConfig:
             registry_path=Path(str(payload["registry_path"])),
             projects=projects,
         )
-

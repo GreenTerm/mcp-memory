@@ -8,7 +8,20 @@ from pathlib import Path
 from tests.support import ProjectSandbox
 
 from mcp_memory.domain import EvidenceWrite, FunctionWrite, ObservedFact
-from mcp_memory.services import EvidenceService, FunctionService, ProjectArchiveService, ProjectService, ProjectTransferService
+from mcp_memory.services import (
+    EvidenceService,
+    FunctionService,
+    GenericEvidenceService,
+    GenericEvidenceWrite,
+    LegacyDatabaseImporter,
+    ProjectArchiveService,
+    ProjectService,
+    ProjectTransferService,
+    RecordService,
+    RecordWrite,
+    RelationService,
+    RelationWrite,
+)
 
 
 class TransferAndArchiveTests(unittest.TestCase):
@@ -43,6 +56,30 @@ class TransferAndArchiveTests(unittest.TestCase):
                     source_origin="test",
                 )
             )
+            note = RecordService(database, self.sandbox.project).upsert_record(
+                RecordWrite(
+                    entity_type="note",
+                    payload={
+                        "slug": "transfer-note",
+                        "title": "Transfer Note",
+                        "summary": "Generic record",
+                        "body": "Generic transfer body",
+                        "tags": ["transfer"],
+                    },
+                    created_by="tester",
+                    updated_by="tester",
+                    source_origin="test",
+                )
+            )
+            GenericEvidenceService(database, self.sandbox.project).create_evidence(
+                GenericEvidenceWrite(
+                    entity_type="note",
+                    record_id=note.record_id,
+                    evidence_type="excerpt",
+                    description="Generic evidence",
+                    created_by="tester",
+                )
+            )
 
     def tearDown(self) -> None:
         self.sandbox.cleanup()
@@ -51,7 +88,7 @@ class TransferAndArchiveTests(unittest.TestCase):
         transfer = ProjectTransferService()
         export_path = self.sandbox.root / "bundle.json"
         export_result = transfer.export_project(self.sandbox.project, export_path)
-        self.assertEqual(export_result["counts"]["functions"], 1)
+        self.assertEqual(export_result["counts"]["records"], 1)
         self.assertTrue(export_path.exists())
 
         imported_root = self.sandbox.root / "imported_project"
@@ -63,16 +100,16 @@ class TransferAndArchiveTests(unittest.TestCase):
             19877,
         )
         import_result = transfer.import_project(imported_project, export_path, replace_existing=True)
-        self.assertEqual(import_result["counts"]["functions"], 1)
+        self.assertEqual(import_result["counts"]["records"], 1)
 
         with open(import_result["input_path"], "r", encoding="utf-8") as handle:
             bundle = json.load(handle)
-        self.assertEqual(bundle["records"]["functions"][0]["function_id"], "fn_main")
+        self.assertEqual(bundle["records"]["items"][0]["slug"], "transfer-note")
 
         with open_database(imported_project.database_path) as database:
-            loaded = FunctionService(database).get_function("imported-project", "bin-main", "fn_main")
+            loaded = RecordService(database, imported_project).get_record("note", "transfer-note")
             self.assertIsNotNone(loaded)
-            evidence = EvidenceService(database).list_evidence("imported-project", "function", "fn_main")
+            evidence = GenericEvidenceService(database, imported_project).list_evidence("note", loaded.record_id)
             self.assertEqual(len(evidence), 1)
 
     def test_backup_and_restore_roundtrip(self) -> None:
@@ -82,7 +119,7 @@ class TransferAndArchiveTests(unittest.TestCase):
         archive = ProjectArchiveService(self.sandbox.registry)
         backup_path = self.sandbox.root / "backup.zip"
         backup_result = archive.create_backup(self.sandbox.project, backup_path)
-        self.assertEqual(backup_result["file_count"], 2)
+        self.assertEqual(backup_result["file_count"], 3)
         self.assertTrue(backup_path.exists())
 
         restored_root = self.sandbox.root / "restored_project"
@@ -106,7 +143,7 @@ class TransferAndArchiveTests(unittest.TestCase):
         export_result = transfer.export_project(self.sandbox.project)
         self.assertTrue(Path(export_result["output_path"]).exists())
 
-        with self.assertRaisesRegex(ValueError, "Unsupported bundle_version"):
+        with self.assertRaisesRegex(ValueError, "Bundle schema must be an object"):
             transfer.import_bundle(self.sandbox.project, {"bundle_version": 2, "records": {}}, replace_existing=False)
 
         with self.assertRaisesRegex(ValueError, "Bundle records must be an object"):
@@ -142,6 +179,45 @@ class TransferAndArchiveTests(unittest.TestCase):
         restored = archive.restore_backup(malformed_zip, restored_root, project_id="malformed-restored")
         self.assertTrue(restored_root.exists())
         self.assertEqual(restored.project_id, "malformed-restored")
+
+    def test_import_legacy_database_to_generic_reverse_engineering_schema(self) -> None:
+        imported_root = self.sandbox.root / "legacy_imported_project"
+        imported_project = self.sandbox.project_service.create_project(
+            "legacy-imported",
+            "Legacy Imported",
+            imported_root,
+            18777,
+            19888,
+        )
+        with self.sandbox.open_database() as database:
+            RelationService(database).create_relation(
+                RelationWrite(
+                    project_id="test-project",
+                    from_entity_type="function",
+                    from_entity_id="fn_main",
+                    to_entity_type="function",
+                    to_entity_id="fn_main",
+                    relation_type="calls",
+                    created_by="tester",
+                )
+            )
+
+        result = LegacyDatabaseImporter().import_legacy_database(
+            imported_project,
+            self.sandbox.project.database_path,
+            source_project_id="test-project",
+            replace_existing=True,
+        )
+        self.assertEqual(result["counts"]["records"], 1)
+        self.assertEqual(result["counts"]["evidence"], 1)
+        self.assertEqual(result["counts"]["relations"], 1)
+
+        with open_database(imported_project.database_path) as database:
+            record = RecordService(database, imported_project).get_record("function", "fn_main")
+            self.assertIsNotNone(record)
+            self.assertEqual(record.payload["current_name"], "main_handler")
+            evidence = GenericEvidenceService(database, imported_project).list_evidence("function", record.record_id)
+            self.assertEqual(len(evidence), 1)
 
 
 from mcp_memory.storage import open_database

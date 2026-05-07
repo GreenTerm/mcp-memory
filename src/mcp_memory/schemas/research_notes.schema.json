@@ -1,0 +1,43 @@
+{
+  "schema_version": "1",
+  "entity_types": [
+    {
+      "name": "source",
+      "label": "Source",
+      "fields": [
+        {"name": "slug", "label": "Slug", "widget": "text"},
+        {"name": "title", "label": "Title", "widget": "text"},
+        {"name": "url", "label": "URL", "widget": "url"},
+        {"name": "notes", "label": "Notes", "widget": "textarea"},
+        {"name": "tags", "label": "Tags", "widget": "tags"}
+      ],
+      "required": ["title"],
+      "title_field": "title",
+      "summary_field": "notes",
+      "slug_field": "slug",
+      "search_fields": ["title", "url", "notes"],
+      "tag_fields": ["tags"]
+    },
+    {
+      "name": "claim",
+      "label": "Claim",
+      "fields": [
+        {"name": "slug", "label": "Slug", "widget": "text"},
+        {"name": "title", "label": "Title", "widget": "text"},
+        {"name": "statement", "label": "Statement", "widget": "textarea"},
+        {"name": "status", "label": "Status", "widget": "enum", "options": ["open", "supported", "refuted"]},
+        {"name": "tags", "label": "Tags", "widget": "tags"}
+      ],
+      "required": ["title", "statement"],
+      "title_field": "title",
+      "summary_field": "statement",
+      "slug_field": "slug",
+      "search_fields": ["title", "statement", "status"],
+      "tag_fields": ["tags"]
+    }
+  ],
+  "relation_types": [
+    {"name": "supports", "label": "Supports", "from": ["source"], "to": ["claim"], "directed": true},
+    {"name": "refutes", "label": "Refutes", "from": ["source"], "to": ["claim"], "directed": true}
+  ]
+}

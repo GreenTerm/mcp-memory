@@ -1,0 +1,71 @@
+{
+  "schema_version": "1",
+  "entity_types": [
+    {
+      "name": "function",
+      "label": "Function",
+      "fields": [
+        {"name": "slug", "label": "Slug", "widget": "text"},
+        {"name": "binary_id", "label": "Binary ID", "widget": "text"},
+        {"name": "address", "label": "Address", "widget": "text"},
+        {"name": "raw_name", "label": "Raw Name", "widget": "text"},
+        {"name": "current_name", "label": "Current Name", "widget": "text"},
+        {"name": "summary", "label": "Summary", "widget": "textarea"},
+        {"name": "behavior_description", "label": "Behavior", "widget": "textarea"},
+        {"name": "tags", "label": "Tags", "widget": "tags"},
+        {"name": "metadata", "label": "Metadata", "widget": "json"}
+      ],
+      "required": ["binary_id", "address", "current_name", "summary"],
+      "title_field": "current_name",
+      "summary_field": "summary",
+      "slug_field": "slug",
+      "search_fields": ["binary_id", "address", "raw_name", "current_name", "summary", "behavior_description"],
+      "tag_fields": ["tags"]
+    },
+    {
+      "name": "structure",
+      "label": "Structure",
+      "fields": [
+        {"name": "slug", "label": "Slug", "widget": "text"},
+        {"name": "binary_id", "label": "Binary ID", "widget": "text"},
+        {"name": "raw_name", "label": "Raw Name", "widget": "text"},
+        {"name": "current_name", "label": "Current Name", "widget": "text"},
+        {"name": "summary", "label": "Summary", "widget": "textarea"},
+        {"name": "fields", "label": "Fields", "widget": "json"},
+        {"name": "tags", "label": "Tags", "widget": "tags"}
+      ],
+      "required": ["binary_id", "current_name", "summary"],
+      "title_field": "current_name",
+      "summary_field": "summary",
+      "slug_field": "slug",
+      "search_fields": ["binary_id", "raw_name", "current_name", "summary"],
+      "tag_fields": ["tags"]
+    },
+    {
+      "name": "hypothesis",
+      "label": "Hypothesis",
+      "fields": [
+        {"name": "slug", "label": "Slug", "widget": "text"},
+        {"name": "title", "label": "Title", "widget": "text"},
+        {"name": "statement", "label": "Statement", "widget": "textarea"},
+        {"name": "status", "label": "Status", "widget": "enum", "options": ["new", "probable", "confirmed", "rejected"]},
+        {"name": "confidence", "label": "Confidence", "widget": "number"},
+        {"name": "binary_id", "label": "Binary ID", "widget": "text"},
+        {"name": "tags", "label": "Tags", "widget": "tags"}
+      ],
+      "required": ["title", "statement"],
+      "title_field": "title",
+      "summary_field": "statement",
+      "slug_field": "slug",
+      "search_fields": ["title", "statement", "binary_id"],
+      "tag_fields": ["tags"]
+    }
+  ],
+  "relation_types": [
+    {"name": "calls", "label": "Calls", "from": ["function"], "to": ["function"], "directed": true},
+    {"name": "uses_structure", "label": "Uses Structure", "from": ["function"], "to": ["structure"], "directed": true},
+    {"name": "supports", "label": "Supports", "from": ["*"], "to": ["hypothesis"], "directed": true},
+    {"name": "refutes", "label": "Refutes", "from": ["*"], "to": ["hypothesis"], "directed": true},
+    {"name": "related_to", "label": "Related To", "from": ["*"], "to": ["*"], "directed": false}
+  ]
+}

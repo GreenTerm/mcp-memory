@@ -30,6 +30,7 @@ from mcp_memory.gui.home import (
 )
 from mcp_memory.logging_utils import configure_logging, shutdown_logging
 from mcp_memory.runtime import ProjectRuntimeInfo, ProjectRuntimeManager
+from mcp_memory.schema import load_project_schema
 
 
 class _HealthHandler(BaseHTTPRequestHandler):
@@ -244,6 +245,8 @@ class GuiHomeTests(unittest.TestCase):
             self.assertIn("Create Project", html)
             self.assertIn("Project ID", html)
             self.assertIn("Advanced Settings", html)
+            self.assertIn("Schema Template", html)
+            self.assertIn("reverse_engineering", html)
             self.assertIn('action="/projects/new?lang=en"', html)
         finally:
             if server is not None:
@@ -347,6 +350,7 @@ class GuiHomeTests(unittest.TestCase):
                     "http_port": "22001",
                     "mcp_port": "22002",
                     "write_mode": "auto",
+                    "schema_template": "research_notes",
                 }
             ).encode("utf-8")
 
@@ -362,6 +366,7 @@ class GuiHomeTests(unittest.TestCase):
             self.assertEqual(created_project.write_mode, "auto")
             self.assertEqual(created_project.http_port, 22001)
             self.assertEqual(created_project.mcp_port, 22002)
+            self.assertEqual(load_project_schema(created_project.schema_path).entity("source").name, "source")
             self.assertTrue(project_root.exists())
             self.assertIn("flash=created", final_url)
             self.assertIn("Project created successfully.", html)
@@ -523,6 +528,7 @@ class GuiHomeTests(unittest.TestCase):
                     "http_port": "23001",
                     "mcp_port": "23002",
                     "write_mode": "confirm",
+                    "schema_template": "infrastructure_deployment",
                 }
             ).encode("utf-8")
             with request.urlopen(
@@ -540,7 +546,9 @@ class GuiHomeTests(unittest.TestCase):
             self.assertIn("Project created successfully.", created_html)
             self.assertIn("Copy MCP config", created_html)
             self.assertIn("23002/mcp", created_html)
-            self.assertIsNotNone(sandbox.registry.get_project("setup-project"))
+            setup_project = sandbox.registry.get_project("setup-project")
+            self.assertIsNotNone(setup_project)
+            self.assertEqual(load_project_schema(setup_project.schema_path).entity("server").name, "server")
         finally:
             if server is not None:
                 server.shutdown()

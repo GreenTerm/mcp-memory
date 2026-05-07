@@ -179,6 +179,62 @@ class ConfigAndCliTests(unittest.TestCase):
             self.assertEqual(items[0]["project_id"], "p1")
             shutdown_logging()
 
+    def test_cli_schema_commands(self) -> None:
+        with TemporaryDirectory() as tmp:
+            app_home = Path(tmp) / "app"
+            project_root = Path(tmp) / "project"
+            self.assertEqual(
+                run(
+                    [
+                        "--app-home",
+                        str(app_home),
+                        "create-project",
+                        "p1",
+                        "--name",
+                        "Project One",
+                        "--project-root",
+                        str(project_root),
+                        "--schema-template",
+                        "research_notes",
+                    ]
+                ),
+                0,
+            )
+
+            output = io.StringIO()
+            with redirect_stdout(output):
+                self.assertEqual(run(["--app-home", str(app_home), "show-schema", "p1"]), 0)
+            self.assertEqual(json.loads(output.getvalue())["entity_types"][0]["name"], "source")
+
+            output = io.StringIO()
+            with redirect_stdout(output):
+                self.assertEqual(run(["--app-home", str(app_home), "validate-schema", "--project-id", "p1"]), 0)
+            self.assertEqual(json.loads(output.getvalue())["status"], "valid")
+
+            schema_path = Path(tmp) / "replacement.schema.json"
+            schema_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "1",
+                        "entity_types": [
+                            {
+                                "name": "replacement",
+                                "fields": [{"name": "title", "label": "Title", "widget": "text"}],
+                                "required": ["title"],
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            output = io.StringIO()
+            with redirect_stdout(output):
+                self.assertEqual(run(["--app-home", str(app_home), "update-schema", "p1", "--schema", str(schema_path)]), 0)
+            self.assertEqual(json.loads(output.getvalue())["status"], "updated")
+            updated_payload = json.loads((project_root / "schema.json").read_text(encoding="utf-8"))
+            self.assertEqual(updated_payload["entity_types"][0]["name"], "replacement")
+            shutdown_logging()
+
     def test_cli_run_http_api_unknown_project_raises_system_exit(self) -> None:
         with TemporaryDirectory() as tmp:
             app_home = Path(tmp) / "app"
@@ -284,6 +340,29 @@ class ConfigAndCliTests(unittest.TestCase):
                     self.assertEqual(exit_code, 0)
                     transfer_cls.return_value.import_project.assert_called_once()
 
+                with mock.patch("mcp_memory.cli.main.LegacyDatabaseImporter") as legacy_cls:
+                    legacy_cls.return_value.import_legacy_database.return_value = {
+                        "legacy_database_path": str(Path(tmp) / "legacy.db"),
+                        "source_project_id": "old-project",
+                        "replace_existing": True,
+                        "counts": {"records": 1},
+                    }
+                    exit_code = run(
+                        [
+                            "--app-home",
+                            str(app_home),
+                            "import-legacy-db",
+                            "p1",
+                            "--input",
+                            str(Path(tmp) / "legacy.db"),
+                            "--source-project-id",
+                            "old-project",
+                            "--replace-existing",
+                        ]
+                    )
+                    self.assertEqual(exit_code, 0)
+                    legacy_cls.return_value.import_legacy_database.assert_called_once()
+
                 with mock.patch("mcp_memory.cli.main.ProjectArchiveService") as archive_cls:
                     archive_cls.return_value.create_backup.return_value = {"output_path": str(Path(tmp) / "backup.zip"), "file_count": 2}
                     exit_code = run(["--app-home", str(app_home), "backup-project", "p1"])
@@ -337,6 +416,7 @@ class ConfigAndCliTests(unittest.TestCase):
             failing_commands = [
                 ["--app-home", str(app_home), "export-json", "missing-project"],
                 ["--app-home", str(app_home), "import-json", "missing-project", "--input", str(Path(tmp) / "bundle.json")],
+                ["--app-home", str(app_home), "import-legacy-db", "missing-project", "--input", str(Path(tmp) / "legacy.db")],
                 ["--app-home", str(app_home), "backup-project", "missing-project"],
                 ["--app-home", str(app_home), "list-pending", "missing-project"],
                 ["--app-home", str(app_home), "confirm-change", "missing-project", "pc1"],

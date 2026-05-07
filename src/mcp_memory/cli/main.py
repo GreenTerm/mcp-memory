@@ -11,7 +11,8 @@ from mcp_memory.api.server import serve_project_http_api
 from mcp_memory.gui import serve_ui_home
 from mcp_memory.logging_utils import configure_logging, log_event
 from mcp_memory.mcp import serve_project_mcp_api
-from mcp_memory.services import PendingChangeService, ProjectArchiveService, ProjectService, ProjectTransferService
+from mcp_memory.schema import ProjectSchema, copy_schema_payload, list_bundled_schema_templates, load_schema_payload
+from mcp_memory.services import LegacyDatabaseImporter, PendingChangeService, ProjectArchiveService, ProjectService, ProjectTransferService
 from mcp_memory.storage import open_database
 
 
@@ -40,6 +41,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     create_project.add_argument("--http-port", type=int, default=8765)
     create_project.add_argument("--mcp-port", type=int, default=9876)
+    create_project.add_argument("--schema")
+    create_project.add_argument(
+        "--schema-template",
+        choices=tuple(list_bundled_schema_templates()),
+        default="general_knowledge",
+    )
     create_project.add_argument(
         "--write-mode",
         choices=("confirm", "auto"),
@@ -47,6 +54,17 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     subparsers.add_parser("list-projects", help="Print registered projects as JSON.")
+
+    show_schema = subparsers.add_parser("show-schema", help="Print a project schema as JSON.")
+    show_schema.add_argument("project_id")
+
+    validate_schema = subparsers.add_parser("validate-schema", help="Validate a schema file or project schema.")
+    validate_schema.add_argument("--schema")
+    validate_schema.add_argument("--project-id")
+
+    update_schema = subparsers.add_parser("update-schema", help="Replace a project schema with a validated schema file.")
+    update_schema.add_argument("project_id")
+    update_schema.add_argument("--schema", required=True)
 
     export_json = subparsers.add_parser("export-json", help="Export project records into a JSON bundle.")
     export_json.add_argument("project_id")
@@ -56,6 +74,12 @@ def build_parser() -> argparse.ArgumentParser:
     import_json.add_argument("project_id")
     import_json.add_argument("--input", required=True, dest="input_path")
     import_json.add_argument("--replace-existing", action="store_true")
+
+    import_legacy_db = subparsers.add_parser("import-legacy-db", help="Import an old fixed RE project.db into generic records.")
+    import_legacy_db.add_argument("project_id")
+    import_legacy_db.add_argument("--input", required=True, dest="input_path")
+    import_legacy_db.add_argument("--source-project-id")
+    import_legacy_db.add_argument("--replace-existing", action="store_true")
 
     backup_project = subparsers.add_parser("backup-project", help="Create a zip backup of a project workspace.")
     backup_project.add_argument("project_id")
@@ -109,6 +133,17 @@ def _registry_from_args(app_home_raw: str | None) -> tuple[Path, ProjectRegistry
 def run(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    parser_actions = getattr(parser, "_actions", None)
+    if not isinstance(parser_actions, list):
+        parser.error(f"Unknown command: {args.command}")
+    known_commands = {
+        command
+        for action in parser_actions
+        if isinstance(action, argparse._SubParsersAction)
+        for command in action.choices
+    }
+    if args.command not in known_commands:
+        parser.error(f"Unknown command: {args.command}")
 
     app_home, registry = _registry_from_args(args.app_home)
     service = ProjectService(registry)
@@ -145,6 +180,8 @@ def run(argv: list[str] | None = None) -> int:
             http_port=args.http_port,
             mcp_port=args.mcp_port,
             write_mode=args.write_mode,
+            schema_path=None if args.schema is None else Path(args.schema).expanduser().resolve(),
+            schema_template=args.schema_template,
         )
         log_event(
             logger,
@@ -156,6 +193,51 @@ def run(argv: list[str] | None = None) -> int:
             write_mode=project.write_mode,
         )
         print(json.dumps(project.to_dict(), ensure_ascii=False, indent=2))
+        return 0
+
+    if args.command == "show-schema":
+        project = registry.get_project(args.project_id)
+        if project is None:
+            parser.error(f"Unknown project_id: {args.project_id}")
+        payload = load_schema_payload(project.schema_path)
+        log_event(logger, logging.INFO, "command_finish", command=args.command, status="ok", project_id=project.project_id)
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        return 0
+
+    if args.command == "validate-schema":
+        if args.schema:
+            schema_path = Path(args.schema).expanduser().resolve()
+        elif args.project_id:
+            project = registry.get_project(args.project_id)
+            if project is None:
+                parser.error(f"Unknown project_id: {args.project_id}")
+            schema_path = project.schema_path
+        else:
+            parser.error("validate-schema requires --schema or --project-id")
+        payload = load_schema_payload(schema_path)
+        ProjectSchema.from_dict(payload)
+        log_event(logger, logging.INFO, "command_finish", command=args.command, status="ok", schema_path=schema_path)
+        print(json.dumps({"status": "valid", "schema_path": str(schema_path)}, ensure_ascii=False, indent=2))
+        return 0
+
+    if args.command == "update-schema":
+        project = registry.get_project(args.project_id)
+        if project is None:
+            parser.error(f"Unknown project_id: {args.project_id}")
+        source_path = Path(args.schema).expanduser().resolve()
+        payload = load_schema_payload(source_path)
+        ProjectSchema.from_dict(payload)
+        copy_schema_payload(project.schema_path, payload)
+        log_event(
+            logger,
+            logging.INFO,
+            "command_finish",
+            command=args.command,
+            status="ok",
+            project_id=project.project_id,
+            schema_path=project.schema_path,
+        )
+        print(json.dumps({"status": "updated", "schema_path": str(project.schema_path)}, ensure_ascii=False, indent=2))
         return 0
 
     if args.command == "list-projects":
@@ -207,6 +289,29 @@ def run(argv: list[str] | None = None) -> int:
             status="ok",
             project_id=project.project_id,
             input_path=result["input_path"],
+            replace_existing=result["replace_existing"],
+        )
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 0
+
+    if args.command == "import-legacy-db":
+        project = registry.get_project(args.project_id)
+        if project is None:
+            parser.error(f"Unknown project_id: {args.project_id}")
+        result = LegacyDatabaseImporter().import_legacy_database(
+            project,
+            Path(args.input_path).expanduser().resolve(),
+            source_project_id=None if args.source_project_id is None else str(args.source_project_id),
+            replace_existing=bool(args.replace_existing),
+        )
+        log_event(
+            logger,
+            logging.INFO,
+            "command_finish",
+            command=args.command,
+            status="ok",
+            project_id=project.project_id,
+            input_path=result["legacy_database_path"],
             replace_existing=result["replace_existing"],
         )
         print(json.dumps(result, ensure_ascii=False, indent=2))

@@ -8,9 +8,11 @@ $stdoutPath = Join-Path $artifactsDir "local_checks.stdout.txt"
 $stderrPath = Join-Path $artifactsDir "local_checks.stderr.txt"
 $coveragePath = Join-Path $artifactsDir "coverage.txt"
 $smokeTimeoutMs = 180000
-$phaseExitCode = 0
+$unitExitCode = 0
 
 New-Item -ItemType Directory -Force -Path $artifactsDir | Out-Null
+$env:TEMP = $artifactsDir
+$env:TMP = $artifactsDir
 
 function Invoke-ExternalProcess {
     param(
@@ -86,59 +88,38 @@ $env:PYTHONPATH = Join-Path $repoRoot "src"
 if (Test-Path $stdoutPath) { Remove-Item -Force $stdoutPath }
 if (Test-Path $stderrPath) { Remove-Item -Force $stderrPath }
 
-"`n== PHASE CHECKS ==" | Add-Content -Encoding UTF8 $outputPath
-$phaseScripts = Get-ChildItem -Path $PSScriptRoot -Filter "run_phase*_checks.ps1" |
-    Sort-Object Name
+"`n== UNIT TESTS ==" | Add-Content -Encoding UTF8 $outputPath
+$unitStdoutPath = Join-Path $artifactsDir "local_checks.unittest.stdout.txt"
+$unitStderrPath = Join-Path $artifactsDir "local_checks.unittest.stderr.txt"
+$unitResult = Invoke-ExternalProcess `
+    -FilePath $pythonCmd `
+    -Arguments @(
+        "-X", "utf8",
+        "-m", "unittest", "discover",
+        "-s", (Join-Path $repoRoot "tests"),
+        "-v"
+    ) `
+    -WorkingDirectory $repoRoot `
+    -TimeoutMs 180000 `
+    -StdoutPath $unitStdoutPath `
+    -StderrPath $unitStderrPath
 
-foreach ($phaseScript in $phaseScripts) {
-    "`n== $($phaseScript.BaseName) ==" | Add-Content -Encoding UTF8 $outputPath
-    $phaseNumber = [regex]::Match($phaseScript.BaseName, "run_phase(\d+)_checks").Groups[1].Value
-    $phaseOutputPath = Join-Path $artifactsDir "phase$phaseNumber`_checks.txt"
-    $phaseStdoutPath = Join-Path $artifactsDir "phase$phaseNumber`_checks.stdout.txt"
-    $phaseStderrPath = Join-Path $artifactsDir "phase$phaseNumber`_checks.stderr.txt"
-
-    @(
-        "Running Phase $phaseNumber checks with $pythonCmd"
-        "PYTHONPATH=$env:PYTHONPATH"
-        ""
-    ) | Set-Content -Encoding UTF8 $phaseOutputPath
-
-    $phaseResult = Invoke-ExternalProcess `
-        -FilePath $pythonCmd `
-        -Arguments @(
-            "-X", "utf8",
-            "-m", "unittest", "discover",
-            "-s", (Join-Path $repoRoot "tests"),
-            "-v"
-        ) `
-        -WorkingDirectory $repoRoot `
-        -TimeoutMs 180000 `
-        -StdoutPath $phaseStdoutPath `
-        -StderrPath $phaseStderrPath
-
-    $currentPhaseExitCode = [int]$phaseResult.ExitCode
-    if ($phaseResult.TimedOut) {
-        $currentPhaseExitCode = 124
-        "phase timed out after timeout_ms=180000" | Add-Content -Encoding UTF8 $phaseOutputPath
-    }
-    $phaseExitCode = [Math]::Max($phaseExitCode, $currentPhaseExitCode)
-
-    if (Test-Path $phaseStdoutPath) {
-        Get-Content $phaseStdoutPath | Add-Content -Encoding UTF8 $phaseOutputPath
-    }
-    if (Test-Path $phaseStderrPath) {
-        "stderr:" | Add-Content -Encoding UTF8 $phaseOutputPath
-        Get-Content $phaseStderrPath | Add-Content -Encoding UTF8 $phaseOutputPath
-    }
-    "process_exit_code=$currentPhaseExitCode" | Add-Content -Encoding UTF8 $phaseOutputPath
-
-    "phase_script=$($phaseScript.Name)" | Add-Content -Encoding UTF8 $outputPath
-    "phase_report=$phaseOutputPath" | Add-Content -Encoding UTF8 $outputPath
-    "phase_process_exit_code=$currentPhaseExitCode" | Add-Content -Encoding UTF8 $outputPath
-    Get-Content $phaseOutputPath | Add-Content -Encoding UTF8 $outputPath
+if ($unitResult.TimedOut) {
+    "`n== TIMEOUT ==" | Add-Content -Encoding UTF8 $outputPath
+    "unittest discover exceeded timeout_ms=180000" | Add-Content -Encoding UTF8 $outputPath
+    $unitExitCode = 124
+} else {
+    $unitExitCode = [int]$unitResult.ExitCode
 }
 
-"`nphase_checks_process_exit_code=$phaseExitCode" | Add-Content -Encoding UTF8 $outputPath
+if (Test-Path $unitStdoutPath) {
+    Get-Content $unitStdoutPath | Add-Content -Encoding UTF8 $outputPath
+}
+if (Test-Path $unitStderrPath) {
+    "`n== UNIT STDERR ==" | Add-Content -Encoding UTF8 $outputPath
+    Get-Content $unitStderrPath | Add-Content -Encoding UTF8 $outputPath
+}
+"`nunittest_process_exit_code=$unitExitCode" | Add-Content -Encoding UTF8 $outputPath
 
 "`n== SMOKE ==" | Add-Content -Encoding UTF8 $outputPath
 $processResult = Invoke-ExternalProcess `
@@ -181,7 +162,7 @@ $coverageExitCode = $LASTEXITCODE
 "coverage_report=$coveragePath" | Add-Content -Encoding UTF8 $outputPath
 "coverage_process_exit_code=$coverageExitCode" | Add-Content -Encoding UTF8 $outputPath
 
-$finalExitCode = [Math]::Max($phaseExitCode, [Math]::Max($exitCode, $coverageExitCode))
+$finalExitCode = [Math]::Max($unitExitCode, [Math]::Max($exitCode, $coverageExitCode))
 "`nprocess_exit_code=$finalExitCode" | Add-Content -Encoding UTF8 $outputPath
 
 Write-Host "Saved result to $outputPath"

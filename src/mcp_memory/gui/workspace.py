@@ -36,8 +36,13 @@ from mcp_memory.services import (
     SearchService,
     StructureService,
     StructureValidationError,
+    GenericWorkflowService,
+    Record,
+    RecordService,
 )
+from mcp_memory.schema import load_project_schema
 from mcp_memory.storage import Database, open_database
+from .generic import generic_workspace_post_action, generic_workspace_response
 
 
 logger = get_logger("ui")
@@ -106,6 +111,8 @@ def workspace_page_html(
 
 def workspace_sidebar(current_url: str, lang: str) -> str:
     items = [
+        ("Entities", with_lang("/ui/entities", lang), "workspace"),
+        ("Records", with_lang("/ui/records", lang), "workspace"),
         ("Binaries", with_lang("/ui/search?entity_type=binary", lang), "entities"),
         ("Functions", with_lang("/ui/functions", lang), "entities"),
         ("Structures", with_lang("/ui/structures", lang), "entities"),
@@ -114,6 +121,7 @@ def workspace_sidebar(current_url: str, lang: str) -> str:
         ("Graph", with_lang("/ui/graph", lang), "workspace"),
         ("Import/Export", with_lang("/ui/import-export", lang), "project"),
         ("Backups", with_lang("/ui/backups", lang), "project"),
+        ("Schema", with_lang("/ui/schema", lang), "project"),
         ("Settings", with_lang("/ui/settings", lang), "project"),
     ]
     path, _, _ = current_url.partition("?")
@@ -124,6 +132,10 @@ def render_workspace_response(project: ProjectConfig, registry: ProjectRegistry,
     path, _, query_string = raw_path.partition("?")
     query = parse_qs(query_string)
     lang = resolve_language(query.get("lang", ["en"])[0])
+
+    generic_response = generic_workspace_response(project, registry, raw_path, workspace_page_html)
+    if generic_response is not None:
+        return generic_response
 
     if path in ("/ui", "/ui/"):
         return (HTTPStatus.OK, render_workspace_dashboard(project, lang))
@@ -190,26 +202,39 @@ def workspace_post_action(project: ProjectConfig, registry: ProjectRegistry, raw
     path, _, query_string = raw_path.partition("?")
     query = parse_qs(query_string)
     lang = resolve_language(query.get("lang", [form_data.get("lang", "en")])[0])
+    generic_action = generic_workspace_post_action(project, registry, raw_path, form_data)
+    if generic_action is not None:
+        return generic_action
     if path.startswith("/ui/pending/") and path.endswith("/confirm"):
         pending_change_id = path[: -len("/confirm")].rsplit("/", 1)[-1]
         with open_database(project.database_path) as database:
-            PendingChangeService(database).confirm_change(
-                project.project_id,
-                pending_change_id,
-                confirmed_by=form_data.get("confirmed_by", "ui"),
-                actor_type="user",
-            )
+            generic_workflow = GenericWorkflowService(database, project)
+            generic_pending = generic_workflow.get_pending_change(pending_change_id)
+            if generic_pending is not None and generic_pending.operation in {"upsert_record", "archive_record", "create_relation", "add_evidence"}:
+                generic_workflow.confirm_change(pending_change_id, confirmed_by=form_data.get("confirmed_by", "ui"), actor_type="user")
+            else:
+                PendingChangeService(database).confirm_change(
+                    project.project_id,
+                    pending_change_id,
+                    confirmed_by=form_data.get("confirmed_by", "ui"),
+                    actor_type="user",
+                )
         log_event(logger, logging.INFO, "pending_confirmed", project_id=project.project_id, pending_change_id=pending_change_id)
         return {"location": with_lang("/ui/pending?flash=confirmed", lang)}
 
     if path.startswith("/ui/pending/") and path.endswith("/reject"):
         pending_change_id = path[: -len("/reject")].rsplit("/", 1)[-1]
         with open_database(project.database_path) as database:
-            PendingChangeService(database).reject_change(
-                project.project_id,
-                pending_change_id,
-                rejected_by=form_data.get("rejected_by", "ui"),
-            )
+            generic_workflow = GenericWorkflowService(database, project)
+            generic_pending = generic_workflow.get_pending_change(pending_change_id)
+            if generic_pending is not None and generic_pending.operation in {"upsert_record", "archive_record", "create_relation", "add_evidence"}:
+                generic_workflow.reject_change(pending_change_id, rejected_by=form_data.get("rejected_by", "ui"))
+            else:
+                PendingChangeService(database).reject_change(
+                    project.project_id,
+                    pending_change_id,
+                    rejected_by=form_data.get("rejected_by", "ui"),
+                )
         log_event(logger, logging.WARNING, "pending_rejected", project_id=project.project_id, pending_change_id=pending_change_id)
         return {"location": with_lang("/ui/pending?flash=rejected", lang)}
 
@@ -251,32 +276,32 @@ def workspace_post_action(project: ProjectConfig, registry: ProjectRegistry, raw
 
 def render_workspace_dashboard(project: ProjectConfig, lang: str) -> str:
     with open_database(project.database_path) as database:
-        functions = FunctionService(database).list_project_functions(project.project_id)
-        structures = StructureService(database).list_project_structures(project.project_id)
-        hypotheses = GlobalHypothesisService(database).list_hypotheses(project.project_id)
-        function_count = len(functions)
-        structure_count = len(structures)
-        hypothesis_count = len(hypotheses)
-        pending_count = len(PendingChangeService(database).list_pending_changes(project.project_id))
-        recent_updates = SearchService(database).search(SearchQuery(project.project_id, limit=5))
+        record_service = RecordService(database, project)
+        schema = load_project_schema(project.schema_path)
+        records = record_service.list_records(limit=1000)
+        recent_records = record_service.list_records(limit=5)
+        archived_count = database.connection.execute(
+            "SELECT COUNT(*) AS count FROM records WHERE project_id = ? AND status = 'archived'",
+            (project.project_id,),
+        ).fetchone()["count"]
+        relation_count = database.connection.execute(
+            "SELECT COUNT(*) AS count FROM relations WHERE project_id = ?",
+            (project.project_id,),
+        ).fetchone()["count"]
+        pending_count = len(GenericWorkflowService(database, project).list_pending_changes("pending"))
 
-    binary_ids = sorted(
-        {
-            item.binary_id
-            for item in [*functions, *structures, *hypotheses]
-            if getattr(item, "binary_id", None)
-        }
-    )
     mcp_endpoint = f"http://{project.mcp_host}:{project.mcp_port}/mcp"
     overview = key_value_grid(
         [
             ("Project ID", project.project_id),
+            ("Schema Version", schema.schema_version),
+            ("Entity Types", str(len(schema.entity_types))),
             ("Write Mode", project.write_mode),
             ("HTTP Endpoint", f"http://{project.http_host}:{project.http_port}"),
             ("MCP Endpoint", mcp_endpoint),
         ]
     )
-    project_summary = "Local offline-first reverse-engineering knowledge base."
+    project_summary = "Local offline-first schema-backed knowledge base for people and agents."
     body = (
         "<main class=\"workspace-shell\">"
         f"{workspace_header(project, 'Project Overview', '/ui/', lang)}"
@@ -287,10 +312,10 @@ def render_workspace_dashboard(project: ProjectConfig, lang: str) -> str:
         f"{overview}"
         f"{mcp_config_block(mcp_endpoint, project.project_id)}"
         "</section>"
-        f"{section('Project Stats', metric_grid(len(binary_ids), function_count, structure_count, hypothesis_count, pending_count), 'The current shape of this local workspace.')}"
-        f"{section('Quick Entries', overview_quick_entries(), 'Open the working surface you need next.')}"
+        f"{section('Project Stats', generic_metric_grid(len(schema.entity_types), len(records), int(archived_count), int(relation_count), pending_count), 'The current shape of this generic workspace.')}"
+        f"{section('Quick Entries', overview_quick_entries(schema), 'Open the working surface you need next.')}"
         f"{section('Storage Paths', overview_storage_paths(project), 'Everything stays local to this project workspace.')}"
-        f"{section('Recent Updates', render_recent_updates(project, recent_updates), 'Latest searchable records from this project.')}"
+        f"{section('Recent Updates', render_recent_records(recent_records, lang), 'Latest generic records from this project.')}"
         "</main>"
     )
     return workspace_page_html(project, "Project Overview", body, "/ui/", lang, title_suffix=f"{project.display_name} Workspace")
@@ -1250,6 +1275,18 @@ def metric_grid(binary_count: int, function_count: int, structure_count: int, hy
     )
 
 
+def generic_metric_grid(entity_type_count: int, record_count: int, archived_count: int, relation_count: int, pending_count: int) -> str:
+    return (
+        "<div class=\"metric-grid\">"
+        f"{metric_card('Entity Types', entity_type_count, 'Types defined in this project schema.')}"
+        f"{metric_card('Active Records', record_count, 'Records visible in default lists and search.')}"
+        f"{metric_card('Archived', archived_count, 'Records kept as history but hidden by default.')}"
+        f"{metric_card('Relations', relation_count, 'Typed links between records.')}"
+        f"{metric_card('Pending', pending_count, 'Generic changes waiting for confirmation.')}"
+        "</div>"
+    )
+
+
 def metric_card(title: str, value: int, description: str) -> str:
     return (
         "<article class=\"metric-card\">"
@@ -1279,17 +1316,23 @@ def quick_links(project: ProjectConfig) -> str:
     )
 
 
-def overview_quick_entries() -> str:
+def overview_quick_entries(schema: Any | None = None) -> str:
     entries = [
-        ("Functions", "/ui/functions", "Review function records and addresses."),
-        ("Structures", "/ui/structures", "Inspect recovered layouts and fields."),
-        ("Hypotheses", "/ui/global-hypotheses", "Track analysis claims separately from facts."),
-        ("Graph", "/ui/graph", "Follow relationships between entities."),
-        ("Search", "/ui/search", "Find records by name, tag, address, or text."),
+        ("Entity Types", "/ui/entities", "Browse the schema-defined record types."),
+        ("Records", "/ui/records", "Scan generic records across the project."),
+        ("Search", "/ui/search", "Find records by title, summary, text, or tags."),
+        ("Graph", "/ui/graph", "Follow typed relationships between records."),
+        ("Evidence", "/ui/evidence", "Attach source material to any record."),
+        ("Schema", "/ui/schema", "Edit project schema JSON."),
         ("Settings", "/ui/settings", "Adjust identity, write mode, and endpoints."),
         ("Import/Export", "/ui/import-export", "Move local project data in and out."),
         ("Backups", "/ui/backups", "Create or restore local project archives."),
     ]
+    if schema is not None:
+        entries.extend(
+            (f"New {entity.label}", f"/ui/records/{entity.name}/new", f"Create a new {entity.name} record.")
+            for entity in schema.entity_types[:4]
+        )
     cards = []
     for title, href, description in entries:
         cards.append(
@@ -1324,6 +1367,25 @@ def render_recent_updates(project: ProjectConfig, items: list[dict[str, Any]]) -
             "<article class=\"mini-card\">"
             f"<div class=\"card-topline\">{badge(human_entity_type(str(item['entity_type'])), 'accent')}{badge(str(item['updated_at']), 'neutral')}</div>"
             f"<h3><a href=\"{escape(resolve_entity_link(project, str(item['entity_type']), str(item['entity_id'])))}\">{escape(title)}</a></h3>"
+            f"<p class=\"body-copy\">{escape(preview or 'No summary available yet.')}</p>"
+            "</article>"
+        )
+    return f"<div class=\"result-list\">{''.join(cards)}</div>"
+
+
+def render_recent_records(items: list[Record], lang: str) -> str:
+    if not items:
+        return empty_state("No recent updates yet", "Created or updated records will appear here once the project has generic content.")
+    cards = []
+    for item in items:
+        preview = item.summary[:160] + ("..." if len(item.summary) > 160 else "")
+        href = with_lang(f"/ui/records/{item.entity_type}/{item.record_id}", lang)
+        identity = item.slug or item.record_id
+        cards.append(
+            "<article class=\"mini-card\">"
+            f"<div class=\"card-topline\">{badge(item.entity_type, 'accent')}{badge(item.updated_at, 'neutral')}</div>"
+            f"<h3><a href=\"{escape(href, quote=True)}\">{escape(item.title)}</a></h3>"
+            f"<p class=\"result-subtitle\">{escape(identity)}</p>"
             f"<p class=\"body-copy\">{escape(preview or 'No summary available yet.')}</p>"
             "</article>"
         )
