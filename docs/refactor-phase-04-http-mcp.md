@@ -1,6 +1,6 @@
 # Phase 04 - Generic HTTP And MCP Surfaces
 
-Status: generic surfaces implemented and verified for v0.3.0; old fixed-code retirement remains cleanup.
+Status: generic surfaces implemented and verified for v0.8.0; old fixed-code paths remain compatibility cleanup.
 
 Goal: replace fixed RE routes and MCP tools with generic schema-aware interfaces.
 

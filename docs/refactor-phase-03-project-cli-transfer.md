@@ -1,6 +1,6 @@
 # Phase 03 - Project Lifecycle, CLI, Transfer, And Legacy Import
 
-Status: complete for v0.3.0 generic project lifecycle, transfer, backup portability, and legacy DB import.
+Status: complete for v0.8.0 generic project lifecycle, transfer, backup portability, and legacy DB import.
 
 Goal: make generic schemas part of project lifecycle and provide import/export paths for generic and legacy data.
 

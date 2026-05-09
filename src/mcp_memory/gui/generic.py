@@ -709,6 +709,8 @@ def _render_entity_type_edit(project: ProjectConfig, entity_name: str, error: st
     widgets = ["text", "textarea", "number", "bool", "enum", "tags", "json", "datetime", "url", "path"]
     field_rows = "".join(_entity_edit_field_row(idx, entity, field, widgets, lang) for idx, field in enumerate(entity.fields))
     next_idx = len(entity.fields)
+    relation_rows = "".join(_entity_edit_relation_row(idx, relation, lang) for idx, relation in enumerate(schema.relation_types))
+    next_rel_idx = len(schema.relation_types)
     gui_form = (
         f'{error_html}<form class="project-form entity-editor-form" method="post" action="{escape(with_lang(f"/ui/entities/{entity.name}/edit", lang), quote=True)}">'
         '<input type="hidden" name="form_mode" value="gui">'
@@ -743,17 +745,34 @@ def _render_entity_type_edit(project: ProjectConfig, entity_name: str, error: st
             f'<thead><tr><th></th><th>{escape(_ui_text("Field", lang))}</th><th>{escape(_ui_text("Label", lang))}</th><th>{escape(_ui_text("Type", lang))}</th><th>{escape(_ui_text("Required", lang))}</th><th>{escape(_ui_text("Role", lang))}</th><th>{escape(_ui_text("Actions", lang))}</th></tr></thead>'
             f'<tbody class="entity-editor-fields">{field_rows}</tbody></table></div>',
         )
+        + _constructor_section(
+            "Relation Types (optional)",
+            '<button type="button" class="button button-secondary button-small constructor-add-button" onclick="addEntityEditRelationRow()">'
+            + icon_span("Add Relation Type", "button-icon")
+            + "Add Relation Type</button>",
+            '<div class="constructor-table-wrap"><table class="constructor-table entity-editor-table">'
+            f'<thead><tr><th></th><th>{escape(_ui_text("Relation Name", lang))}</th><th>{escape(_ui_text("Relation Label", lang))}</th><th>{escape(_ui_text("From", lang))}</th><th>{escape(_ui_text("To", lang))}</th><th>{escape(_ui_text("Directed", lang))}</th><th>{escape(_ui_text("Actions", lang))}</th></tr></thead>'
+            f'<tbody class="entity-editor-relations">{relation_rows}</tbody></table></div>',
+        )
         + '<div class="form-actions"><button class="button button-primary" type="submit">Save Entity Type</button>'
         + f'<a class="button button-secondary" href="{escape(with_lang("/ui/entities", lang), quote=True)}">Cancel</a></div>'
         "</form>"
         "<script>"
         f"var _eefIdx={next_idx};"
+        f"var _eerIdx={next_rel_idx};"
         "function addEntityEditFieldRow(){"
         'var c=document.querySelector(".entity-editor-fields");'
         "c.insertAdjacentHTML('beforeend'," + json.dumps(_entity_edit_field_row_js_template(widgets, lang)) + ".replace(/__IDX__/g,_eefIdx));"
         "_eefIdx++;"
         "}"
         "function removeEntityEditFieldRow(btn){btn.closest('.constructor-field-row').remove();}"
+        "function addEntityEditRelationRow(){"
+        'var c=document.querySelector(".entity-editor-relations");'
+        "c.insertAdjacentHTML('beforeend'," + json.dumps(_constructor_relation_row_js_template(lang)) + ".replace(/__IDX__/g,_eerIdx));"
+        "_eerIdx++;"
+        "}"
+        "function removeEntityEditRelationRow(btn){btn.closest('.constructor-relation-row').remove();}"
+        "function removeConstructorRelationRow(btn){removeEntityEditRelationRow(btn);}"
         "function toggleEnumOptions(sel){"
         'var row=sel.closest(".constructor-field-row");'
         'var el=row.querySelector(".constructor-enum-line");'
@@ -796,6 +815,8 @@ def _submit_entity_type_edit(project: ProjectConfig, entity_name: str, form_data
                 break
         else:
             raise ValueError(f"unknown entity type: {entity_name}")
+        if form_data.get("form_mode") != "raw" and any(key.startswith("rel_name_") for key in form_data):
+            payload["relation_types"] = _relation_payloads_from_editor_form(form_data)
         ProjectSchema.from_dict(payload)
         copy_schema_payload(project.schema_path, payload)
     except (ValueError, KeyError, json.JSONDecodeError) as exc:
@@ -919,6 +940,21 @@ def _entity_edit_field_row_js_template(widgets: list[str], lang: str) -> str:
     )
 
 
+def _entity_edit_relation_row(idx: int, relation: Any, lang: str) -> str:
+    directed_attr = " checked" if relation.directed else ""
+    return (
+        '<tr class="constructor-relation-row entity-editor-relation-row">'
+        '<td class="constructor-drag-cell"><span class="drag-handle" aria-hidden="true"></span></td>'
+        f'<td><input name="rel_name_{idx}" required pattern="[a-z][a-z0-9_]*" value="{escape(relation.name, quote=True)}"></td>'
+        f'<td><input name="rel_label_{idx}" required value="{escape(relation.label, quote=True)}"></td>'
+        f'<td><input name="rel_from_{idx}" required value="{escape(", ".join(relation.from_types), quote=True)}"></td>'
+        f'<td><input name="rel_to_{idx}" required value="{escape(", ".join(relation.to_types), quote=True)}"></td>'
+        f'<td class="constructor-center"><input class="constructor-checkbox" type="checkbox" name="rel_directed_{idx}" value="true"{directed_attr}></td>'
+        f'<td><div class="constructor-row-actions">{_constructor_icon_button("Delete", "removeEntityEditRelationRow(this)", "danger")}</div></td>'
+        "</tr>"
+    )
+
+
 def _entity_payload_from_editor_form(entity_name: str, form_data: dict[str, str]) -> dict[str, Any]:
     fields = []
     required = []
@@ -970,6 +1006,24 @@ def _entity_payload_from_editor_form(entity_name: str, form_data: dict[str, str]
         "search_fields": search_fields,
         "tag_fields": tag_fields,
     }
+
+
+def _relation_payloads_from_editor_form(form_data: dict[str, str]) -> list[dict[str, Any]]:
+    relation_types = []
+    for idx in _indexed_form_suffixes(form_data, "rel_name_"):
+        relation_name = form_data.get(f"rel_name_{idx}", "").strip()
+        if not relation_name:
+            continue
+        relation_types.append(
+            {
+                "name": relation_name,
+                "label": form_data.get(f"rel_label_{idx}", "").strip() or relation_name,
+                "from": _split_csv(form_data.get(f"rel_from_{idx}", "")),
+                "to": _split_csv(form_data.get(f"rel_to_{idx}", "")),
+                "directed": form_data.get(f"rel_directed_{idx}") == "true",
+            }
+        )
+    return relation_types
 
 
 def _render_entity_types_with_error(project: ProjectConfig, error: str, lang: str) -> str:

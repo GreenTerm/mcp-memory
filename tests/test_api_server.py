@@ -774,6 +774,8 @@ class ApiServerTests(unittest.TestCase):
         self.assertIn("Ticket", edit_html)
         self.assertIn("entity-editor-form", edit_html)
         self.assertIn("entity-editor-fields", edit_html)
+        self.assertIn("entity-editor-relations", edit_html)
+        self.assertIn("Relation Types (optional)", edit_html)
         self.assertIn("raw-schema-panel", edit_html)
         self.assertIn("Edit raw schema JSON", edit_html)
         self.assertIn('name="field_label_0"', edit_html)
@@ -791,6 +793,11 @@ class ApiServerTests(unittest.TestCase):
                 "field_description_0": "Visible title for the support ticket.",
                 "field_title_0": "true",
                 "field_search_0": "true",
+                "rel_name_0": "ticket_relates_to",
+                "rel_label_0": "Ticket Relates To",
+                "rel_from_0": "ticket",
+                "rel_to_0": "note",
+                "rel_directed_0": "true",
             },
         )
         self.assertIn("Support Ticket", updated_html)
@@ -798,6 +805,7 @@ class ApiServerTests(unittest.TestCase):
         ticket_after_gui = next(item for item in schema_after_gui["entity_types"] if item["name"] == "ticket")
         self.assertEqual(ticket_after_gui["fields"][0]["label"], "Ticket Title")
         self.assertEqual(ticket_after_gui["fields"][0]["description"], "Visible title for the support ticket.")
+        self.assertIn("ticket_relates_to", [item["name"] for item in schema_after_gui["relation_types"]])
 
         raw_payload = dict(ticket_after_gui)
         raw_payload["description"] = "Raw updated"

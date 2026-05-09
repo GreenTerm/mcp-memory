@@ -1,13 +1,13 @@
 # Phase 01 - Schema And Storage Foundation
 
-Status: complete for v0.3.0 generic model; fixed-table cleanup pending.
+Status: complete for v0.8.0 generic model; fixed-table cleanup remains compatibility cleanup.
 
 Goal: introduce the project-local schema DSL and generic SQLite foundation while keeping the repository understandable during the big-bang transition.
 
 ## Already Done
 
 - Added `Jinja2>=3.1,<4` to `pyproject.toml`.
-- Project package version is now `0.3.0`.
+- Project package version is now `0.8.0`.
 - Added package-data entries for GUI templates and bundled schemas.
 - Added `ProjectConfig.schema_path` with backward-compatible loading.
 - Added `src/mcp_memory/schema.py` with schema dataclasses, validation, bundled schema loading, and project schema save/load helpers.

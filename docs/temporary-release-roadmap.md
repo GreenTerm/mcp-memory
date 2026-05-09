@@ -1,6 +1,6 @@
 # Temporary Release Roadmap
 
-Version: 0.3.0.
+Version: 0.8.0.
 
 Status: temporary planning document. This file is intentionally separate from stable release notes so the roadmap can be edited freely while the project is still being shaped toward a 1.0 release.
 
@@ -16,17 +16,39 @@ Bring `mcp-memory` from a working schema-first local knowledge base to a release
 - safe schema editing and data operations
 - documentation that lets a new user create and operate a project without guessing
 
+## Progress Through 0.8.0
+
+Status markers:
+
+- [x] `0.3.1` Dashboard and UI consistency patch
+- [x] `0.4.0` Schema Builder beta
+- [x] `0.5.0` Operations and offline install hardening
+- [x] `0.6.0` Agent workflow hardening
+- [x] `0.7.0` Search and graph usability baseline
+- [x] `0.8.0` Legacy code retirement/isolation baseline
+- [ ] `0.9.0` Release candidate
+- [ ] `1.0.0` Stable local knowledge base
+
+Completed notes:
+
+- The workbench UI direction is now the default server-rendered GUI direction, with compact dashboard panels, grouped navigation, table-like schema editors, styled destructive actions, and RU/EN localization passes on touched pages.
+- Entity create/edit/delete flows are GUI-first. Field editing and relation type editing are structured; raw JSON remains behind an advanced disclosure.
+- DNS/path gateway, backup/restore, import/export, offline wheel workflow, and local operation docs are covered in README and temporary release docs.
+- MCP prompts and tool metadata are schema-aware and include usage examples plus required/optional payload guidance for the active schema.
+- Search has regression coverage for technical text and graph pages expose focused relation browsing with caps handled in tests.
+- Fixed reverse-engineering surfaces remain compatibility code for existing tests and users, but the documented product path is generic schema-first. `reverse_engineering.schema.json` and `import-legacy-db` remain supported.
+
 ## Current State
 
-The project is not yet a 1.0 product. It is closer to a strong `0.3.x` or early beta:
+The project is not yet a 1.0 product. It is now a `0.8.0` pre-release:
 
 - the generic data model and adapters exist
 - the DNS/path gateway exists
 - MCP prompts and tool metadata are schema-aware
-- GUI has a new workbench direction, but some pages and states still need consistency passes
+- GUI has a new workbench direction, with remaining polish mostly around visual QA and edge states
 - tests are healthy, but visual regression coverage is still manual/ad hoc
-- old reverse-engineering transitional code remains in the repository
-- offline installation and clean-machine release checks still need a formal checklist
+- old reverse-engineering transitional code is isolated as compatibility surface rather than the documented main path
+- offline installation and clean-machine release checks are documented, but still need a formal release-candidate dry run
 
 ## Release Themes Before 1.0
 
@@ -75,6 +97,8 @@ The project is not yet a 1.0 product. It is closer to a strong `0.3.x` or early 
 
 ### 0.3.1: Dashboard And UI Consistency Patch
 
+Status: done in `0.8.0` baseline.
+
 Goal: stabilize the current workbench redesign and remove obvious visual regressions.
 
 Scope:
@@ -96,6 +120,8 @@ Exit criteria:
 - Playwright smoke script or equivalent manual checklist covers dashboard, entities, record create, search, graph, settings
 
 ### 0.4.0: Schema Builder Beta
+
+Status: done in `0.8.0` baseline.
 
 Goal: make schema editing feel intentional rather than transitional.
 
@@ -119,6 +145,8 @@ Exit criteria:
 
 ### 0.5.0: Operations And Offline Install Hardening
 
+Status: done in `0.8.0` baseline.
+
 Goal: make the local product reliable to install, move, backup, restore, and run offline.
 
 Scope:
@@ -141,6 +169,8 @@ Exit criteria:
 
 ### 0.6.0: Agent Workflow Hardening
 
+Status: done in `0.8.0` baseline.
+
 Goal: make MCP usage robust for real agent workflows.
 
 Scope:
@@ -161,6 +191,8 @@ Exit criteria:
 
 ### 0.7.0: Search And Graph Usability
 
+Status: done as baseline in `0.8.0`; richer graph interactions stay post-0.8 backlog.
+
 Goal: make retrieval and relation browsing good enough for larger projects.
 
 Scope:
@@ -180,6 +212,8 @@ Exit criteria:
 - exact retrieval and FTS behavior are documented
 
 ### 0.8.0: Legacy Code Retirement
+
+Status: done as isolation baseline. Compatibility surfaces remain documented instead of fully removed.
 
 Goal: reduce internal confusion before 1.0 by removing or isolating old fixed RE surfaces.
 
@@ -276,4 +310,3 @@ Low priority:
 - Export, import, backup, and restore one sample project.
 - Connect an MCP client and call read/write tools.
 - Review `git status` for generated artifacts before commit.
-

@@ -1,6 +1,6 @@
 # Phase 06 - Tests, Smoke Checks, And Documentation
 
-Status: unit tests and generic smoke checks pass for v0.3.0; coverage threshold still needs a follow-up pass.
+Status: unit tests, generic smoke checks, and coverage threshold pass for v0.8.0.
 
 Goal: replace fixed RE verification with generic model verification and keep local Windows checks reliable.
 

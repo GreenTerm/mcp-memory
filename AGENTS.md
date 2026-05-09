@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Project version: 0.3.0.
+Project version: 0.8.0.
 
 Instructions for Codex in this repository. These notes should be treated as persistent project guidance and merged with task-specific user instructions.
 

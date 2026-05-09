@@ -1,6 +1,6 @@
 # Future Plans
 
-Version: 0.3.0.
+Version: 0.8.0.
 
 This list tracks work that is still useful after the generic schema-first refactor, DNS/path gateway, and schema-aware MCP instructions.
 
@@ -8,7 +8,7 @@ Temporary release planning lives in [Temporary Release Roadmap](temporary-releas
 
 ## 1. Search Query Polish
 
-Status: basic FTS escaping for hyphenated text shipped after the 0.3.0 review. Queries such as `gui-seed` are now quoted before reaching SQLite FTS.
+Status: basic FTS escaping for hyphenated text shipped before 0.8.0. Queries such as `gui-seed` are now quoted before reaching SQLite FTS.
 
 Goal:
 
@@ -18,7 +18,7 @@ Goal:
 
 ## 2. Retire Fixed RE Transitional Code
 
-The v0.3.0 public surface is generic, but some old function/structure/hypothesis routes, services, and GUI paths still exist to keep tests and import workflows stable during the transition.
+The 0.8.0 public docs describe the generic schema-first surface, but some old function/structure/hypothesis routes, services, and GUI paths still exist to keep tests and import workflows stable during the transition.
 
 Goal:
 
@@ -29,14 +29,10 @@ Goal:
 
 ## 3. Full Schema Builder Editing
 
-The GUI can create entity types, fields, and relation types. It still needs richer editing.
+The GUI can create and edit entity types, fields, and relation types. It still needs richer record-impact warnings.
 
 Goal:
 
-- edit/delete entity types
-- edit/delete fields
-- structured required/title/summary/slug/search/tag edits
-- edit/delete relation types
 - clear warnings when schema edits make existing records incomplete
 
 ## 4. Larger Project UX
