@@ -2,7 +2,7 @@
 
 `mcp-memory` 1.0.0 is a local offline-first schema-driven knowledge base for people and agents.
 
-Projects are stored as isolated Windows-local workspaces with SQLite, files on disk, a JSON HTTP API, an MCP Streamable HTTP endpoint, and a server-rendered web UI. The current vNext model is generic: each project has a portable `schema.json` that defines its entity types, fields, search metadata, and relation types.
+Projects are stored as isolated Windows-local workspaces with SQLite, files on disk, a JSON HTTP API, an MCP Streamable HTTP endpoint, and a server-rendered web UI. The current model is generic: each project has a portable `schema.json` that defines its entity types, fields, search metadata, and relation types.
 
 ## Features
 
@@ -368,5 +368,5 @@ The release check validates version metadata, docs links, bundled schemas, unit 
 - [Release 0.3.0 notes](docs/release-0.3.0.md)
 - [Release 0.8.0 notes](docs/release-0.8.0.md)
 - [Release 1.0.0 notes](docs/release-1.0.0.md)
-- [Temporary release roadmap](docs/temporary-release-roadmap.md)
+- [Release roadmap and backlog](docs/temporary-release-roadmap.md)
 - [Future plans](docs/future-plans.md)

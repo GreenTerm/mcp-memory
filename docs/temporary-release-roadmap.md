@@ -1,8 +1,8 @@
-# Temporary Release Roadmap
+# Release Roadmap And Backlog
 
 Version: 1.0.0.
 
-Status: temporary planning document. This file is intentionally separate from stable release notes so the roadmap can be edited freely while the project is still being shaped toward a 1.0 release.
+Status: post-1.0 roadmap and backlog. This file remains separate from stable release notes so planning can be edited freely without changing historical release notes.
 
 ## Product Goal
 
@@ -16,7 +16,7 @@ Bring `mcp-memory` from a working schema-first local knowledge base to a release
 - safe schema editing and data operations
 - documentation that lets a new user create and operate a project without guessing
 
-## Progress Through 0.8.0
+## Progress Through 1.0.0
 
 Status markers:
 
@@ -33,7 +33,7 @@ Completed notes:
 
 - The workbench UI direction is now the default server-rendered GUI direction, with compact dashboard panels, grouped navigation, table-like schema editors, styled destructive actions, and RU/EN localization passes on touched pages.
 - Entity create/edit/delete flows are GUI-first. Field editing and relation type editing are structured; raw JSON remains behind an advanced disclosure.
-- DNS/path gateway, backup/restore, import/export, offline wheel workflow, and local operation docs are covered in README and temporary release docs.
+- DNS/path gateway, backup/restore, import/export, offline wheel workflow, and local operation docs are covered in README and release docs.
 - MCP prompts and tool metadata are schema-aware and include usage examples plus required/optional payload guidance for the active schema.
 - Search has regression coverage for technical text and graph pages expose focused relation browsing with caps handled in tests.
 - Fixed reverse-engineering surfaces remain compatibility code for existing tests and users, but the documented product path is generic schema-first. `reverse_engineering.schema.json` and `import-legacy-db` remain supported.
@@ -51,7 +51,7 @@ The project is now at the `1.0.0` stable local baseline:
 - old reverse-engineering transitional code is isolated as compatibility surface rather than the documented main path
 - offline installation and clean-machine release checks are documented; clean-machine execution remains an external release ritual
 
-## Release Themes Before 1.0
+## Post-1.0 Backlog Themes
 
 ### UX And Visual Polish
 

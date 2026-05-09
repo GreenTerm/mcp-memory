@@ -16,7 +16,7 @@ Goal: replace fixed RE verification with generic model verification and keep loc
   - Added focused generic GUI tests.
   - Added focused generic transfer service and HTTP export/import tests.
   - Added legacy importer tests using an old-style sample DB.
-  - Updated old-transition tests to match the generic vNext contract where the public surface changed.
+  - Updated old-transition tests to match the generic schema-first contract where the public surface changed.
   - Converted `scripts/local_smoke_check.py` to use bundled schemas and generic API/MCP/GUI.
   - Simplified `scripts/run_local_checks.ps1` so it runs the full unit suite once instead of repeating it once per phase file.
   - Updated README/docs for schema templates, generic APIs, MCP tools, legacy import, and offline Jinja2 wheel workflow.
@@ -26,7 +26,6 @@ Goal: replace fixed RE verification with generic model verification and keep loc
 
 - Not done yet:
   - Remove remaining fixed API/GUI/service tests after fixed transitional code is retired.
-  - Raise or re-scope coverage back to the configured `fail_under = 95`; current generic vNext coverage report is 87%.
 
 ## Acceptance Checks
 
@@ -35,4 +34,4 @@ Goal: replace fixed RE verification with generic model verification and keep loc
   - Generic smoke check passes.
 
 - Not done yet:
-  - Coverage remains below the project threshold and needs a dedicated recovery pass.
+  - Fixed transitional code still has compatibility tests until those surfaces are retired.

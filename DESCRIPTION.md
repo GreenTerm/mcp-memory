@@ -17,7 +17,7 @@ Primary interfaces:
 
 ## Current State
 
-Implemented in version 0.3.0:
+Implemented in version 1.0.0:
 
 - Global app registry and isolated per-project workspaces.
 - Project-local `schema.json` plus bundled schema templates.
@@ -49,7 +49,7 @@ Implemented in version 0.3.0:
 
 ## Data Model
 
-The public v0.3.0 model is generic:
+The public 1.0.0 model is generic:
 
 - `schema.json` defines entity types, fields, required fields, title/summary/slug/search/tag fields, and relation types.
 - `records` stores schema-specific payloads by entity type.

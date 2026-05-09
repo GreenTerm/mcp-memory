@@ -86,13 +86,13 @@ Completed in the current implementation pass:
 - Converted local smoke check to bundled-schema generic API/MCP/GUI coverage.
 - Updated README/user docs for generic schemas, generic API/MCP, legacy import, and offline dependencies.
 - Added initial schema tests.
-- Converted full test suite expectations to the generic vNext contract and verified all tests pass.
+- Converted full test suite expectations to the generic schema-first contract and verified all tests pass.
 - Integrated selected `mcp-memory-main-0.2.0` changes without copying the snapshot wholesale; data migration/import is intentionally left for a later fully-ready version.
 - Added Home UI DNS/path gateway and `AppConfig.base_url`.
 - Added schema-aware MCP agent instructions with tool examples and required/optional field references.
 - Updated project version to 1.0.0.
 
-Important note: generic vNext is implemented and verified, but old fixed RE services/API/GUI still exist as transitional code. The legacy importer uses the old data shape as an input format, so fixed-code retirement should be handled separately.
+Important note: the generic schema-first surface is implemented and verified, but old fixed RE services/API/GUI still exist as transitional code. The legacy importer uses the old data shape as an input format, so fixed-code retirement should be handled separately.
 
 ## Target Direction
 
@@ -125,7 +125,7 @@ The system should support:
 
 - Target model: schema-first with a custom simple DSL.
 - Internal protocol: typed commands/queries/events through a central dispatcher.
-- Migration strategy: breaking vNext refactor, with a separate legacy importer for old databases.
+- Migration strategy: breaking schema-first refactor, with a separate legacy importer for old databases.
 - Old public surfaces: replace with generic HTTP/MCP/GUI surfaces; no permanent compatibility wrappers.
 - GUI: use Jinja2 and schema-generated forms.
 - Record identity: generated UUID `record_id`.

@@ -4,7 +4,7 @@ Version: 1.0.0.
 
 This list tracks work that is still useful after the generic schema-first refactor, DNS/path gateway, and schema-aware MCP instructions.
 
-Temporary release planning lives in [Temporary Release Roadmap](temporary-release-roadmap.md).
+Release planning and the post-1.0 backlog live in [Release Roadmap And Backlog](temporary-release-roadmap.md).
 
 ## 1. Search Query Polish
 

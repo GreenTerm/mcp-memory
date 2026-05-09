@@ -34,7 +34,7 @@ Goal: introduce the project-local schema DSL and generic SQLite foundation while
 
 ## Remaining Work
 
-- Decide what old fixed RE tables remain temporarily for transition/legacy import and what is removed in vNext cleanup.
+- Decide what old fixed RE tables remain for compatibility/legacy import and what can be removed in a post-1.0 cleanup.
 - Rename or document `entity_versions` as the generic version table, since the original plan called it `record_versions`.
 - Extend schema-layer tests only as the DSL grows.
 
