@@ -10,7 +10,8 @@ New-Item -ItemType Directory -Force -Path $artifactsDir | Out-Null
 $env:TEMP = $artifactsDir
 $env:TMP = $artifactsDir
 
-if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
+$pythonCommand = Get-Command python -ErrorAction SilentlyContinue
+if (-not $pythonCommand) {
     @(
         "No Python interpreter found."
         "Expected 'python' in PATH."
@@ -19,7 +20,7 @@ if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
     exit 1
 }
 
-$pythonCmd = "python"
+$pythonCmd = $pythonCommand.Source
 $env:PYTHONPATH = Join-Path $repoRoot "src"
 
 "Running coverage with $pythonCmd" | Set-Content -Encoding UTF8 $outputPath

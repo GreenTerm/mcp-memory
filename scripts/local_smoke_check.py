@@ -221,10 +221,17 @@ def main() -> int:
         wait_for_json(f"http://127.0.0.1:{http_port}/health")
         wait_for_json(f"http://127.0.0.1:{mcp_port}/health")
         wait_for_text(f"http://127.0.0.1:{ui_home_port}/")
+        gateway_base = f"http://127.0.0.1:{ui_home_port}/smoke-project"
+        gateway_ui = wait_for_text(f"{gateway_base}/ui/?lang=en")
+        if "Smoke Project" not in gateway_ui and "Project Overview" not in gateway_ui:
+            raise RuntimeError("Home gateway did not render project UI")
 
         schema = get_json(f"http://127.0.0.1:{http_port}/schema")
         if schema["entity_types"][0]["name"] != "note":
             raise RuntimeError("HTTP schema did not expose default note entity")
+        gateway_schema = get_json(f"{gateway_base}/schema")
+        if gateway_schema["entity_types"][0]["name"] != "note":
+            raise RuntimeError("Home gateway schema proxy did not expose default note entity")
         created = post_json(
             f"http://127.0.0.1:{http_port}/records/note",
             {"payload": {"slug": "http-note", "title": "HTTP Note", "body": "HTTP searchable body"}, "created_by": "smoke"},
@@ -238,6 +245,10 @@ def main() -> int:
         tool_names = {item["name"] for item in tools}
         if {"get_schema", "upsert_record", "search_records"} - tool_names:
             raise RuntimeError("MCP generic tools are missing")
+        gateway_tools = rpc(f"{gateway_base}/mcp", "tools/list", {})["result"]["tools"]
+        gateway_tool_names = {item["name"] for item in gateway_tools}
+        if {"get_schema", "upsert_record", "search_records"} - gateway_tool_names:
+            raise RuntimeError("Home gateway MCP proxy is missing generic tools")
         mcp_created = call_tool(
             f"http://127.0.0.1:{mcp_port}/mcp",
             "upsert_record",

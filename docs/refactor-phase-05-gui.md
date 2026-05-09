@@ -1,6 +1,6 @@
 # Phase 05 - Generic Jinja2 GUI
 
-Status: generic GUI and Home UI gateway implemented and verified for v0.8.0; old fixed pages still exist as compatibility code.
+Status: generic GUI and Home UI gateway implemented and verified for v1.0.0; old fixed pages still exist as compatibility code.
 
 Goal: replace fixed function/structure/hypothesis UI with schema-generated generic pages.
 

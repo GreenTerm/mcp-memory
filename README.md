@@ -1,6 +1,6 @@
 # mcp-memory
 
-`mcp-memory` 0.8.0 is a local offline-first schema-driven knowledge base for people and agents.
+`mcp-memory` 1.0.0 is a local offline-first schema-driven knowledge base for people and agents.
 
 Projects are stored as isolated Windows-local workspaces with SQLite, files on disk, a JSON HTTP API, an MCP Streamable HTTP endpoint, and a server-rendered web UI. The current vNext model is generic: each project has a portable `schema.json` that defines its entity types, fields, search metadata, and relation types.
 
@@ -353,11 +353,20 @@ powershell -ExecutionPolicy Bypass -File .\scripts\run_local_checks.ps1
 
 Smoke output is written under `artifacts/`.
 
+Run the full release check before tagging a release:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_release_check.ps1
+```
+
+The release check validates version metadata, docs links, bundled schemas, unit tests, local smoke, and coverage. Output is written to `artifacts/release_check.txt`.
+
 ## Additional Docs
 
 - [Module guide](docs/modules.md)
 - [Generic refactor status](docs/generic-knowledge-refactor-plan.md)
 - [Release 0.3.0 notes](docs/release-0.3.0.md)
 - [Release 0.8.0 notes](docs/release-0.8.0.md)
+- [Release 1.0.0 notes](docs/release-1.0.0.md)
 - [Temporary release roadmap](docs/temporary-release-roadmap.md)
 - [Future plans](docs/future-plans.md)

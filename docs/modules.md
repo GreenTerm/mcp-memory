@@ -1,8 +1,8 @@
 # Module Guide
 
-Version: 0.8.0.
+Version: 1.0.0.
 
-Short navigation for the current `mcp-memory` codebase. The project is now a schema-driven local knowledge base: old reverse-engineering services still exist for legacy compatibility/import paths, but the public 0.8.0 surface is generic records, typed relations, evidence, search, HTTP, MCP, CLI, and server-rendered GUI.
+Short navigation for the current `mcp-memory` codebase. The project is now a schema-driven local knowledge base: old reverse-engineering services still exist for legacy compatibility/import paths, but the public 1.0.0 surface is generic records, typed relations, evidence, search, HTTP, MCP, CLI, and server-rendered GUI.
 
 ## High-Level Layout
 

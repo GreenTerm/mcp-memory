@@ -1,6 +1,6 @@
 # Future Plans
 
-Version: 0.8.0.
+Version: 1.0.0.
 
 This list tracks work that is still useful after the generic schema-first refactor, DNS/path gateway, and schema-aware MCP instructions.
 
@@ -8,7 +8,7 @@ Temporary release planning lives in [Temporary Release Roadmap](temporary-releas
 
 ## 1. Search Query Polish
 
-Status: basic FTS escaping for hyphenated text shipped before 0.8.0. Queries such as `gui-seed` are now quoted before reaching SQLite FTS.
+Status: basic FTS escaping for hyphenated text shipped before 1.0.0. Queries such as `gui-seed` are now quoted before reaching SQLite FTS.
 
 Goal:
 
@@ -18,7 +18,7 @@ Goal:
 
 ## 2. Retire Fixed RE Transitional Code
 
-The 0.8.0 public docs describe the generic schema-first surface, but some old function/structure/hypothesis routes, services, and GUI paths still exist to keep tests and import workflows stable during the transition.
+The 1.0.0 public docs describe the generic schema-first surface, but some old function/structure/hypothesis routes, services, and GUI paths still exist to keep tests and import workflows stable during the transition.
 
 Goal:
 

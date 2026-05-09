@@ -1,6 +1,6 @@
 # Temporary Release Roadmap
 
-Version: 0.8.0.
+Version: 1.0.0.
 
 Status: temporary planning document. This file is intentionally separate from stable release notes so the roadmap can be edited freely while the project is still being shaped toward a 1.0 release.
 
@@ -26,8 +26,8 @@ Status markers:
 - [x] `0.6.0` Agent workflow hardening
 - [x] `0.7.0` Search and graph usability baseline
 - [x] `0.8.0` Legacy code retirement/isolation baseline
-- [ ] `0.9.0` Release candidate
-- [ ] `1.0.0` Stable local knowledge base
+- [x] `0.9.0` Release candidate
+- [x] `1.0.0` Stable local knowledge base
 
 Completed notes:
 
@@ -37,18 +37,19 @@ Completed notes:
 - MCP prompts and tool metadata are schema-aware and include usage examples plus required/optional payload guidance for the active schema.
 - Search has regression coverage for technical text and graph pages expose focused relation browsing with caps handled in tests.
 - Fixed reverse-engineering surfaces remain compatibility code for existing tests and users, but the documented product path is generic schema-first. `reverse_engineering.schema.json` and `import-legacy-db` remain supported.
+- Release checks are repeatable through `scripts/run_release_check.ps1`; the local smoke check now verifies direct HTTP/MCP and Home gateway UI/API/MCP paths.
 
 ## Current State
 
-The project is not yet a 1.0 product. It is now a `0.8.0` pre-release:
+The project is now at the `1.0.0` stable local baseline:
 
 - the generic data model and adapters exist
 - the DNS/path gateway exists
 - MCP prompts and tool metadata are schema-aware
-- GUI has a new workbench direction, with remaining polish mostly around visual QA and edge states
-- tests are healthy, but visual regression coverage is still manual/ad hoc
+- GUI has the workbench direction as the normal product path, with future polish tracked as backlog
+- tests, local smoke, gateway smoke, and coverage are repeatable through release scripts
 - old reverse-engineering transitional code is isolated as compatibility surface rather than the documented main path
-- offline installation and clean-machine release checks are documented, but still need a formal release-candidate dry run
+- offline installation and clean-machine release checks are documented; clean-machine execution remains an external release ritual
 
 ## Release Themes Before 1.0
 
@@ -234,6 +235,8 @@ Exit criteria:
 
 ### 0.9.0: Release Candidate
 
+Status: done in `1.0.0` baseline.
+
 Goal: freeze behavior and focus on bugs, docs, and repeatability.
 
 Scope:
@@ -255,6 +258,8 @@ Exit criteria:
 - release checklist can be executed from scratch
 
 ### 1.0.0: Stable Local Knowledge Base
+
+Status: done.
 
 Goal: mark the first stable release for local offline schema-first knowledge bases.
 

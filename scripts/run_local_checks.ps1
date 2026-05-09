@@ -70,8 +70,9 @@ function Invoke-ExternalProcess {
 }
 
 $pythonCmd = $null
-if (Get-Command python -ErrorAction SilentlyContinue) {
-    $pythonCmd = "python"
+$pythonCommand = Get-Command python -ErrorAction SilentlyContinue
+if ($pythonCommand) {
+    $pythonCmd = $pythonCommand.Source
 }
 
 if (-not $pythonCmd) {
@@ -157,7 +158,7 @@ if (Test-Path $stderrPath) {
 "`nsmoke_process_exit_code=$exitCode" | Add-Content -Encoding UTF8 $outputPath
 
 "`n== COVERAGE ==" | Add-Content -Encoding UTF8 $outputPath
-powershell -ExecutionPolicy Bypass -File (Join-Path $repoRoot "scripts\run_coverage.ps1") | Out-Null
+& (Join-Path $repoRoot "scripts\run_coverage.ps1") | Out-Null
 $coverageExitCode = $LASTEXITCODE
 "coverage_report=$coveragePath" | Add-Content -Encoding UTF8 $outputPath
 "coverage_process_exit_code=$coverageExitCode" | Add-Content -Encoding UTF8 $outputPath

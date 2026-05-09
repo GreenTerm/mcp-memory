@@ -1,6 +1,6 @@
 # UI Redesign Implementation Plan
 
-Version: 0.8.0.
+Version: 1.0.0.
 
 This plan tracks the current UI polish pass for the server-rendered MCP Memory GUI. The goal is to keep the app simple and offline-friendly while making the workspace feel more like a dense professional knowledge tool than a collection of large cards.
 

@@ -1,6 +1,6 @@
 # Phase 02 - Generic Core Services And Protocol
 
-Status: complete for v0.8.0 generic model; fixed services remain isolated compatibility code.
+Status: complete for v1.0.0 generic model; fixed services remain isolated compatibility code.
 
 Goal: replace fixed RE services with generic records, relations, evidence, pending workflow, and a typed in-process protocol.
 

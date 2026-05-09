@@ -4,7 +4,7 @@ Working plan for the big-bang refactor from a fixed reverse-engineering knowledg
 
 ## Current Status
 
-Status: v0.8.0 generic implementation is complete for schema, core, adapters, GUI, DNS/path gateway, MCP instructions, transfer, backup, legacy import, smoke checks, and unit tests. Old fixed-code surfaces are isolated as compatibility paths; release-candidate polish remains.
+Status: v1.0.0 generic implementation is complete for schema, core, adapters, GUI, DNS/path gateway, MCP instructions, transfer, backup, legacy import, smoke checks, release checks, and unit tests. Old fixed-code surfaces are isolated as compatibility paths.
 
 ## Status Snapshot
 
@@ -29,7 +29,7 @@ Status: v0.8.0 generic implementation is complete for schema, core, adapters, GU
 - Selected `mcp-memory-main-0.2.0` GUI work has been integrated into the main implementation: `/ui/entities/new` entity type constructor, optional relation type creation from that form, constructor hints/translations/styles, generic-only workspace sidebar, and next-available port defaults in Home GUI project forms.
 - Legacy DB importer is implemented as `import-legacy-db` and maps current old RE state into `reverse_engineering.schema.json`.
 - Local smoke checks use bundled schemas and generic HTTP/MCP/GUI surfaces.
-- README/user docs describe version 0.8.0, generic schemas, DNS/path gateway, API, MCP, legacy import, and offline dependency workflow.
+- README/user docs describe version 1.0.0, generic schemas, DNS/path gateway, API, MCP, legacy import, and offline dependency workflow.
 - Full test suite passes: `python -X utf8 -m unittest discover -s tests -v` ran 155 tests successfully.
 - `scripts/run_local_checks.ps1` no longer repeats the full test suite once per phase file; it now runs unit tests once, then smoke, then coverage.
 
@@ -90,7 +90,7 @@ Completed in the current implementation pass:
 - Integrated selected `mcp-memory-main-0.2.0` changes without copying the snapshot wholesale; data migration/import is intentionally left for a later fully-ready version.
 - Added Home UI DNS/path gateway and `AppConfig.base_url`.
 - Added schema-aware MCP agent instructions with tool examples and required/optional field references.
-- Updated project version to 0.8.0.
+- Updated project version to 1.0.0.
 
 Important note: generic vNext is implemented and verified, but old fixed RE services/API/GUI still exist as transitional code. The legacy importer uses the old data shape as an input format, so fixed-code retirement should be handled separately.
 
