@@ -158,11 +158,15 @@ class GuiHomeTests(unittest.TestCase):
                 with request.urlopen(base_url + "/assets/ui.js") as response:
                     js = response.read().decode("utf-8")
 
-                self.assertIn("Pick up your reverse-engineering workspace", html)
+                self.assertIn("Open a local knowledge workspace", html)
+                self.assertIn("home-topbar", html)
+                self.assertIn("project-shelf-section", html)
                 self.assertIn('data-theme="dark"', html)
                 self.assertIn('<script src="/assets/ui.js" defer></script>', html)
                 self.assertIn("Test Project", html)
                 self.assertIn("DB Path", html)
+                self.assertIn("Local Runtime", html)
+                self.assertIn("project-card-section", html)
                 self.assertIn("Copy MCP config", html)
                 self.assertIn("mcp-config-test-project", html)
                 self.assertIn("Running", html)
@@ -357,6 +361,15 @@ class GuiHomeTests(unittest.TestCase):
                 request.urlopen(base_url + "/missing-project/ui/")
             with self.assertRaises(error.HTTPError) as stopped_ctx:
                 request.urlopen(base_url + "/test-project/ui/")
+            with self.assertRaises(error.HTTPError) as stopped_api_ctx:
+                request.urlopen(
+                    request.Request(
+                        base_url + "/test-project/records/note",
+                        data=json.dumps({"payload": {"title": "Stopped"}}).encode("utf-8"),
+                        method="POST",
+                        headers={"Content-Type": "application/json; charset=utf-8"},
+                    )
+                )
             with self.assertRaises(error.HTTPError) as stopped_mcp_ctx:
                 request.urlopen(
                     request.Request(
@@ -370,6 +383,8 @@ class GuiHomeTests(unittest.TestCase):
             self.assertEqual(missing_ctx.exception.code, 404)
             self.assertEqual(stopped_ctx.exception.code, 503)
             self.assertIn("Start Project", stopped_ctx.exception.read().decode("utf-8"))
+            self.assertEqual(stopped_api_ctx.exception.code, 503)
+            self.assertIn("project_unavailable", stopped_api_ctx.exception.read().decode("utf-8"))
             self.assertEqual(stopped_mcp_ctx.exception.code, 503)
             self.assertIn("project_unavailable", stopped_mcp_ctx.exception.read().decode("utf-8"))
         finally:

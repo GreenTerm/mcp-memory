@@ -60,6 +60,9 @@ Main suites:
 - `tests/test_api_server.py`
 - `tests/test_mcp_server.py`
 - `tests/test_gui_home.py`
+- `tests/test_runtime_manager.py`
+- `tests/test_config_cli.py`
+- `tests/test_coverage_targets.py`
 - `tests/test_transfer_archive.py`
 - `scripts/local_smoke_check.py`
 

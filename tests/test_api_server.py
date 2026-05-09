@@ -169,6 +169,47 @@ class ApiServerTests(unittest.TestCase):
         self.assertEqual(archived["status"], "archived")
         self.assertEqual(self._get_status("/records/note/api-note"), 404)
 
+    def test_generic_http_put_and_bad_record_routes(self) -> None:
+        schema = self._get_json("/schema")
+        updated_schema = self._put_json("/schema", schema)
+        self.assertEqual(updated_schema["status"], "updated")
+
+        created = self._post_json(
+            "/records/note",
+            {"payload": {"slug": "put-note", "title": "Before PUT"}, "created_by": "tester"},
+        )
+        updated = self._put_json(
+            "/records/note/put-note",
+            {"payload": {"slug": "put-note", "title": "After PUT", "summary": "Updated"}, "updated_by": "tester"},
+        )
+        self.assertEqual(updated["record_id"], created["record_id"])
+        self.assertEqual(updated["title"], "After PUT")
+
+        created_by_put = self._put_json(
+            "/records/note/explicit-put-id",
+            {"payload": {"slug": "put-created", "title": "Created by PUT"}, "created_by": "tester"},
+        )
+        self.assertEqual(created_by_put["record_id"], "explicit-put-id")
+        self.assertEqual(created_by_put["slug"], "put-created")
+
+        self.assertEqual(self._get_status("/records/note/too/many"), 404)
+        self.assertEqual(self._post_status("/records/note/id/extra/archive", {}), 404)
+        self.assertEqual(self._post_status("/records/note/id", {"payload": {"title": "Bad route"}}), 404)
+        self.assertEqual(self._post_status("/records/note", {"payload": []}), 400)
+        self.assertEqual(self._put_status("/records/note/put-note", {"payload": []}), 400)
+        self.assertEqual(self._put_status("/records/note/put-note/extra", {"payload": {"title": "Bad"}}), 404)
+        self.assertEqual(self._put_status("/missing", {}), 404)
+
+        invalid_req = request.Request(
+            self.base_url + "/schema",
+            data=b"{bad json",
+            headers={"Content-Type": "application/json; charset=utf-8"},
+            method="PUT",
+        )
+        with self.assertRaises(error.HTTPError) as ctx:
+            request.urlopen(invalid_req)
+        self.assertEqual(ctx.exception.code, 400)
+
     def test_generic_http_relation_evidence_and_pending_routes(self) -> None:
         first = self._post_json("/records/note", {"payload": {"slug": "first", "title": "First"}, "created_by": "tester"})
         second = self._post_json("/records/note", {"payload": {"slug": "second", "title": "Second"}, "created_by": "tester"})
@@ -352,6 +393,8 @@ class ApiServerTests(unittest.TestCase):
         self.assertIn('aria-label="Search workspace"', dashboard_html)
         self.assertIn('aria-label="Language selector"', dashboard_html)
         self.assertIn('aria-label="Workspace navigation"', dashboard_html)
+        self.assertIn('class="sidebar-section-title">Knowledge</p>', dashboard_html)
+        self.assertIn('class="sidebar-section-title">Operations</p>', dashboard_html)
         self.assertIn('aria-label="Breadcrumbs"', dashboard_html)
         self.assertIn('data-theme-toggle', dashboard_html)
         self.assertEqual(dashboard_html.count("language-switcher"), 1)
@@ -366,7 +409,14 @@ class ApiServerTests(unittest.TestCase):
         self.assertIn("Обзор проекта", dashboard_ru_html)
         self.assertIn("Project Stats", dashboard_html)
         self.assertIn("Quick Entries", dashboard_html)
+        self.assertIn('class="action-card"', dashboard_html)
+        self.assertIn('class="action-card-head"', dashboard_html)
+        self.assertIn('class="action-card-icon"', dashboard_html)
+        self.assertIn('class="action-card-title">Entity Types</span>', dashboard_html)
+        self.assertNotIn('class="quick-link action-card"', dashboard_html)
         self.assertIn("Storage Paths", dashboard_html)
+        self.assertIn('class="path-list"', dashboard_html)
+        self.assertIn('<code class="key-value">', dashboard_html)
         self.assertIn("Recent Updates", dashboard_html)
         self.assertIn("Copy MCP config", dashboard_html)
         self.assertIn("http://127.0.0.1:19876/mcp", dashboard_html)
@@ -460,10 +510,14 @@ class ApiServerTests(unittest.TestCase):
         self.assertIn(".skip-link", css)
         self.assertIn(".sidebar-collapsed .sidebar-link", css)
         self.assertIn(".sidebar-collapsed .app-sidebar", css)
+        self.assertIn(".sidebar-section-title", css)
         self.assertIn(".graph-canvas", css)
         self.assertIn(".workspace-back-link", css)
         self.assertIn(".empty-state-body", css)
         self.assertIn(".action-card-title", css)
+        self.assertIn(".action-card-icon", css)
+        self.assertIn(".record-form-grid", css)
+        self.assertIn(".record-form .record-field-control", css)
         self.assertIn("mcp-memory-theme", js)
 
     def test_generic_ui_record_flow_and_schema_page(self) -> None:
@@ -473,6 +527,13 @@ class ApiServerTests(unittest.TestCase):
 
         new_html = self._get_text("/ui/records/note/new")
         self.assertIn("Record Form", new_html)
+        self.assertIn('class="project-form record-form"', new_html)
+        self.assertIn('class="form-grid record-form-grid"', new_html)
+        self.assertIn('class="form-field record-form-field"', new_html)
+        self.assertIn('class="record-field-control"', new_html)
+        self.assertIn("hint-wrap", new_html)
+        self.assertIn("friendly unique slug", new_html)
+        self.assertIn("Required field.", new_html)
         self.assertIn('name="title"', new_html)
 
         posted = self._post_form_text(
@@ -578,10 +639,19 @@ class ApiServerTests(unittest.TestCase):
         self.assertIn("/ui/entities/new", entities_html)
         self.assertIn("/ui/entities/note/edit", entities_html)
         self.assertIn("/ui/entities/note/delete", entities_html)
+        self.assertIn("entity-type-card", entities_html)
+        self.assertIn("entity-type-grid", entities_html)
+        self.assertIn("Required Fields", entities_html)
+        self.assertIn("New Record", entities_html)
+        self.assertIn("button-danger", entities_html)
 
         constructor_html = self._get_text("/ui/entities/new")
         self.assertIn("New Entity Type", constructor_html)
         self.assertIn("hint-wrap", constructor_html)
+        self.assertIn("constructor-table", constructor_html)
+        self.assertIn("constructor-role-pills", constructor_html)
+        self.assertIn("constructor-add-button", constructor_html)
+        self.assertIn("icon-button-danger", constructor_html)
         self.assertIn('name="name"', constructor_html)
         self.assertIn('name="label"', constructor_html)
         self.assertIn('name="description"', constructor_html)
@@ -702,26 +772,50 @@ class ApiServerTests(unittest.TestCase):
         edit_html = self._get_text("/ui/entities/ticket/edit")
         self.assertIn("Edit Entity Type", edit_html)
         self.assertIn("Ticket", edit_html)
+        self.assertIn("entity-editor-form", edit_html)
+        self.assertIn("entity-editor-fields", edit_html)
+        self.assertIn("raw-schema-panel", edit_html)
+        self.assertIn("Edit raw schema JSON", edit_html)
+        self.assertIn('name="field_label_0"', edit_html)
 
-        entity_payload = {
-            "name": "ticket",
-            "label": "Support Ticket",
-            "description": "Updated",
-            "fields": [{"name": "title", "label": "Title", "widget": "text"}],
-            "required": [],
-            "title_field": "title",
-            "summary_field": "",
-            "slug_field": "",
-            "search_fields": ["title"],
-            "tag_fields": [],
-        }
-        updated_html = self._post_form_text("/ui/entities/ticket/edit", {"entity_json": json.dumps(entity_payload)})
+        updated_html = self._post_form_text(
+            "/ui/entities/ticket/edit",
+            {
+                "form_mode": "gui",
+                "name": "ticket",
+                "label": "Support Ticket",
+                "description": "Updated",
+                "field_name_0": "title",
+                "field_label_0": "Ticket Title",
+                "field_widget_0": "text",
+                "field_description_0": "Visible title for the support ticket.",
+                "field_title_0": "true",
+                "field_search_0": "true",
+            },
+        )
         self.assertIn("Support Ticket", updated_html)
+        schema_after_gui = self._get_json("/schema")
+        ticket_after_gui = next(item for item in schema_after_gui["entity_types"] if item["name"] == "ticket")
+        self.assertEqual(ticket_after_gui["fields"][0]["label"], "Ticket Title")
+        self.assertEqual(ticket_after_gui["fields"][0]["description"], "Visible title for the support ticket.")
+
+        raw_payload = dict(ticket_after_gui)
+        raw_payload["description"] = "Raw updated"
+        raw_updated_html = self._post_form_text("/ui/entities/ticket/edit", {"form_mode": "raw", "entity_json": json.dumps(raw_payload)})
+        self.assertIn("Raw updated", raw_updated_html)
+
+        delete_page = self._get_text("/ui/entities/ticket/delete")
+        self.assertIn("Delete Entity Type", delete_page)
+        self.assertIn("danger-zone", delete_page)
 
         deleted_html = self._post_form_text("/ui/entities/ticket/delete", {})
         self.assertNotIn("Support Ticket", deleted_html)
         schema = self._get_json("/schema")
         self.assertNotIn("ticket", [item["name"] for item in schema["entity_types"]])
+
+        failed_delete_html = self._post_form_text("/ui/entities/note/delete", {})
+        self.assertIn("<!DOCTYPE html>", failed_delete_html)
+        self.assertIn("schema must keep at least one entity type", failed_delete_html)
 
     def test_generic_ui_entity_type_constructor_rejects_invalid(self) -> None:
         result_html = self._post_form_text(
@@ -904,6 +998,7 @@ class ApiServerTests(unittest.TestCase):
         self.assertEqual(created_relation["relation_type"], "uses_structure")
         self.assertGreaterEqual(len(search_result["items"]), 1)
         self.assertEqual(len(self._get_json("/relations?entity_type=function&entity_id=fn_main")["items"]), 1)
+        self.assertEqual(len(self._get_json("/relations?entity_type=function&entity_id=missing")["items"]), 0)
         self.assertEqual(len(self._get_json("/related?entity_type=function&entity_id=fn_main&hops=1")["items"]), 1)
         self.assertEqual(self._get_json("/structures/struct_ctx")["structure_id"], "struct_ctx")
         self.assertEqual(self._get_json("/global-hypotheses/gh1")["hypothesis_id"], "gh1")
@@ -1352,6 +1447,16 @@ class ApiServerTests(unittest.TestCase):
         with request.urlopen(req) as response:
             return json.loads(response.read().decode("utf-8"))
 
+    def _put_json(self, path: str, payload: dict) -> dict:
+        req = request.Request(
+            self.base_url + path,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json; charset=utf-8"},
+            method="PUT",
+        )
+        with request.urlopen(req) as response:
+            return json.loads(response.read().decode("utf-8"))
+
     def _get_text(self, path: str) -> str:
         with request.urlopen(self.base_url + path) as response:
             return response.read().decode("utf-8")
@@ -1372,6 +1477,20 @@ class ApiServerTests(unittest.TestCase):
     def _get_status(self, path: str) -> int:
         try:
             self._get_text(path)
+        except error.HTTPError as exc:
+            return exc.code
+        return 200
+
+    def _post_status(self, path: str, payload: dict) -> int:
+        try:
+            self._post_json(path, payload)
+        except error.HTTPError as exc:
+            return exc.code
+        return 200
+
+    def _put_status(self, path: str, payload: dict) -> int:
+        try:
+            self._put_json(path, payload)
         except error.HTTPError as exc:
             return exc.code
         return 200

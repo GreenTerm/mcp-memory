@@ -1,8 +1,7 @@
-"""Core package for the offline-first RE knowledge base."""
+"""Core package for the offline-first schema-driven knowledge base."""
 
 __all__ = [
     "__version__",
 ]
 
-__version__ = "0.1.0"
-
+__version__ = "0.3.0"

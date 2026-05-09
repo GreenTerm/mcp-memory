@@ -54,9 +54,15 @@ from .render import (
     empty_state,
     flash_banner,
     html_page,
+    icon_span,
+    inner_empty_state,
     key_value_grid,
     load_asset_text,
     mcp_config_block,
+    nav_tile_grid,
+    page_header,
+    panel,
+    property_grid,
     section,
     shell_command,
     sidebar_nav,
@@ -91,7 +97,7 @@ def workspace_page_html(
     _, _, query_string = current_url.partition("?")
     query = parse_qs(query_string)
     search_query = query.get("q", [""])[0]
-    sidebar = workspace_sidebar(current_url, lang)
+    sidebar = workspace_sidebar(project, current_url, lang)
     topbar = top_search(
         with_lang("/ui/search", lang),
         search_query,
@@ -113,7 +119,7 @@ def workspace_page_html(
     )
 
 
-def workspace_sidebar(current_url: str, lang: str) -> str:
+def workspace_sidebar(project: ProjectConfig, current_url: str, lang: str) -> str:
     items = [
         ("Projects", home_ui_href(lang), "home"),
         ("Entities", with_lang("/ui/entities", lang), "workspace"),
@@ -126,7 +132,14 @@ def workspace_sidebar(current_url: str, lang: str) -> str:
         ("Settings", with_lang("/ui/settings", lang), "project"),
     ]
     path, _, _ = current_url.partition("?")
-    return sidebar_nav(items, active_href=path, brand_href=with_lang("/ui/", lang))
+    footer = (
+        '<div class="sidebar-project-status">'
+        '<span class="sidebar-status-dot" aria-hidden="true"></span>'
+        f'<div><strong>Project: {escape(project.project_id)}</strong>'
+        f'<span>Mode: {escape(project.write_mode)}</span></div>'
+        '</div>'
+    )
+    return sidebar_nav(items, active_href=path, brand_href=with_lang("/ui/", lang), footer_html=footer)
 
 
 def render_workspace_response(project: ProjectConfig, registry: ProjectRegistry, raw_path: str) -> tuple[HTTPStatus, str] | None:
@@ -205,6 +218,15 @@ def workspace_post_action(project: ProjectConfig, registry: ProjectRegistry, raw
     lang = resolve_language(query.get("lang", [form_data.get("lang", "en")])[0])
     generic_action = generic_workspace_post_action(project, registry, raw_path, form_data)
     if generic_action is not None:
+        if "html" in generic_action and not str(generic_action["html"]).lstrip().lower().startswith("<!doctype"):
+            generic_action = dict(generic_action)
+            generic_action["html"] = workspace_page_html(
+                project,
+                "Workspace",
+                str(generic_action["html"]),
+                raw_path,
+                lang,
+            )
         return generic_action
     if path.startswith("/ui/pending/") and path.endswith("/confirm"):
         pending_change_id = path[: -len("/confirm")].rsplit("/", 1)[-1]
@@ -292,7 +314,7 @@ def render_workspace_dashboard(project: ProjectConfig, lang: str) -> str:
         pending_count = len(GenericWorkflowService(database, project).list_pending_changes("pending"))
 
     mcp_endpoint = f"http://{project.mcp_host}:{project.mcp_port}/mcp"
-    overview = key_value_grid(
+    overview = property_grid(
         [
             ("Project ID", project.project_id),
             ("Schema Version", schema.schema_version),
@@ -303,20 +325,25 @@ def render_workspace_dashboard(project: ProjectConfig, lang: str) -> str:
         ]
     )
     project_summary = "Local offline-first schema-backed knowledge base for people and agents."
+    back_action = f'<a class="quick-link workspace-back-link" href="{escape(home_ui_href(lang), quote=True)}">Back to Projects</a>'
+    project_panel = (
+        '<div class="project-overview-layout">'
+        '<div class="project-overview-copy">'
+        f"<h2>{escape(project.display_name)}</h2>"
+        f"<p>{escape(project_summary)}</p>"
+        "</div>"
+        f"{overview}"
+        "</div>"
+        f"{mcp_config_block(mcp_endpoint, project.project_id)}"
+    )
     body = (
         "<main class=\"workspace-shell\">"
-        f"{workspace_header(project, 'Project Overview', '/ui/', lang)}"
-        "<section class=\"entity-hero\">"
-        f"{render_header_meta([badge('Project', 'accent')])}"
-        f"<h2>{escape(project.display_name)}</h2>"
-        f"<p class=\"entity-subtitle\">{escape(project_summary)}</p>"
-        f"{overview}"
-        f"{mcp_config_block(mcp_endpoint, project.project_id)}"
-        "</section>"
-        f"{section('Project Stats', generic_metric_grid(len(schema.entity_types), len(records), int(archived_count), int(relation_count), pending_count), 'The current shape of this generic workspace.')}"
-        f"{section('Quick Entries', overview_quick_entries(schema), 'Open the working surface you need next.')}"
-        f"{section('Storage Paths', overview_storage_paths(project), 'Everything stays local to this project workspace.')}"
-        f"{section('Recent Updates', render_recent_records(recent_records, lang), 'Latest generic records from this project.')}"
+        f"{page_header('Project Overview', f'{project.display_name} - {project.project_id}', actions_html=back_action)}"
+        f"{panel('Project', project_panel, class_name='project-overview-panel')}"
+        f"{panel('Project Stats', generic_metric_grid(len(schema.entity_types), len(records), int(archived_count), int(relation_count), pending_count), 'The current shape of this generic workspace.', 'stats-panel')}"
+        f"{panel('Quick Entries', overview_quick_entries(schema), 'Open the working surface you need next.', 'quick-entries-panel')}"
+        f"{panel('Storage Paths', overview_storage_paths(project), 'Everything stays local to this project workspace.', 'paths-panel')}"
+        f"{panel('Recent Updates', render_recent_records(recent_records, lang), 'Latest generic records from this project.', 'recent-panel')}"
         "</main>"
     )
     return workspace_page_html(project, "Project Overview", body, "/ui/", lang, title_suffix=f"{project.display_name} Workspace")
@@ -1290,7 +1317,7 @@ def generic_metric_grid(entity_type_count: int, record_count: int, archived_coun
 
 def metric_card(title: str, value: int, description: str) -> str:
     return (
-        "<article class=\"metric-card\">"
+        "<article class=\"stat-cell metric-card\">"
         f"<p class=\"metric-title\">{escape(title)}</p>"
         f"<p class=\"metric-value\">{escape(str(value))}</p>"
         f"<p class=\"metric-description\">{escape(description)}</p>"
@@ -1334,26 +1361,24 @@ def overview_quick_entries(schema: Any | None = None) -> str:
             (f"New {entity.label}", f"/ui/records/{entity.name}/new", f"Create a new {entity.name} record.")
             for entity in schema.entity_types[:4]
         )
-    cards = []
-    for title, href, description in entries:
-        cards.append(
-            "<a class=\"quick-link action-card\" href=\"{0}\">"
-            "<span class=\"action-card-title\">{1}</span>"
-            "<span class=\"action-card-description\">{2}</span>"
-            "</a>".format(escape(href, quote=True), escape(title), escape(description))
-        )
-    return f"<div class=\"link-grid action-grid\">{''.join(cards)}</div>"
+    return nav_tile_grid([(title, href, description, title) for title, href, description in entries])
 
 
 def overview_storage_paths(project: ProjectConfig) -> str:
-    return '<div class="path-list">' + key_value_grid(
-        [
-            ("DB Path", str(project.database_path)),
-            ("Exports Dir", str(project.exports_dir)),
-            ("Backups Dir", str(project.backups_dir)),
-            ("Project Root", str(project.project_root)),
-        ]
-    ) + "</div>"
+    rows = []
+    for label, value in [
+        ("DB Path", str(project.database_path)),
+        ("Exports Dir", str(project.exports_dir)),
+        ("Backups Dir", str(project.backups_dir)),
+        ("Project Root", str(project.project_root)),
+    ]:
+        rows.append(
+            "<div class=\"property-row key-value-item\">"
+            f"<span class=\"key-label\">{escape(label)}</span>"
+            f"<code class=\"key-value\">{escape(value)}</code>"
+            "</div>"
+        )
+    return f"<div class=\"path-list\"><div class=\"property-grid key-value-grid\">{''.join(rows)}</div></div>"
 
 
 def render_recent_updates(project: ProjectConfig, items: list[dict[str, Any]]) -> str:
@@ -1376,21 +1401,20 @@ def render_recent_updates(project: ProjectConfig, items: list[dict[str, Any]]) -
 
 def render_recent_records(items: list[Record], lang: str) -> str:
     if not items:
-        return empty_state("No recent updates yet", "Created or updated records will appear here once the project has generic content.")
+        return inner_empty_state("No recent updates yet", "Created or updated records will appear here once the project has generic content.")
     cards = []
     for item in items:
         preview = item.summary[:160] + ("..." if len(item.summary) > 160 else "")
         href = with_lang(f"/ui/records/{item.entity_type}/{item.record_id}", lang)
         identity = item.slug or item.record_id
         cards.append(
-            "<article class=\"mini-card\">"
-            f"<div class=\"card-topline\">{badge(item.entity_type, 'accent')}{badge(item.updated_at, 'neutral')}</div>"
-            f"<h3><a href=\"{escape(href, quote=True)}\">{escape(item.title)}</a></h3>"
-            f"<p class=\"result-subtitle\">{escape(identity)}</p>"
-            f"<p class=\"body-copy\">{escape(preview or 'No summary available yet.')}</p>"
+            "<article class=\"data-list-row recent-record-row\">"
+            f"<div class=\"data-list-main\"><h3><a href=\"{escape(href, quote=True)}\">{escape(item.title)}</a></h3>"
+            f"<p>{escape(preview or 'No summary available yet.')}</p></div>"
+            f"<div class=\"data-list-meta\">{badge(item.entity_type, 'accent')}<span>{escape(identity)}</span><span>{escape(item.updated_at)}</span></div>"
             "</article>"
         )
-    return f"<div class=\"result-list\">{''.join(cards)}</div>"
+    return f"<div class=\"data-list recent-record-list\">{''.join(cards)}</div>"
 
 
 def search_form(q: str, entity_type: str, binary_id: str, tag: str, lang: str) -> str:

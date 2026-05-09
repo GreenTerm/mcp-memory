@@ -4,7 +4,7 @@ Working plan for the big-bang refactor from a fixed reverse-engineering knowledg
 
 ## Current Status
 
-Status: v0.3.0 generic implementation is complete for schema, core, adapters, GUI, DNS/path gateway, MCP instructions, transfer, backup, legacy import, smoke checks, and unit tests. Coverage recovery and old fixed-code retirement remain cleanup items.
+Status: v0.3.0 generic implementation is complete for schema, core, adapters, GUI, DNS/path gateway, MCP instructions, transfer, backup, legacy import, smoke checks, and unit tests. Old fixed-code retirement and larger-project polish remain cleanup items.
 
 ## Status Snapshot
 
@@ -30,7 +30,7 @@ Status: v0.3.0 generic implementation is complete for schema, core, adapters, GU
 - Legacy DB importer is implemented as `import-legacy-db` and maps current old RE state into `reverse_engineering.schema.json`.
 - Local smoke checks use bundled schemas and generic HTTP/MCP/GUI surfaces.
 - README/user docs describe version 0.3.0, generic schemas, DNS/path gateway, API, MCP, legacy import, and offline dependency workflow.
-- Full test suite passes: `python -X utf8 -m unittest discover -s tests -v` ran 143 tests successfully.
+- Full test suite passes: `python -X utf8 -m unittest discover -s tests -v` ran 155 tests successfully.
 - `scripts/run_local_checks.ps1` no longer repeats the full test suite once per phase file; it now runs unit tests once, then smoke, then coverage.
 
 ### Not Done Yet
@@ -39,14 +39,14 @@ Status: v0.3.0 generic implementation is complete for schema, core, adapters, GU
 - Old fixed RE service code still exists and has not been removed.
 - Schema builder can add entity types, fields, and relation types, but does not yet provide full edit/delete/migration UX.
 - Generated schema-specific MCP convenience tools are not implemented.
-- Coverage is below the configured threshold after the big-bang generic GUI/API expansion; this remains a cleanup item.
+- Larger-project UX still needs validation for pagination, graph caps, and dense browsing.
 
 ### Latest Verification
 
-The latest full verification passed:
+The latest direct unit verification passed:
 
 - Command: `python -X utf8 -m unittest discover -s tests -v`
-- Result: 143 tests, OK.
+- Result: 155 tests, OK.
 
 The work has been split into phase files:
 
@@ -305,4 +305,4 @@ Before treating the codebase as fully cleaned up, finish:
 
 - old fixed route/page/service cleanup
 - generated schema-specific MCP wrappers if they are still desired
-- coverage recovery to the configured threshold
+- larger-project UX verification and graph/search polish

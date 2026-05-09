@@ -46,6 +46,8 @@ class ProjectService:
             raise ValueError("write_mode must be one of: confirm, auto")
         if http_port <= 0 or mcp_port <= 0:
             raise ValueError("http_port and mcp_port must be positive integers")
+        if http_port > 65535 or mcp_port > 65535:
+            raise ValueError("http_port and mcp_port must be between 1 and 65535")
         if http_port == mcp_port:
             raise ValueError("http_port and mcp_port must be different")
         if project_root.exists() and not project_root.is_dir():

@@ -22,10 +22,10 @@
 
 ## Verification
 
-Latest full suite:
+Latest direct unit suite:
 
 ```powershell
 python -X utf8 -m unittest discover -s tests -v
 ```
 
-Result: 143 tests, OK.
+Result: 155 tests, OK.

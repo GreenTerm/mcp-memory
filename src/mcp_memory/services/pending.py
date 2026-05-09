@@ -196,7 +196,7 @@ class PendingChangeService:
         return updated
 
     def _apply_operation(self, record: PendingChangeRecord, actor_type: str) -> Any:
-        from mcp_memory.api.server import (
+        from mcp_memory.services.legacy_payloads import (
             evidence_write_from_payload,
             function_write_from_payload,
             global_hypothesis_write_from_payload,

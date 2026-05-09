@@ -161,14 +161,24 @@ class GenericRelationService:
                         if key in seen:
                             continue
                         seen.add(key)
+                        record = self._records.get_record(candidate_type, candidate_id)
+                        if record is None:
+                            continue
                         next_frontier.append(key)
-                        record = self._records.get_record(candidate_type, candidate_id, include_archived=True)
+                        relation_type = self._relation_type(relation.relation_type)
+                        relation_direction = "out" if key == (relation.to_entity_type, relation.to_record_id) else "in"
                         related.append(
                             {
                                 "entity_type": candidate_type,
                                 "record_id": candidate_id,
                                 "title": None if record is None else record.title,
                                 "relation_type": relation.relation_type,
+                                "relation_directed": relation_type.directed,
+                                "relation_direction": relation_direction,
+                                "from_entity_type": relation.from_entity_type,
+                                "from_record_id": relation.from_record_id,
+                                "to_entity_type": relation.to_entity_type,
+                                "to_record_id": relation.to_record_id,
                             }
                         )
             frontier = next_frontier

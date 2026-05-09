@@ -408,7 +408,7 @@ def build_home_handler(
             return True
 
         def _send_gateway_unavailable(self, project: ProjectConfig, runtime: ProjectRuntimeInfo, public_root: str) -> None:
-            if self.path.endswith("/mcp") or "application/json" in self.headers.get("Accept", ""):
+            if self._gateway_request_wants_json():
                 self._send_json(
                     {"error": {"code": "project_unavailable", "message": runtime.reason, "project_id": project.project_id}},
                     status=HTTPStatus.SERVICE_UNAVAILABLE,
@@ -429,6 +429,32 @@ def build_home_handler(
                 html_page("Project unavailable", body, "/assets/app.css", page_class="warm-lab"),
                 status=HTTPStatus.SERVICE_UNAVAILABLE,
             )
+
+        def _gateway_request_wants_json(self) -> bool:
+            if self.path.endswith("/mcp"):
+                return True
+            if "application/json" in self.headers.get("Accept", ""):
+                return True
+            if "application/json" in self.headers.get("Content-Type", ""):
+                return True
+            path = urlparse(self.path).path
+            parts = [segment for segment in path.split("/") if segment]
+            stripped_path = "/" + "/".join(parts[1:]) if len(parts) > 1 else ""
+            api_roots = (
+                "/schema",
+                "/entity-types",
+                "/records",
+                "/relations",
+                "/related",
+                "/evidence",
+                "/search",
+                "/pending-changes",
+                "/export",
+                "/import",
+                "/backup",
+                "/restore",
+            )
+            return any(stripped_path == root or stripped_path.startswith(f"{root}/") for root in api_roots)
 
         def _proxy_to_project(self, project: ProjectConfig, public_root: str, path: str, query: str, use_mcp: bool) -> None:
             body = b""
@@ -701,6 +727,7 @@ def render_home_page(
     create_url = f"/projects/new?lang={lang}"
     setup_url = f"/setup?lang={lang}"
     global_flash_html = render_home_flash(flash, lang) if flash and not flash_project_id else ""
+    topbar = render_home_topbar(current_url, lang, create_url, setup_url)
 
     if projects:
         content = "".join(
@@ -715,11 +742,12 @@ def render_home_page(
             for project in projects
         )
         body = (
-            "<main class=\"home-shell\">"
-            f"{language_switcher(current_url, lang)}"
-            "<section class=\"hero-card\">"
-            f"<h1>{translate_text(lang, 'Pick up your reverse-engineering workspace.')}</h1>"
-            f"<p class=\"hero-copy\">{translate_text(lang, 'Every project stays local, searchable, and easy to reopen. This screen helps you find the right workspace and see whether it is already running.')}</p>"
+            "<main class=\"home-shell home-hub\">"
+            f"{topbar}"
+            "<section class=\"hero-card home-hero\">"
+            "<p class=\"eyebrow\">mcp-memory</p>"
+            f"<h1>{translate_text(lang, 'Open a local knowledge workspace.')}</h1>"
+            f"<p class=\"hero-copy\">{translate_text(lang, 'Projects stay local, schema-driven, searchable, and available through one DNS/path gateway for people and agents.')}</p>"
             "<div class=\"hero-actions\">"
             f"<a class=\"button button-primary\" href=\"{escape(create_url, quote=True)}\">{translate_text(lang, 'New Project')}</a>"
             f"<a class=\"button button-secondary\" href=\"{escape(setup_url, quote=True)}\">{translate_text(lang, 'Setup Guide')}</a>"
@@ -727,16 +755,20 @@ def render_home_page(
             "</section>"
             f"{global_flash_html}"
             f"{render_base_url_settings(registry, public_root, lang)}"
-            f"<section class=\"project-grid\">{content}</section>"
+            "<section class=\"panel-section project-shelf-section\">"
+            "<div class=\"section-heading\"><h2>Projects</h2><p class=\"section-subtitle\">Start, open, and route each local workspace from one place.</p></div>"
+            f"<div class=\"project-grid\">{content}</div>"
+            "</section>"
             "</main>"
         )
     else:
         body = (
-            "<main class=\"home-shell\">"
-            f"{language_switcher(current_url, lang)}"
-            "<section class=\"hero-card\">"
+            "<main class=\"home-shell home-hub\">"
+            f"{topbar}"
+            "<section class=\"hero-card home-hero\">"
+            "<p class=\"eyebrow\">mcp-memory</p>"
             f"<h1>{translate_text(lang, 'Your project shelf is empty.')}</h1>"
-            f"<p class=\"hero-copy\">{translate_text(lang, 'Create the first workspace from the browser, then start it when you are ready.')}</p>"
+            f"<p class=\"hero-copy\">{translate_text(lang, 'Create the first local schema-driven workspace, then open it through the Home gateway when you are ready.')}</p>"
             "<div class=\"hero-actions\">"
             f"<a class=\"button button-primary\" href=\"{escape(create_url, quote=True)}\">{translate_text(lang, 'New Project')}</a>"
             f"<a class=\"button button-secondary\" href=\"{escape(setup_url, quote=True)}\">{translate_text(lang, 'Setup Guide')}</a>"
@@ -749,6 +781,19 @@ def render_home_page(
         )
     html = html_page("mcp-memory Projects", body, "/assets/app.css", page_class="warm-lab", html_lang=lang)
     return localize_markup(html, lang)
+
+
+def render_home_topbar(current_url: str, lang: str, create_url: str, setup_url: str) -> str:
+    return (
+        "<header class=\"home-topbar\">"
+        "<a class=\"brand-mark\" href=\"/\">mcp-memory</a>"
+        "<nav class=\"home-topbar-actions\" aria-label=\"Home actions\">"
+        f"<a class=\"button button-secondary\" href=\"{escape(setup_url, quote=True)}\">Setup Guide</a>"
+        f"<a class=\"button button-primary\" href=\"{escape(create_url, quote=True)}\">New Project</a>"
+        f"{language_switcher(current_url, lang)}"
+        "</nav>"
+        "</header>"
+    )
 
 
 def render_project_card(
@@ -771,24 +816,22 @@ def render_project_card(
     gateway_mcp_url = project_gateway_url(public_root, project, "/mcp")
     actions = render_project_actions(project, runtime, lang, public_root)
     hint = render_project_hint(project, app_home, runtime, flash)
-    meta = key_value_grid(
-        [
-            ("Project ID", project.project_id),
-            ("DB Path", str(project.database_path)),
-            ("Write Mode", project.write_mode),
-            ("Gateway HTTP", gateway_http_url),
-            ("Gateway MCP", gateway_mcp_url),
-            ("Local HTTP", http_url),
-            ("Local MCP", local_mcp_url),
-        ]
+    gateway_meta = key_value_grid([("Gateway HTTP", gateway_http_url), ("Gateway MCP", gateway_mcp_url)])
+    local_meta = key_value_grid(
+        [("Project ID", project.project_id), ("Write Mode", project.write_mode), ("Local HTTP", http_url), ("Local MCP", local_mcp_url)]
     )
+    storage_meta = key_value_grid([("DB Path", str(project.database_path))])
     menu = render_project_card_menu(project, lang)
     return (
         "<article class=\"project-card\">"
         f"<div class=\"card-topline card-topline-between\">{status_badge}{menu}</div>"
         f"<h2>{escape(project.display_name)}</h2>"
         f"<p class=\"project-subtitle\">{escape(project.project_id)}</p>"
-        f"{meta}"
+        "<div class=\"project-card-sections\">"
+        f"<section class=\"project-card-section\"><h3>Gateway</h3>{gateway_meta}</section>"
+        f"<section class=\"project-card-section\"><h3>Local Runtime</h3>{local_meta}</section>"
+        f"<section class=\"project-card-section\"><h3>Storage</h3>{storage_meta}</section>"
+        "</div>"
         f"{mcp_config_block(gateway_mcp_url, project.project_id)}"
         "<div class=\"project-actions\">"
         f"{actions}"
@@ -887,9 +930,9 @@ def render_project_hint(project: ProjectConfig, app_home: Path, runtime: Project
 def render_base_url_settings(registry: ProjectRegistry, public_root: str, lang: str) -> str:
     config = registry.load()
     return (
-        '<section class="panel-section">'
-        '<h2>DNS Gateway</h2>'
-        '<p class="section-copy">Use one root URL for all projects. Project workspaces are available at /project_id/ and MCP at /project_id/mcp.</p>'
+        '<section class="panel-section gateway-panel">'
+        '<div class="section-heading"><h2>DNS Gateway</h2>'
+        '<p class="section-subtitle">Use one root URL for all projects. Project workspaces are available at /project_id/ and MCP at /project_id/mcp.</p></div>'
         f"{render_dns_instructions(public_root)}"
         f'<form class="project-form" method="post" action="/settings/base-url?lang={escape(lang, quote=True)}">'
         '<div class="form-grid">'

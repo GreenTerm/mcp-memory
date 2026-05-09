@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import urlparse
 
+from mcp_memory import __version__
 from mcp_memory.config import ProjectConfig, ProjectRegistry
 from mcp_memory.logging_utils import configure_logging, get_logger, log_event, start_request_log
 from mcp_memory.protocol import GetRecordQuery, GetRelatedQuery, GetSchemaQuery, ListEntityTypesQuery, ProjectDispatcher, SearchRecordsQuery
@@ -176,7 +177,7 @@ def build_handler(
                         request_id,
                         {
                             "protocolVersion": "2025-03-26",
-                            "serverInfo": {"name": "mcp-memory", "version": "0.1.0"},
+                            "serverInfo": {"name": "mcp-memory", "version": __version__},
                             "capabilities": {
                                 "tools": {"listChanged": False},
                                 "resources": {"subscribe": False, "listChanged": False},
@@ -265,6 +266,7 @@ def build_handler(
                     spec = tools.get(tool_name)
                     if spec is None:
                         raise McpRequestError(f"Unknown tool: {tool_name}")
+                    _validate_tool_arguments(tool_name, spec, arguments)
                     log_event(
                         request_logger,
                         logging.INFO,
@@ -548,6 +550,9 @@ def tool_example(tool_name: str, schema: ProjectSchema, project: ProjectConfig, 
             "evidence_type": "excerpt",
             "description": "Short source excerpt that supports this record.",
             "excerpt": "Relevant source text or observation.",
+            "attachment_path": "attachments/source.txt",
+            "media_type": "text/plain",
+            "size_bytes": 128,
             "created_by": "agent",
         },
         "create_relation": {
@@ -586,7 +591,7 @@ def _tool_usage_specs() -> dict[str, dict[str, list[str]]]:
         "get_related": {"required": ["entity_type", "record_id"], "optional": ["hops"]},
         "add_evidence": {
             "required": ["entity_type", "record_id", "evidence_type", "description"],
-            "optional": ["evidence_id", "excerpt", "source_url", "attachment_refs", "created_by"],
+            "optional": ["evidence_id", "excerpt", "attachment_path", "media_type", "size_bytes", "source_origin", "created_by"],
         },
         "create_relation": {
             "required": ["from_entity_type", "from_record_id", "to_entity_type", "to_record_id", "relation_type"],
@@ -690,7 +695,7 @@ Create/update example:
     "updated_by": "agent",
 })}
 
-FTS warning: avoid raw hyphenated query text such as gui-seed. Search individual words like gui seed, or use tag='gui-seed' until FTS escaping is fixed."""
+FTS note: search_records quotes text tokens before passing them to SQLite FTS, so hyphenated terms such as gui-seed are safe. Use tag='gui-seed' when you need an exact tag filter."""
 
 
 def _render_function_prompt(project: ProjectConfig, arguments: dict[str, str]) -> str:
@@ -816,6 +821,20 @@ def _build_tools() -> dict[str, ToolSpec]:
     return _build_generic_tools()
 
 
+def _validate_tool_arguments(tool_name: str, spec: ToolSpec, arguments: dict[str, Any]) -> None:
+    input_schema = spec.input_schema
+    required = [str(item) for item in input_schema.get("required", [])]
+    missing = [field for field in required if field not in arguments]
+    if missing:
+        raise McpRequestError(f"Missing required fields for {tool_name}: {', '.join(missing)}")
+    if input_schema.get("additionalProperties") is False:
+        properties = input_schema.get("properties", {})
+        allowed = set(properties.keys()) if isinstance(properties, dict) else set()
+        unexpected = sorted(str(field) for field in arguments if field not in allowed)
+        if unexpected:
+            raise McpRequestError(f"Unexpected fields for {tool_name}: {', '.join(unexpected)}")
+
+
 def _build_generic_tools() -> dict[str, ToolSpec]:
     return {
         "get_project_config": ToolSpec(
@@ -931,8 +950,8 @@ def _build_generic_tools() -> dict[str, ToolSpec]:
             name="add_evidence",
             description=(
                 "Attach evidence to a generic record. Required top-level fields: entity_type, record_id, "
-                "evidence_type, description. Optional top-level fields: evidence_id, excerpt, source_url, "
-                "attachment_refs, created_by."
+                "evidence_type, description. Optional top-level fields: evidence_id, excerpt, attachment_path, "
+                "media_type, size_bytes, source_origin, created_by."
             ),
             input_schema={
                 "type": "object",
@@ -943,8 +962,10 @@ def _build_generic_tools() -> dict[str, ToolSpec]:
                     "evidence_type": {"type": "string"},
                     "description": {"type": "string"},
                     "excerpt": {"type": "string"},
-                    "source_url": {"type": "string"},
-                    "attachment_refs": {"type": "array", "items": {"type": "object"}},
+                    "attachment_path": {"type": "string"},
+                    "media_type": {"type": "string"},
+                    "size_bytes": {"type": "integer"},
+                    "source_origin": {"type": "string"},
                     "created_by": {"type": "string"},
                 },
                 "required": ["entity_type", "record_id", "evidence_type", "description"],

@@ -1,18 +1,19 @@
 # Global Plan
 
-Этот файл фиксирует актуальную картину проекта после реализации backend, MCP и GUI. Исторический план был ориентирован на поэтапную сборку; сейчас большинство MVP-пунктов уже выполнено.
+This file records the current project picture after the generic schema-first refactor, DNS/path gateway work, GUI refactor, MCP prompt work, and verification updates.
 
-## Архитектурное направление
+## Architecture Direction
 
 - Windows-first local application.
-- Python `3.10+`, SQLite, stdlib-first.
-- Никаких обязательных runtime-зависимостей.
-- Один app home с registry и отдельный workspace на каждый проект.
-- Один project HTTP/UI server и один MCP server на проект.
-- Данные разных проектов не смешиваются.
-- Backup/restore, import/export и audit считаются пользовательскими возможностями, а не внутренними деталями.
+- Python 3.10+, SQLite, stdlib-first.
+- Small offline-installable dependency footprint; Jinja2 is the only required runtime dependency.
+- One app home with a project registry and one isolated workspace per project.
+- One project HTTP/UI server and one MCP server per project when run directly.
+- Home UI can proxy project UI/API/MCP by path for a single DNS/Base URL.
+- Project data does not mix across workspaces.
+- Backup/restore, import/export, audit, versions, pending changes, and archive are user-facing features.
 
-## Текущий runtime layout
+## Runtime Layout
 
 ```text
 app-home/
@@ -20,6 +21,7 @@ app-home/
   logs/
 
 project-root/
+  schema.json
   project.db
   attachments/
   exports/
@@ -35,92 +37,75 @@ src/mcp_memory/
   domain/
   gui/
   mcp/
+  schemas/
   services/
   storage/
 ```
 
-## Реализованные фазы
+## Current Public Surface
 
-### 1. Config, schema, services
+The preferred public surface is generic and schema-driven:
+
+- Project-local `schema.json`.
+- Generic records, relations, evidence, search, archive, pending changes, audit, and versions.
+- CLI commands for app/project/schema lifecycle, transfer, backup/restore, and pending review.
+- HTTP API routes for schema, entity types, records, search, relations, related traversal, evidence, pending changes, JSON transfer, backup, and restore.
+- MCP tools for schema discovery, record operations, relation/evidence writes, pending review, JSON transfer, backup, and restore.
+- MCP prompts with schema-aware guidance and tool examples.
+- Home UI for project management and DNS/path gateway.
+- Workspace UI for dashboard, entities, records, search, graph, evidence, schema, pending changes, audit, import/export, backups, and settings.
+
+Old fixed reverse-engineering routes, services, and GUI pages still exist as transitional implementation detail and regression coverage. New workflows should use generic records, or the `reverse_engineering` schema template plus `import-legacy-db` for old data.
+
+## Implemented Phases
+
+### 1. Config, Schema, Storage, Services
 
 Done:
 
-- `AppConfig`, `ProjectConfig`, project registry
-- SQLite bootstrap/migrations
-- domain dataclasses
-- service layer для functions, structures, hypotheses, evidence, relations
-- pending changes
-- audit log и version snapshots
-- FTS search documents
+- `AppConfig`, `ProjectConfig`, and project registry.
+- SQLite bootstrap/migrations.
+- Project-local schema copy and validation.
+- Bundled schema templates: `general_knowledge`, `reverse_engineering`, `infrastructure_deployment`, and `research_notes`.
+- Generic record, relation, evidence, search, archive, workflow, transfer, backup, restore, and legacy import services.
+- Pending changes with `confirm` and `auto` write modes.
+- Audit rows and record version snapshots.
+- SQLite FTS search documents.
 
 ### 2. HTTP API
 
 Done:
 
-- health/config endpoints
-- CRUD/read routes для основных сущностей
-- search, relations, related traversal
-- pending confirm/reject
-- import/export
-- backup/restore
-- UTF-8 JSON responses
+- Health/config routes.
+- Generic schema, entity type, record, search, relation, related traversal, evidence, archive, pending, import/export, backup, and restore routes.
+- `PUT /schema` and `PUT /records/{entity_type}/{record_id_or_slug}`.
+- UTF-8 JSON responses.
+- Transitional old fixed routes remain available while cleanup continues.
 
 ### 3. MCP
 
 Done:
 
-- stdlib MCP-over-HTTP implementation
-- Streamable HTTP compatible `POST /mcp`
-- `Mcp-Session-Id` lifecycle
-- JSON-RPC notifications with `202 Accepted`
-- legacy no-session JSON-RPC compatibility
-- `tools/list`, `tools/call`
-- list-only `resources/list`, `resources/templates/list`
-- `prompts/list`, `prompts/get`
-- Codex-style handshake compatibility
+- Stdlib MCP-over-HTTP implementation.
+- Streamable HTTP compatible `POST /mcp`.
+- `Mcp-Session-Id` lifecycle.
+- JSON-RPC notifications with `202 Accepted`.
+- Legacy no-session JSON-RPC compatibility.
+- `tools/list`, `tools/call`, `prompts/list`, and `prompts/get`.
+- List-only `resources/list` and `resources/templates/list`.
+- Codex-style handshake compatibility.
+- Generic-only published tool surface.
 
-### 4. Import/export and backup/restore
-
-Done:
-
-- JSON bundle export/import
-- optional replace on import
-- zip backup of project workspace
-- restore to a project workspace
-- CLI, HTTP API, MCP and GUI entry points
-
-### 5. GUI
-
-Done:
-
-- home project shelf
-- project card actions: Start, Stop, Restart, Open Workspace, Edit, Delete
-- project settings UI
-- workspace app shell with topbar and icon sidebar
-- compact workspace header
-- dashboard cards
-- search page and empty states
-- functions, structures and hypotheses list/detail/edit/create pages
-- graph page based on relations
-- import/export and backups pages
-- pending changes and audit pages
-- dark/light theme
-- English/Russian language switcher
-- Russian mojibake regression coverage
-
-## Current MCP surface
-
-Tools:
+Current MCP tools:
 
 - `get_project_config`
+- `get_schema`
+- `list_entity_types`
 - `search_records`
 - `get_record`
+- `upsert_record`
+- `archive_record`
 - `get_related`
-- `create_function`
-- `update_function`
-- `create_structure`
-- `update_structure`
-- `create_hypothesis`
 - `add_evidence`
 - `create_relation`
 - `list_pending_changes`
@@ -131,7 +116,7 @@ Tools:
 - `backup_project`
 - `restore_project`
 
-Prompts:
+Current MCP prompts:
 
 - `agent_workspace_guide`
 - `record_function_analysis`
@@ -141,40 +126,71 @@ Prompts:
 
 Resources:
 
-- `resources/list` returns an empty list
-- `resources/templates/list` returns an empty list
+- `resources/list` returns an empty list.
+- `resources/templates/list` returns an empty list.
 
-## Write policy
+### 4. Import/Export And Backup/Restore
+
+Done:
+
+- Generic JSON bundle export/import with `bundle_version: 2`.
+- Optional replace on import.
+- Zip backup of project workspace.
+- Restore to a new or existing project workspace.
+- Schema included in JSON transfer and backups.
+- CLI, HTTP API, MCP, and GUI entry points.
+
+### 5. GUI
+
+Done:
+
+- Home project shelf and setup flow.
+- Project card actions: start, stop, restart, open workspace, edit, delete.
+- Base URL setting and DNS/path gateway.
+- Workspace app shell with topbar, sidebar, theme switcher, language switcher, and global search.
+- Generic dashboard.
+- Entity browser, entity constructor, entity edit/delete, and schema builder actions.
+- Generic record list/detail/create/edit/archive pages.
+- Search, graph, evidence, pending, audit, import/export, backups, settings, and schema pages.
+- Packaged CSS/JS, dark/light theme, English/Russian localization, and UTF-8 regression coverage.
+
+## Write Policy
 
 `write_mode=confirm`:
 
-- writes become pending changes
-- caller must confirm or reject them
-- safest default for agent usage
+- Writes become pending changes.
+- A caller must confirm or reject them.
+- This is the safest default for agent usage.
 
 `write_mode=auto`:
 
-- writes are applied immediately
-- useful for controlled local seeding and trusted workflows
+- Writes are applied immediately.
+- This is useful for trusted local seeding and controlled workflows.
 
-## Verification target
+## Verification Target
 
-Use:
+Run:
 
 ```powershell
+python -X utf8 -m unittest discover -s tests -v
 powershell -ExecutionPolicy Bypass -File .\scripts\run_local_checks.ps1
 ```
 
-Expected status:
+Current direct unit verification:
 
-- `process_exit_code=0`
-- `coverage_process_exit_code=0`
-- coverage `>=95%`
+- Command: `python -X utf8 -m unittest discover -s tests -v`
+- Result: 155 tests, OK.
 
-## Known remaining work
+Project target:
 
-- Escape or quote FTS queries with hyphens so `gui-seed` does not break SQLite FTS parsing.
-- Improve entity browsing and bulk navigation for large projects.
-- Add richer graph filtering and relation authoring from the GUI.
+- `scripts/run_local_checks.ps1` should finish with `process_exit_code=0`.
+- Coverage should remain at or above the configured threshold.
+
+## Known Remaining Work
+
+- Retire or isolate old fixed reverse-engineering routes, pages, and services once legacy import coverage no longer needs them.
+- Expand schema builder edit/delete/migration UX where needed.
+- Improve larger-project browsing with pagination or incremental filtering.
+- Add richer graph filtering and relation authoring.
 - Consider MCP resources later if clients need resource-based reads instead of tools.
 - Keep dependency footprint small; do not add an official MCP SDK unless it clearly reduces maintenance cost.

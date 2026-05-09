@@ -79,12 +79,38 @@ class GenericRecordTests(unittest.TestCase):
 
             results = SearchService(database).search(SearchQuery(project_id=self.sandbox.project.project_id, query_text="Searchable"))
             self.assertEqual(len(results), 1)
+            hyphen_results = SearchService(database).search(SearchQuery(project_id=self.sandbox.project.project_id, query_text="alpha-beta"))
+            self.assertEqual(len(hyphen_results), 1)
+            punctuation_with_tag = SearchService(database).search(
+                SearchQuery(project_id=self.sandbox.project.project_id, query_text="!!!", tag="alpha")
+            )
+            self.assertEqual(len(punctuation_with_tag), 1)
+            punctuation_only = SearchService(database).search(
+                SearchQuery(project_id=self.sandbox.project.project_id, query_text="!!!")
+            )
+            self.assertEqual(punctuation_only, [])
 
             archived = service.archive_record("note", "first-note", archived_by="tester")
             self.assertEqual(archived.status, "archived")
             self.assertIsNone(service.get_record("note", "first-note"))
             self.assertEqual(len(service.list_records("note")), 0)
             self.assertEqual(len(service.list_records("note", include_archived=True)), 1)
+            self.assertEqual(SearchService(database).search(SearchQuery(project_id=self.sandbox.project.project_id, query_text="Searchable")), [])
+
+            service.upsert_record(
+                RecordWrite(
+                    entity_type="note",
+                    record_id=created.record_id,
+                    payload={
+                        "slug": "first-note",
+                        "title": "Updated Archived Note",
+                        "summary": "Updated archived summary",
+                        "body": "Searchable body text",
+                    },
+                    updated_by="tester",
+                )
+            )
+            self.assertEqual(SearchService(database).search(SearchQuery(project_id=self.sandbox.project.project_id, query_text="Searchable")), [])
 
     def test_record_service_validates_required_fields_and_slug_uniqueness(self) -> None:
         with self.sandbox.open_database() as database:
@@ -120,6 +146,12 @@ class GenericRecordTests(unittest.TestCase):
             self.assertEqual(len(relations.list_relations("note", "one")), 1)
             related = relations.traverse_related("note", "one", hops=1)
             self.assertEqual(related[0]["record_id"], second.record_id)
+            self.assertEqual(related[0]["relation_direction"], "out")
+            self.assertFalse(related[0]["relation_directed"])
+            self.assertEqual(related[0]["from_record_id"], first.record_id)
+            self.assertEqual(related[0]["to_record_id"], second.record_id)
+            records.archive_record("note", "two", archived_by="tester")
+            self.assertEqual(relations.traverse_related("note", "one", hops=1), [])
 
             with self.assertRaisesRegex(GenericRelationValidationError, "unknown relation type"):
                 relations.create_relation(

@@ -74,6 +74,15 @@ class ServiceTests(unittest.TestCase):
 
     def test_project_service_update_project_and_validation(self) -> None:
         service = ProjectService(self.sandbox.registry)
+        with self.assertRaisesRegex(ValueError, "between 1 and 65535"):
+            service.create_project(
+                project_id="bad-port-project",
+                display_name="Bad Port",
+                project_root=self.sandbox.root / "bad-port-project",
+                http_port=70000,
+                mcp_port=30002,
+            )
+
         updated = service.update_project(
             project_id="test-project",
             display_name="Updated Project",

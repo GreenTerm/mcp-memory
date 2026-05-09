@@ -4,18 +4,17 @@ Version: 0.3.0.
 
 This list tracks work that is still useful after the generic schema-first refactor, DNS/path gateway, and schema-aware MCP instructions.
 
-## 1. FTS Escaping For Hyphenated Queries
+Temporary release planning lives in [Temporary Release Roadmap](temporary-release-roadmap.md).
 
-Problem: SQLite FTS can parse strings with hyphens as expressions. For example, `gui-seed` can fail as a raw FTS query instead of behaving like normal text search.
+## 1. Search Query Polish
+
+Status: basic FTS escaping for hyphenated text shipped after the 0.3.0 review. Queries such as `gui-seed` are now quoted before reaching SQLite FTS.
 
 Goal:
 
-- safely quote or escape user FTS input
-- preserve exact and tag filters
-- add regression tests for `gui-seed`, addresses, and text with `-`, `.`, and `:`
-- remove the MCP prompt workaround after the fix
-
-Current workaround: search separate words such as `gui seed`, or search exact tags with `tag`.
+- broaden regression tests for addresses and text with `.`, `:`, paths, and mixed punctuation
+- decide whether quoted phrases, AND semantics, or prefix search should be exposed explicitly
+- improve search result ranking/snippets once the schema-first model settles
 
 ## 2. Retire Fixed RE Transitional Code
 

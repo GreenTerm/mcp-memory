@@ -116,7 +116,10 @@ class RecordService:
         self._replace_tags(record, self._tag_values(entity, payload))
         self._append_version(record)
         self._append_audit(record, "upsert_record", actor_type, write.updated_by)
-        self._upsert_search_document(record, entity)
+        if record.status == "archived":
+            self._delete_search_document(record)
+        else:
+            self._upsert_search_document(record, entity)
         connection.commit()
         log_event(
             self._logger,
@@ -393,6 +396,8 @@ class RecordService:
             return [item.strip() for item in value.replace(",", "\n").splitlines() if item.strip()]
         if isinstance(value, list):
             return [str(item).strip() for item in value if str(item).strip()]
+        if isinstance(value, (int, float, bool)):
+            return [str(value)]
         raise RecordValidationError("tags fields must be strings or arrays")
 
     def _field_text(self, payload: dict[str, Any], field_name: str) -> str:

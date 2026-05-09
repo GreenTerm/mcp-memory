@@ -87,12 +87,12 @@ python -X utf8 -m unittest discover -s tests -v
 powershell -ExecutionPolicy Bypass -File .\scripts\run_local_checks.ps1
 ```
 
-Current full suite verification: 143 tests pass.
+Current full suite verification: 155 tests pass, total coverage 95%.
 
 ## Remaining Polish
 
+- current implementation plan and references: `docs/ui-redesign-implementation-plan.md`
 - full schema builder edit/delete UX
 - old fixed RE page retirement
-- FTS escaping for hyphenated search terms
 - larger-project list pagination/filtering
 - richer graph controls

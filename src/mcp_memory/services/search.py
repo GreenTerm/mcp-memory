@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 from typing import Any
 
 from mcp_memory.storage import Database
@@ -25,9 +26,14 @@ class SearchService:
         filters: list[str] = ["sd.project_id = ?"]
         params: list[Any] = [query.project_id]
 
+        text_query_without_tokens = False
         if query.query_text:
-            filters.append("sd.document_id IN (SELECT document_id FROM search_documents_fts WHERE search_documents_fts MATCH ?)")
-            params.append(query.query_text)
+            match_query = _fts_match_query(query.query_text)
+            if match_query:
+                filters.append("sd.document_id IN (SELECT document_id FROM search_documents_fts WHERE search_documents_fts MATCH ?)")
+                params.append(match_query)
+            else:
+                text_query_without_tokens = True
 
         if query.entity_types:
             placeholders = ", ".join("?" for _ in query.entity_types)
@@ -71,6 +77,9 @@ class SearchService:
             filters.append("sd.address_text LIKE ?")
             params.append(f"%{query.address}%")
 
+        if text_query_without_tokens and len(filters) == 1:
+            return []
+
         params.append(query.limit)
         sql = f"""
             SELECT sd.document_id, sd.entity_type, sd.entity_id, sd.title_text, sd.body_text, sd.tag_text, sd.address_text, sd.updated_at
@@ -80,3 +89,8 @@ class SearchService:
             LIMIT ?
         """
         return self._database.connection.execute(sql, params).fetchall()
+
+
+def _fts_match_query(raw_query: str) -> str:
+    tokens = re.findall(r"[\w-]+", raw_query, flags=re.UNICODE)
+    return " ".join(f'"{token.replace(chr(34), chr(34) + chr(34))}"' for token in tokens)

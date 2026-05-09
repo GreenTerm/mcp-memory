@@ -11,6 +11,7 @@ from unittest import mock
 
 from tests.support import ProjectSandbox
 
+from mcp_memory import __version__
 from mcp_memory.api.server import function_write_from_payload
 from mcp_memory.logging_utils import configure_logging
 from mcp_memory.mcp.server import build_handler, serve_project_mcp_api
@@ -62,6 +63,7 @@ class McpServerTests(unittest.TestCase):
         self.assertTrue(headers.get("Mcp-Session-Id"))
         response = json.loads(body.decode("utf-8"))
         self.assertEqual(response["result"]["serverInfo"]["name"], "mcp-memory")
+        self.assertEqual(response["result"]["serverInfo"]["version"], __version__)
         self.assertIn("resources", response["result"]["capabilities"])
         self.assertIn("prompts", response["result"]["capabilities"])
 
@@ -107,7 +109,14 @@ class McpServerTests(unittest.TestCase):
             by_name["add_evidence"]["inputSchema"]["required"],
             ["entity_type", "record_id", "evidence_type", "description"],
         )
+        add_evidence_props = by_name["add_evidence"]["inputSchema"]["properties"]
+        self.assertIn("attachment_path", add_evidence_props)
+        self.assertIn("media_type", add_evidence_props)
+        self.assertIn("size_bytes", add_evidence_props)
+        self.assertNotIn("source_url", add_evidence_props)
+        self.assertNotIn("attachment_refs", add_evidence_props)
         self.assertIn("Required top-level fields", by_name["add_evidence"]["description"])
+        self.assertIn("attachment_path", by_name["add_evidence"]["description"])
         self.assertIn("Optional top-level fields", by_name["create_relation"]["description"])
         self.assertIn("relation_type must be allowed", by_name["create_relation"]["description"])
         self.assertIn("archived_by", by_name["archive_record"]["description"])
@@ -479,6 +488,14 @@ class McpServerTests(unittest.TestCase):
 
         bad_arguments = self._rpc("tools/call", {"name": "search_records", "arguments": []}, request_id=9)
         self.assertEqual(bad_arguments["error"]["code"], -32602)
+
+        unexpected_argument = self._rpc(
+            "tools/call",
+            {"name": "search_records", "arguments": {"q": "startup", "unexpected": True}},
+            request_id=12,
+        )
+        self.assertEqual(unexpected_argument["error"]["code"], -32602)
+        self.assertIn("Unexpected fields", unexpected_argument["error"]["message"])
 
         unsupported_record = self._rpc(
             "tools/call",

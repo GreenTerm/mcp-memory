@@ -21,7 +21,7 @@ Goal: replace fixed RE verification with generic model verification and keep loc
   - Simplified `scripts/run_local_checks.ps1` so it runs the full unit suite once instead of repeating it once per phase file.
   - Updated README/docs for schema templates, generic APIs, MCP tools, legacy import, and offline Jinja2 wheel workflow.
   - Updated README/docs for DNS/path gateway and schema-aware MCP agent instructions.
-  - Verified full suite: `python -X utf8 -m unittest discover -s tests -v` ran 143 tests and passed.
+  - Verified full suite: `python -X utf8 -m unittest discover -s tests -v` ran 155 tests and passed.
   - Added documentation phase files and updated the main refactor plan.
 
 - Not done yet:
