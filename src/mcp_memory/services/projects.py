@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
 import logging
+import re
 
 from mcp_memory.config import AppConfig, ProjectConfig, ProjectRegistry
 from mcp_memory.logging_utils import get_logger, log_event
@@ -38,8 +39,7 @@ class ProjectService:
         if existing is not None:
             raise ValueError(f"project_id already exists: {project_id}")
 
-        if not project_id.strip():
-            raise ValueError("project_id is required")
+        validate_project_id(project_id)
         if not display_name.strip():
             raise ValueError("display_name is required")
         if write_mode not in {"confirm", "auto"}:
@@ -169,3 +169,17 @@ class ProjectService:
             project_id=project_id,
             project_root=existing.project_root,
         )
+
+
+RESERVED_PROJECT_IDS = {"assets", "projects", "setup", "settings", "health", "mcp", "ui"}
+PROJECT_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
+
+
+def validate_project_id(project_id: str) -> None:
+    value = project_id.strip()
+    if not value:
+        raise ValueError("project_id is required")
+    if value in {".", ".."} or not PROJECT_ID_PATTERN.fullmatch(value):
+        raise ValueError("project_id may contain only letters, digits, hyphen, and underscore")
+    if value.lower() in RESERVED_PROJECT_IDS:
+        raise ValueError(f"project_id is reserved: {project_id}")

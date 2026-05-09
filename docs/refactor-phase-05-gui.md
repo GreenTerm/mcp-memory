@@ -1,6 +1,6 @@
 # Phase 05 - Generic Jinja2 GUI
 
-Status: generic GUI implemented and verified; old fixed pages still exist as transitional code.
+Status: generic GUI and Home UI gateway implemented and verified for v0.3.0; old fixed pages still exist as transitional code.
 
 Goal: replace fixed function/structure/hypothesis UI with schema-generated generic pages.
 
@@ -26,6 +26,13 @@ Goal: replace fixed function/structure/hypothesis UI with schema-generated gener
   - Added Home GUI schema template selection for project creation and setup wizard.
   - Added basic structured schema builder actions for adding entity types, fields, and relation types.
   - Added GUI tests for generic record creation/detail/search/graph/evidence/pending/schema pages and schema-template project creation.
+  - Integrated selected GUI improvements from `mcp-memory-main-0.2.0`:
+    - Added `/ui/entities/new`, a schema-backed entity type constructor with dynamic fields, field metadata flags, enum options, optional relation types, validation, and schema save.
+    - Added hints, styles, and Russian translations for the constructor UI.
+    - Updated the workspace sidebar to generic-only navigation instead of fixed RE links.
+  - Updated Home GUI project forms to propose the next available HTTP/MCP ports.
+    - Added Home UI DNS/path gateway with `base_url`, gateway project links, and proxying for project UI/API/MCP.
+    - Kept the existing responsive project grid instead of the snapshot's fixed two-column grid.
 
 - Remaining:
   - Remove or retire old fixed function/structure/hypothesis pages.
@@ -47,7 +54,10 @@ Goal: replace fixed function/structure/hypothesis UI with schema-generated gener
   - GUI dashboard uses generic records and schema stats.
   - GUI can display and save project `schema.json`.
   - GUI can add schema entity types, fields, and relation types through basic form actions.
+  - GUI can create a new entity type and optional relation types from `/ui/entities/new`.
   - Home GUI project creation can select bundled schema templates.
+  - Home GUI project creation defaults to the next unused local ports.
+  - Home GUI can show and save Base URL and expose projects as `/<project_id>/ui/` and `/<project_id>/mcp`.
 
 - Still required:
   - GUI can create and edit records for each bundled schema.

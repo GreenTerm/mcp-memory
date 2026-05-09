@@ -2,18 +2,21 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from html import escape
+import http.client
+import json
 import logging
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib import error, request
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urlparse, urlsplit, urlunsplit
 
 from mcp_memory.config import ProjectConfig, ProjectRegistry
 from mcp_memory.logging_utils import configure_logging, get_logger, log_event, start_request_log
 from mcp_memory.runtime import ProjectRuntimeInfo, ProjectRuntimeManager
 from mcp_memory.schema import list_bundled_schema_templates
 from mcp_memory.services import ProjectService
+from mcp_memory.services.projects import validate_project_id
 
 from .i18n import language_switcher, localize_markup, resolve_language, translate_text
 from .render import badge, empty_state, html_page, key_value_grid, load_asset_text, mcp_config_block, shell_command
@@ -22,6 +25,26 @@ from .render import badge, empty_state, html_page, key_value_grid, load_asset_te
 DEFAULT_HTTP_PORT = "8765"
 DEFAULT_MCP_PORT = "9876"
 DEFAULT_WRITE_MODE = "confirm"
+ROOT_PATHS = {"", "assets", "projects", "setup", "settings", "health", "mcp", "ui"}
+
+
+def _next_available_ports(registry: ProjectRegistry | None = None) -> tuple[str, str]:
+    """Return the first HTTP and MCP port pair not used by existing projects."""
+    base_http = int(DEFAULT_HTTP_PORT)
+    base_mcp = int(DEFAULT_MCP_PORT)
+    if registry is None:
+        return DEFAULT_HTTP_PORT, DEFAULT_MCP_PORT
+    used: set[int] = set()
+    for project in registry.list_projects():
+        used.add(project.http_port)
+        used.add(project.mcp_port)
+    http_port = base_http
+    while http_port in used:
+        http_port += 1
+    mcp_port = base_mcp
+    while mcp_port in used or mcp_port == http_port:
+        mcp_port += 1
+    return str(http_port), str(mcp_port)
 
 
 @dataclass(slots=True)
@@ -98,10 +121,15 @@ def build_home_handler(
             parsed = urlparse(self.path)
             lang = resolve_language(parse_qs(parsed.query).get("lang", ["en"])[0])
 
+            routed = self._project_gateway_route(parsed)
+            if routed is not None:
+                request_log.finish(request_logger, "request_complete", int(self._response_status), page=parsed.path)
+                return
+
             if parsed.path == "/":
-                self._send_html(render_home_page(registry, app_home, runtime_manager, self.path, lang))
+                self._send_html(render_home_page(registry, app_home, runtime_manager, self.path, lang, public_base_url(registry, self.headers.get("Host", "127.0.0.1:8764"))))
             elif parsed.path == "/setup":
-                self._send_html(render_setup_page(registry, app_home, self.path, lang, build_project_form_state()))
+                self._send_html(render_setup_page(registry, app_home, self.path, lang, build_project_form_state(registry=registry), public_base_url(registry, self.headers.get("Host", "127.0.0.1:8764"))))
             elif len([segment for segment in parsed.path.split("/") if segment]) == 3 and parsed.path.endswith("/edit"):
                 project_id = [segment for segment in parsed.path.split("/") if segment][1]
                 project = registry.get_project(project_id)
@@ -111,11 +139,13 @@ def build_home_handler(
                     self._send_html(render_project_edit_page(project, self.path, lang, build_project_edit_state(project)))
             elif parsed.path == "/projects/new":
                 log_event(request_logger, logging.INFO, "project_create_form_opened")
-                self._send_html(render_project_create_page(app_home, self.path, lang, build_project_form_state()))
+                self._send_html(render_project_create_page(app_home, self.path, lang, build_project_form_state(registry=registry)))
             elif parsed.path == "/assets/app.css":
                 self._send_asset("text/css; charset=utf-8", load_asset_text("app.css").encode("utf-8"))
             elif parsed.path == "/assets/ui.js":
                 self._send_asset("text/javascript; charset=utf-8", load_asset_text("ui.js").encode("utf-8"))
+            elif parsed.path == "/health":
+                self._send_json({"status": "ok", "service": "home"})
             else:
                 self._send_html("Not Found", status=HTTPStatus.NOT_FOUND)
             request_log.finish(request_logger, "request_complete", int(self._response_status), page=parsed.path)
@@ -127,6 +157,11 @@ def build_home_handler(
             query = parse_qs(parsed.query)
             lang = resolve_language(query.get("lang", ["en"])[0])
             parts = [segment for segment in parsed.path.split("/") if segment]
+
+            routed = self._project_gateway_route(parsed)
+            if routed is not None:
+                request_log.finish(request_logger, "request_complete", int(self._response_status), page=parsed.path)
+                return
 
             if parsed.path in {"/projects/new", "/setup/project"}:
                 state = parse_project_create_form(self._read_form_payload(), app_home, registry)
@@ -204,6 +239,16 @@ def build_home_handler(
                 request_log.finish(request_logger, "request_complete", int(self._response_status), page=parsed.path)
                 return
 
+            if parsed.path == "/settings/base-url":
+                payload = self._read_form_payload()
+                try:
+                    set_app_base_url(registry, payload.get("base_url", ""))
+                    self._redirect(f"/?flash=base_url_saved&lang={lang}")
+                except ValueError:
+                    self._redirect(f"/?flash=failed&lang={lang}")
+                request_log.finish(request_logger, "request_complete", int(self._response_status), page=parsed.path)
+                return
+
             if len(parts) == 3 and parts[0] == "projects" and parts[2] == "edit":
                 project = registry.get_project(parts[1])
                 if project is None:
@@ -268,6 +313,33 @@ def build_home_handler(
             self._send_html("Not Found", status=HTTPStatus.NOT_FOUND)
             request_log.finish(request_logger, "request_complete", int(self._response_status), page=parsed.path)
 
+        def do_DELETE(self) -> None:
+            request_log = start_request_log("DELETE", self.path)
+            self._response_status = HTTPStatus.OK
+            parsed = urlparse(self.path)
+            routed = self._project_gateway_route(parsed)
+            if routed is None:
+                self._send_json({"error": {"code": "not_found", "message": "Unknown route"}}, status=HTTPStatus.NOT_FOUND)
+            request_log.finish(request_logger, "request_complete", int(self._response_status), page=parsed.path)
+
+        def do_PUT(self) -> None:
+            request_log = start_request_log("PUT", self.path)
+            self._response_status = HTTPStatus.OK
+            parsed = urlparse(self.path)
+            routed = self._project_gateway_route(parsed)
+            if routed is None:
+                self._send_json({"error": {"code": "not_found", "message": "Unknown route"}}, status=HTTPStatus.NOT_FOUND)
+            request_log.finish(request_logger, "request_complete", int(self._response_status), page=parsed.path)
+
+        def do_PATCH(self) -> None:
+            request_log = start_request_log("PATCH", self.path)
+            self._response_status = HTTPStatus.OK
+            parsed = urlparse(self.path)
+            routed = self._project_gateway_route(parsed)
+            if routed is None:
+                self._send_json({"error": {"code": "not_found", "message": "Unknown route"}}, status=HTTPStatus.NOT_FOUND)
+            request_log.finish(request_logger, "request_complete", int(self._response_status), page=parsed.path)
+
         def log_message(self, format: str, *args: object) -> None:
             log_event(request_logger, logging.INFO, "server_message", message=format % args if args else format)
 
@@ -276,6 +348,15 @@ def build_home_handler(
             self._response_status = status
             self.send_response(status.value)
             self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def _send_json(self, payload: dict[str, object], status: HTTPStatus = HTTPStatus.OK) -> None:
+            body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+            self._response_status = status
+            self.send_response(status.value)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
@@ -301,16 +382,173 @@ def build_home_handler(
             payload = parse_qs(raw, keep_blank_values=True)
             return {key: values[-1] if values else "" for key, values in payload.items()}
 
+        def _project_gateway_route(self, parsed) -> bool | None:
+            parts = [segment for segment in parsed.path.split("/") if segment]
+            if not parts or parts[0] in ROOT_PATHS:
+                return None
+            project_id = parts[0]
+            project = registry.get_project(project_id)
+            if project is None:
+                self._send_html("Project Not Found", status=HTTPStatus.NOT_FOUND)
+                return True
+            public_root = public_base_url(registry, self.headers.get("Host", "127.0.0.1:8764"))
+            if len(parts) == 1:
+                query = parsed.query or "lang=en"
+                self._redirect(f"/{project_id}/ui/?{query}")
+                return True
+            runtime = runtime_manager.get_project_runtime(project)
+            if runtime.status != "running":
+                self._send_gateway_unavailable(project, runtime, public_root)
+                return True
+            stripped_path = "/" + "/".join(parts[1:])
+            if stripped_path == "/mcp":
+                self._proxy_to_project(project, public_root, stripped_path, parsed.query, use_mcp=True)
+            else:
+                self._proxy_to_project(project, public_root, stripped_path, parsed.query, use_mcp=False)
+            return True
+
+        def _send_gateway_unavailable(self, project: ProjectConfig, runtime: ProjectRuntimeInfo, public_root: str) -> None:
+            if self.path.endswith("/mcp") or "application/json" in self.headers.get("Accept", ""):
+                self._send_json(
+                    {"error": {"code": "project_unavailable", "message": runtime.reason, "project_id": project.project_id}},
+                    status=HTTPStatus.SERVICE_UNAVAILABLE,
+                )
+                return
+            start_url = f"/projects/{project.project_id}/start"
+            body = (
+                "<main class=\"home-shell\">"
+                "<section class=\"panel-section\">"
+                f"<h1>{escape(project.display_name)}</h1>"
+                f"<p>{escape(runtime.reason)}</p>"
+                f'<form method="post" action="{escape(start_url, quote=True)}"><button class="button button-primary" type="submit">Start Project</button></form>'
+                f'<p><a href="{escape(public_root, quote=True)}">Back to Projects</a></p>'
+                "</section>"
+                "</main>"
+            )
+            self._send_html(
+                html_page("Project unavailable", body, "/assets/app.css", page_class="warm-lab"),
+                status=HTTPStatus.SERVICE_UNAVAILABLE,
+            )
+
+        def _proxy_to_project(self, project: ProjectConfig, public_root: str, path: str, query: str, use_mcp: bool) -> None:
+            body = b""
+            if self.command in {"POST", "PUT", "PATCH"}:
+                body = self.rfile.read(int(self.headers.get("Content-Length", "0") or "0"))
+            host = project.mcp_host if use_mcp else project.http_host
+            port = project.mcp_port if use_mcp else project.http_port
+            target = path + (f"?{query}" if query else "")
+            headers = proxy_request_headers(self.headers, host, port)
+            connection = http.client.HTTPConnection(host, port, timeout=10)
+            try:
+                connection.request(self.command, target, body=body or None, headers=headers)
+                response = connection.getresponse()
+                response_body = response.read()
+            except OSError as exc:
+                self._send_json({"error": {"code": "proxy_error", "message": str(exc)}}, status=HTTPStatus.BAD_GATEWAY)
+                return
+            finally:
+                connection.close()
+            self._send_proxy_response(project, public_root, response.status, response.getheaders(), response_body, use_mcp)
+
+        def _send_proxy_response(self, project: ProjectConfig, public_root: str, status: int, headers: list[tuple[str, str]], body: bytes, use_mcp: bool) -> None:
+            header_map = {key.lower(): value for key, value in headers}
+            content_type = header_map.get("content-type", "application/octet-stream")
+            if "text/html" in content_type:
+                body = rewrite_gateway_html(body, project, public_root)
+            self._response_status = status
+            self.send_response(status)
+            skip_headers = {"content-length", "connection", "transfer-encoding", "server", "date"}
+            for key, value in headers:
+                lower = key.lower()
+                if lower in skip_headers:
+                    continue
+                if lower == "location":
+                    value = rewrite_gateway_location(value, project, public_root, use_mcp)
+                self.send_header(key, value)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
     return RequestHandler
 
 
-def build_project_form_state(values: dict[str, str] | None = None, errors: dict[str, str] | None = None, form_error: str = "") -> ProjectCreateFormState:
+def normalize_base_url(value: str) -> str:
+    raw = value.strip().rstrip("/")
+    if not raw:
+        return ""
+    parts = urlsplit(raw)
+    if parts.scheme not in {"http", "https"} or not parts.netloc or parts.path not in {"", "/"} or parts.query or parts.fragment:
+        raise ValueError("base_url must be an http(s) root URL without path, query, or fragment")
+    return urlunsplit((parts.scheme, parts.netloc, "", "", "")).rstrip("/")
+
+
+def set_app_base_url(registry: ProjectRegistry, value: str) -> str:
+    normalized = normalize_base_url(value)
+    config = registry.load()
+    config.base_url = normalized
+    registry.save(config)
+    return normalized
+
+
+def public_base_url(registry: ProjectRegistry, host_header: str) -> str:
+    configured = registry.load().base_url.strip().rstrip("/")
+    if configured:
+        return configured
+    return f"http://{host_header.strip() or '127.0.0.1:8764'}".rstrip("/")
+
+
+def project_gateway_url(public_root: str, project: ProjectConfig, path: str = "") -> str:
+    clean_path = path if path.startswith("/") else f"/{path}" if path else ""
+    return f"{public_root}/{project.project_id}{clean_path}"
+
+
+def proxy_request_headers(headers, host: str, port: int) -> dict[str, str]:
+    result: dict[str, str] = {"Host": f"{host}:{port}"}
+    skip = {"host", "content-length", "connection", "transfer-encoding", "server", "date"}
+    for key, value in headers.items():
+        if key.lower() not in skip:
+            result[key] = value
+    return result
+
+
+def rewrite_gateway_html(body: bytes, project: ProjectConfig, public_root: str) -> bytes:
+    text = body.decode("utf-8", errors="replace")
+    prefix = f"/{project.project_id}"
+    for attr in ("href", "src", "action"):
+        for root in ("/ui", "/schema", "/entity-types", "/records", "/relations", "/related", "/evidence", "/search", "/pending-changes", "/project"):
+            text = text.replace(f'{attr}="{root}', f'{attr}="{prefix}{root}')
+    text = text.replace("http://127.0.0.1:8764/", f"{public_root}/")
+    return text.encode("utf-8")
+
+
+def rewrite_gateway_location(location: str, project: ProjectConfig, public_root: str, use_mcp: bool) -> str:
+    parts = urlsplit(location)
+    if parts.scheme and parts.netloc:
+        local_http = f"{project.http_host}:{project.http_port}"
+        local_mcp = f"{project.mcp_host}:{project.mcp_port}"
+        if parts.netloc not in {local_http, local_mcp}:
+            return location
+        path = parts.path
+        query = f"?{parts.query}" if parts.query else ""
+        return project_gateway_url(public_root, project, path) + query
+    if location.startswith("/"):
+        return f"/{project.project_id}{location}"
+    return location
+
+
+def build_project_form_state(
+    values: dict[str, str] | None = None,
+    errors: dict[str, str] | None = None,
+    form_error: str = "",
+    registry: ProjectRegistry | None = None,
+) -> ProjectCreateFormState:
+    default_http, default_mcp = _next_available_ports(registry)
     merged = {
         "project_id": "",
         "display_name": "",
         "project_root": "",
-        "http_port": DEFAULT_HTTP_PORT,
-        "mcp_port": DEFAULT_MCP_PORT,
+        "http_port": default_http,
+        "mcp_port": default_mcp,
         "write_mode": DEFAULT_WRITE_MODE,
         "schema_template": "general_knowledge",
     }
@@ -364,6 +602,11 @@ def parse_project_create_form(payload: dict[str, str], app_home: Path, registry:
         state.errors["project_id"] = "Project ID is required."
     elif registry.get_project(state.values["project_id"]) is not None:
         state.errors["project_id"] = "Project ID already exists."
+    else:
+        try:
+            validate_project_id(state.values["project_id"])
+        except ValueError as exc:
+            state.errors["project_id"] = str(exc)
 
     if not state.values["display_name"]:
         state.errors["display_name"] = "Display Name is required."
@@ -448,6 +691,7 @@ def render_home_page(
     runtime_manager: ProjectRuntimeManager,
     current_url: str = "/",
     lang: str = "en",
+    public_root: str = "http://127.0.0.1:8764",
 ) -> str:
     projects = registry.list_projects()
     parsed = urlparse(current_url)
@@ -466,6 +710,7 @@ def render_home_page(
                 runtime_manager.get_project_runtime(project),
                 flash=flash if flash_project_id == project.project_id else "",
                 lang=lang,
+                public_root=public_root,
             )
             for project in projects
         )
@@ -481,6 +726,7 @@ def render_home_page(
             "</div>"
             "</section>"
             f"{global_flash_html}"
+            f"{render_base_url_settings(registry, public_root, lang)}"
             f"<section class=\"project-grid\">{content}</section>"
             "</main>"
         )
@@ -497,6 +743,7 @@ def render_home_page(
             "</div>"
             "</section>"
             f"{global_flash_html}"
+            f"{render_base_url_settings(registry, public_root, lang)}"
             f"{empty_state(translate_text(lang, 'No registered projects yet'), translate_text(lang, 'Once you create a project, it will appear here with a direct workspace link.'))}"
             "</main>"
         )
@@ -510,6 +757,7 @@ def render_project_card(
     runtime: ProjectRuntimeInfo,
     flash: str = "",
     lang: str = "en",
+    public_root: str = "http://127.0.0.1:8764",
 ) -> str:
     status_badge = {
         "running": badge("Running", "success"),
@@ -518,16 +766,20 @@ def render_project_card(
         "stopped": badge("Offline", "warning"),
     }.get(runtime.status, badge("Offline", "warning"))
     http_url = f"http://{project.http_host}:{project.http_port}"
-    mcp_url = f"http://{project.mcp_host}:{project.mcp_port}/mcp"
-    actions = render_project_actions(project, runtime, lang)
+    local_mcp_url = f"http://{project.mcp_host}:{project.mcp_port}/mcp"
+    gateway_http_url = project_gateway_url(public_root, project, "/ui/")
+    gateway_mcp_url = project_gateway_url(public_root, project, "/mcp")
+    actions = render_project_actions(project, runtime, lang, public_root)
     hint = render_project_hint(project, app_home, runtime, flash)
     meta = key_value_grid(
         [
             ("Project ID", project.project_id),
             ("DB Path", str(project.database_path)),
             ("Write Mode", project.write_mode),
-            ("HTTP", http_url),
-            ("MCP", mcp_url),
+            ("Gateway HTTP", gateway_http_url),
+            ("Gateway MCP", gateway_mcp_url),
+            ("Local HTTP", http_url),
+            ("Local MCP", local_mcp_url),
         ]
     )
     menu = render_project_card_menu(project, lang)
@@ -537,7 +789,7 @@ def render_project_card(
         f"<h2>{escape(project.display_name)}</h2>"
         f"<p class=\"project-subtitle\">{escape(project.project_id)}</p>"
         f"{meta}"
-        f"{mcp_config_block(mcp_url, project.project_id)}"
+        f"{mcp_config_block(gateway_mcp_url, project.project_id)}"
         "<div class=\"project-actions\">"
         f"{actions}"
         "</div>"
@@ -564,8 +816,8 @@ def render_project_card_menu(project: ProjectConfig, lang: str) -> str:
     )
 
 
-def render_project_actions(project: ProjectConfig, runtime: ProjectRuntimeInfo, lang: str) -> str:
-    workspace_url = f"http://{project.http_host}:{project.http_port}/ui/"
+def render_project_actions(project: ProjectConfig, runtime: ProjectRuntimeInfo, lang: str, public_root: str) -> str:
+    workspace_url = project_gateway_url(public_root, project, "/ui/")
     current_lang = f"?lang={lang}"
     if runtime.status == "running":
         controls = [
@@ -632,11 +884,42 @@ def render_project_hint(project: ProjectConfig, app_home: Path, runtime: Project
     return ""
 
 
+def render_base_url_settings(registry: ProjectRegistry, public_root: str, lang: str) -> str:
+    config = registry.load()
+    return (
+        '<section class="panel-section">'
+        '<h2>DNS Gateway</h2>'
+        '<p class="section-copy">Use one root URL for all projects. Project workspaces are available at /project_id/ and MCP at /project_id/mcp.</p>'
+        f"{render_dns_instructions(public_root)}"
+        f'<form class="project-form" method="post" action="/settings/base-url?lang={escape(lang, quote=True)}">'
+        '<div class="form-grid">'
+        '<label class="form-field"><span class="field-label">Base URL</span>'
+        f'<input name="base_url" value="{escape(config.base_url, quote=True)}" placeholder="http://mcp-memory.local:8764"></label>'
+        "</div>"
+        '<div class="form-actions">'
+        '<button class="button button-secondary" type="submit">Save Base URL</button>'
+        "</div>"
+        "</form>"
+        "</section>"
+    )
+
+
+def render_dns_instructions(public_root: str) -> str:
+    return key_value_grid(
+        [
+            ("Root URL", public_root),
+            ("Project URL", f"{public_root}/<project_id>/"),
+            ("MCP URL", f"{public_root}/<project_id>/mcp"),
+        ]
+    )
+
+
 def render_home_flash(flash: str, lang: str) -> str:
     tone = "info"
     message = {
         "deleted": "Project removed from the shelf.",
         "failed": "Project action failed.",
+        "base_url_saved": "Base URL saved.",
     }.get(flash, "")
     if flash == "failed":
         tone = "warning"
@@ -671,7 +954,7 @@ def render_project_create_page(
         "<section class=\"panel-section\">"
         f"{form_error_html}"
         f'<form class="project-form" method="post" action="/projects/new?lang={escape(lang, quote=True)}">'
-        '<div class="form-grid">'
+        '<div class="form-grid project-identity-grid">'
         f"{render_form_field('project_id', 'Project ID', state, required=True)}"
         f"{render_form_field('display_name', 'Display Name', state, required=True)}"
         f"{render_form_field('project_root', 'Project Root', state, hint=project_root_hint_text)}"
@@ -718,7 +1001,7 @@ def render_project_edit_page(
         "<section class=\"panel-section\">"
         f"{form_error_html}"
         f'<form class="project-form" method="post" action="/projects/{escape(project.project_id, quote=True)}/edit?lang={escape(lang, quote=True)}">'
-        '<div class="form-grid">'
+        '<div class="form-grid project-identity-grid">'
         f'<label class="form-field"><span class="field-label">Project ID</span><input value="{escape(project.project_id, quote=True)}" readonly></label>'
         f"{render_project_edit_field('display_name', 'Display Name', state, required=True)}"
         "</div>"
@@ -750,6 +1033,7 @@ def render_setup_page(
     current_url: str,
     lang: str,
     state: ProjectCreateFormState,
+    public_root: str = "http://127.0.0.1:8764",
 ) -> str:
     parsed = urlparse(current_url)
     query = parse_qs(parsed.query)
@@ -766,7 +1050,7 @@ def render_setup_page(
     mcp_html = ""
     paths_html = key_value_grid([("Registry Path", str(registry.config_path)), ("App Home", str(app_home))])
     if project is not None:
-        mcp_endpoint = f"http://{project.mcp_host}:{project.mcp_port}/mcp"
+        mcp_endpoint = project_gateway_url(public_root, project, "/mcp")
         mcp_html = mcp_config_block(mcp_endpoint, project.project_id)
         paths_html = key_value_grid(
             [
@@ -786,6 +1070,7 @@ def render_setup_page(
         f"{flash_html}"
         "<section class=\"setup-steps\">"
         f"{setup_step('1', 'Local Home', key_value_grid([('App Home', str(app_home)), ('Registry Path', str(registry.config_path))]), 'Everything stays on this machine.')}"
+        f"{setup_step('DNS', 'DNS Gateway', render_dns_instructions(public_root), 'Point a local DNS name at the root Home UI, then route projects by path.')}"
         f"{setup_step('2', 'Create Project', form_error_html + render_setup_project_form(state, lang, project_root_hint_text, advanced_attr), 'Use the same local project creation flow as the main form.')}"
         f"{setup_step('3', 'MCP Endpoint', mcp_html or empty_state('No project selected yet', 'Create a project first, then the MCP config will appear here.'), 'Connect agents through the MCP endpoint.')}"
         f"{setup_step('4', 'Local Paths', paths_html, 'Backups and exports stay beside the project workspace.')}"

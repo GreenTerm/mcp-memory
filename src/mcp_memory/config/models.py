@@ -53,11 +53,13 @@ class AppConfig:
     app_home: Path
     registry_path: Path
     projects: list[ProjectConfig] = field(default_factory=list)
+    base_url: str = ""
 
     def to_dict(self) -> dict[str, object]:
         return {
             "app_home": str(self.app_home),
             "registry_path": str(self.registry_path),
+            "base_url": self.base_url,
             "projects": [project.to_dict() for project in self.projects],
         }
 
@@ -71,4 +73,5 @@ class AppConfig:
             app_home=Path(str(payload["app_home"])),
             registry_path=Path(str(payload["registry_path"])),
             projects=projects,
+            base_url=str(payload.get("base_url", "")),
         )

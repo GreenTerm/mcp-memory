@@ -4,7 +4,7 @@ Working plan for the big-bang refactor from a fixed reverse-engineering knowledg
 
 ## Current Status
 
-Status: generic vNext implementation complete for schema, core, adapters, GUI, transfer, backup, legacy import, smoke checks, and unit tests. Coverage recovery and old fixed-code retirement remain cleanup items.
+Status: v0.3.0 generic implementation is complete for schema, core, adapters, GUI, DNS/path gateway, MCP instructions, transfer, backup, legacy import, smoke checks, and unit tests. Coverage recovery and old fixed-code retirement remain cleanup items.
 
 ## Status Snapshot
 
@@ -18,16 +18,19 @@ Status: generic vNext implementation complete for schema, core, adapters, GUI, t
 - Typed protocol dispatcher exists and is used by generic HTTP/MCP/workflow paths.
 - Generic HTTP routes exist for schema, entity types, records, search, relations, related traversal, evidence, archive, and pending confirmation.
 - MCP publishes generic tools and no longer imports HTTP API helpers.
+- MCP prompts are schema-aware and include examples for every tool plus required/optional fields for generic record payloads.
 - Generic GUI routes exist for entity browser, record list/detail/create/edit, search, graph, relation creation, evidence, pending confirmation, and raw schema JSON editing.
 - Workspace dashboard uses generic schema/record statistics and recent generic records.
 - Generic JSON transfer exists as `bundle_version: 2` and includes schema, records, relations, evidence, and attachment metadata.
 - Backup/restore includes `schema.json`, rewrites project IDs on restore, and tolerates older backup shapes.
 - Home GUI and setup wizard can create projects from bundled schema templates.
+- Home GUI can act as a DNS/path gateway: `/<project_id>/ui/...`, `/<project_id>/schema`, project API routes, and `/<project_id>/mcp`.
 - Basic GUI schema builder actions exist for entity types, fields, and relation types, with raw JSON editing still available.
+- Selected `mcp-memory-main-0.2.0` GUI work has been integrated into the main implementation: `/ui/entities/new` entity type constructor, optional relation type creation from that form, constructor hints/translations/styles, generic-only workspace sidebar, and next-available port defaults in Home GUI project forms.
 - Legacy DB importer is implemented as `import-legacy-db` and maps current old RE state into `reverse_engineering.schema.json`.
 - Local smoke checks use bundled schemas and generic HTTP/MCP/GUI surfaces.
-- README/user docs describe generic schemas, API, MCP, legacy import, and offline dependency workflow.
-- Full test suite passes: `python -X utf8 -m unittest discover -s tests -v` ran 132 tests successfully.
+- README/user docs describe version 0.3.0, generic schemas, DNS/path gateway, API, MCP, legacy import, and offline dependency workflow.
+- Full test suite passes: `python -X utf8 -m unittest discover -s tests -v` ran 143 tests successfully.
 - `scripts/run_local_checks.ps1` no longer repeats the full test suite once per phase file; it now runs unit tests once, then smoke, then coverage.
 
 ### Not Done Yet
@@ -36,14 +39,14 @@ Status: generic vNext implementation complete for schema, core, adapters, GUI, t
 - Old fixed RE service code still exists and has not been removed.
 - Schema builder can add entity types, fields, and relation types, but does not yet provide full edit/delete/migration UX.
 - Generated schema-specific MCP convenience tools are not implemented.
-- Coverage is below the configured threshold after the big-bang generic GUI/API expansion: 87% observed vs `fail_under = 95`.
+- Coverage is below the configured threshold after the big-bang generic GUI/API expansion; this remains a cleanup item.
 
 ### Latest Verification
 
 The latest full verification passed:
 
 - Command: `python -X utf8 -m unittest discover -s tests -v`
-- Result: 132 tests, OK.
+- Result: 143 tests, OK.
 
 The work has been split into phase files:
 
@@ -53,6 +56,7 @@ The work has been split into phase files:
 - [Phase 04 - Generic HTTP And MCP Surfaces](refactor-phase-04-http-mcp.md)
 - [Phase 05 - Generic Jinja2 GUI](refactor-phase-05-gui.md)
 - [Phase 06 - Tests, Smoke Checks, And Documentation](refactor-phase-06-tests-verification.md)
+- [Release 0.3.0](release-0.3.0.md)
 
 Completed in the current implementation pass:
 
@@ -83,6 +87,10 @@ Completed in the current implementation pass:
 - Updated README/user docs for generic schemas, generic API/MCP, legacy import, and offline dependencies.
 - Added initial schema tests.
 - Converted full test suite expectations to the generic vNext contract and verified all tests pass.
+- Integrated selected `mcp-memory-main-0.2.0` changes without copying the snapshot wholesale; data migration/import is intentionally left for a later fully-ready version.
+- Added Home UI DNS/path gateway and `AppConfig.base_url`.
+- Added schema-aware MCP agent instructions with tool examples and required/optional field references.
+- Updated project version to 0.3.0.
 
 Important note: generic vNext is implemented and verified, but old fixed RE services/API/GUI still exist as transitional code. The legacy importer uses the old data shape as an input format, so fixed-code retirement should be handled separately.
 

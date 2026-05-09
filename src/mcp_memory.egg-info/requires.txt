@@ -1,3 +1,4 @@
+Jinja2<4,>=3.1
 
 [dev]
 coverage<8,>=7

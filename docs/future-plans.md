@@ -1,99 +1,97 @@
 # Future Plans
 
-Список ближайших улучшений, которые еще не реализованы или требуют отдельного аккуратного прохода. Завершенные GUI/MCP hotfixes сюда больше не заносим как pending work.
+Version: 0.3.0.
+
+This list tracks work that is still useful after the generic schema-first refactor, DNS/path gateway, and schema-aware MCP instructions.
 
 ## 1. FTS Escaping For Hyphenated Queries
 
-Проблема: SQLite FTS может трактовать строку с дефисом как выражение. Например `gui-seed` может привести к ошибке парсинга вместо обычного поиска.
+Problem: SQLite FTS can parse strings with hyphens as expressions. For example, `gui-seed` can fail as a raw FTS query instead of behaving like normal text search.
 
-Цель:
+Goal:
 
-- безопасно quote/escape пользовательский FTS input
-- сохранить exact/tag filters
-- добавить regression tests для `gui-seed`, адресов и строк с символами вроде `-`, `.`, `:`
-- обновить MCP prompt warning после исправления
+- safely quote or escape user FTS input
+- preserve exact and tag filters
+- add regression tests for `gui-seed`, addresses, and text with `-`, `.`, and `:`
+- remove the MCP prompt workaround after the fix
 
-Текущий workaround: искать по словам без дефиса (`gui seed`) или по `tag`.
+Current workaround: search separate words such as `gui seed`, or search exact tags with `tag`.
 
-## 2. Richer Entity Browser
+## 2. Retire Fixed RE Transitional Code
 
-Сейчас есть отдельные pages для functions, structures и global hypotheses. Следующий шаг - общий entity browser для больших проектов.
+The v0.3.0 public surface is generic, but some old function/structure/hypothesis routes, services, and GUI paths still exist to keep tests and import workflows stable during the transition.
 
-Идеи:
+Goal:
 
-- единая страница всех сущностей
-- быстрые фильтры по binary, tag, entity type, status
-- compact rows для больших списков
-- bulk links на graph/search
-- сохранение query params при переходах
+- keep `import-legacy-db` as the supported old-data entrypoint
+- remove or isolate old fixed HTTP routes and GUI pages
+- reduce old service code once the importer no longer needs direct legacy service behavior
+- keep `reverse_engineering.schema.json` as a bundled schema template
 
-## 3. Relation Authoring From GUI
+## 3. Full Schema Builder Editing
 
-Graph уже показывает существующие relations, но создавать связи удобнее через MCP/API.
+The GUI can create entity types, fields, and relation types. It still needs richer editing.
 
-Цель:
+Goal:
 
-- добавить простую GUI-форму `create_relation`
-- дать быстрый переход из detail page к созданию relation
-- валидировать entity type/id на уровне формы
-- после создания вести на focused graph
+- edit/delete entity types
+- edit/delete fields
+- structured required/title/summary/slug/search/tag edits
+- edit/delete relation types
+- clear warnings when schema edits make existing records incomplete
 
-## 4. Graph Polish
+## 4. Larger Project UX
 
-Текущий graph - server-generated SVG без внешних graph dependencies.
+For projects with hundreds or thousands of records, validate:
 
-Возможные улучшения:
+- list page performance
+- HTML response size
+- pagination or incremental filtering
+- graph caps and warnings
+- compact rows and better empty/error states
 
-- более понятная легенда
+## 5. Graph Polish
+
+The current graph is server-generated SVG without external graph dependencies.
+
+Possible improvements:
+
+- clearer legend
 - richer focus controls
-- сохранение выбранных filters
-- улучшенная плотность labels
-- links from side list to detail pages with better context
+- preserved filters
+- denser labels
+- links from side lists to detail pages
 
-## 5. MCP Resources If Needed
+## 6. MCP Resources If Needed
 
-Сейчас MCP resources объявлены как list-only compatibility surface и возвращают пустые списки. Данные проекта доступны через tools.
+MCP resources currently remain a list-only compatibility surface and return empty lists. Project data is available through tools and schema-aware prompts.
 
-Добавлять resources стоит только если появится реальная потребность клиента:
+Add resources only if a real client need appears. Candidate resource URIs:
 
 - `project://config`
 - `project://recent`
-- `entity://function/...`
-- `entity://structure/...`
-- `entity://hypothesis/...`
+- `entity://<entity_type>/<record_id_or_slug>`
 
-До этого tools проще, явнее и лучше подходят текущему локальному workflow.
+## 7. Optional Importers
 
-## 6. Optional Importers
+Future importers should stay optional and offline-friendly.
 
-Будущие importers должны оставаться опциональными и offline-friendly.
-
-Кандидаты:
+Candidates:
 
 - IDA export JSON
 - Ghidra export JSON
 - Binary Ninja export JSON
 - generic symbol list import
 
-Правило: importer не должен требовать внешнего daemon или cloud service.
-
-## 7. Larger Project UX
-
-Для проектов с сотнями и тысячами записей нужно проверить:
-
-- скорость list pages
-- размер HTML responses
-- pagination или incremental filters
-- graph caps and warnings
-- понятные empty/error states
+Rule: importers must not require external daemons, cloud services, or network access at runtime.
 
 ## 8. Packaging And Offline Install
 
-Проверить сценарий:
+Keep checking the offline install workflow:
 
 ```powershell
 pip download .
 pip install --no-index --find-links <wheelhouse> mcp-memory
 ```
 
-Цель - сохранить простую установку на машине без интернета.
+Goal: preserve simple installation on a Windows machine without internet access.

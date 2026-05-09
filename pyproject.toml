@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mcp-memory"
-version = "0.1.0"
-description = "Offline-first RE knowledge base with SQLite-backed storage."
+version = "0.3.0"
+description = "Offline-first schema-driven knowledge base for people and agents."
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = ["Jinja2>=3.1,<4"]

@@ -1,6 +1,6 @@
 # Phase 06 - Tests, Smoke Checks, And Documentation
 
-Status: unit tests and generic smoke checks pass; coverage threshold still needs a follow-up pass.
+Status: unit tests and generic smoke checks pass for v0.3.0; coverage threshold still needs a follow-up pass.
 
 Goal: replace fixed RE verification with generic model verification and keep local Windows checks reliable.
 
@@ -20,7 +20,8 @@ Goal: replace fixed RE verification with generic model verification and keep loc
   - Converted `scripts/local_smoke_check.py` to use bundled schemas and generic API/MCP/GUI.
   - Simplified `scripts/run_local_checks.ps1` so it runs the full unit suite once instead of repeating it once per phase file.
   - Updated README/docs for schema templates, generic APIs, MCP tools, legacy import, and offline Jinja2 wheel workflow.
-  - Verified full suite: `python -X utf8 -m unittest discover -s tests -v` ran 132 tests and passed.
+  - Updated README/docs for DNS/path gateway and schema-aware MCP agent instructions.
+  - Verified full suite: `python -X utf8 -m unittest discover -s tests -v` ran 143 tests and passed.
   - Added documentation phase files and updated the main refactor plan.
 
 - Not done yet:
@@ -34,5 +35,4 @@ Goal: replace fixed RE verification with generic model verification and keep loc
   - Generic smoke check passes.
 
 - Not done yet:
-  - `powershell -ExecutionPolicy Bypass -File .\scripts\run_local_checks.ps1` completes without hanging, but returns exit code `2` because coverage is below threshold.
-  - Coverage remains below the project threshold: 87% observed vs configured 95%.
+  - Coverage remains below the project threshold and needs a dedicated recovery pass.

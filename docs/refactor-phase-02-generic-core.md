@@ -1,6 +1,6 @@
 # Phase 02 - Generic Core Services And Protocol
 
-Status: complete for generic vNext; fixed-service retirement pending.
+Status: complete for v0.3.0 generic model; fixed-service retirement pending.
 
 Goal: replace fixed RE services with generic records, relations, evidence, pending workflow, and a typed in-process protocol.
 

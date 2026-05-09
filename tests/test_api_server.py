@@ -357,10 +357,10 @@ class ApiServerTests(unittest.TestCase):
         self.assertEqual(dashboard_html.count("language-switcher"), 1)
         self.assertEqual(dashboard_html.count("Auto mode"), 1)
         self.assertIn('class="quick-link workspace-back-link"', dashboard_html)
-        self.assertIn('href="/?lang=en"', dashboard_html)
-        self.assertNotIn('data-nav-group="home"', dashboard_html)
+        self.assertIn('href="http://127.0.0.1:8764/?lang=en"', dashboard_html)
+        self.assertIn('data-nav-group="home"', dashboard_html)
         self.assertNotIn("Warm Lab", dashboard_html)
-        self.assertIn("/ui/functions", dashboard_html)
+        self.assertIn("/ui/entities", dashboard_html)
         self.assertIn("/ui/graph", dashboard_html)
         self.assertIn("/ui/import-export", dashboard_html)
         self.assertIn("Обзор проекта", dashboard_ru_html)
@@ -379,7 +379,7 @@ class ApiServerTests(unittest.TestCase):
         self.assertIn("Save Function", new_function_form_html)
         self.assertIn('class="empty-state-body"', search_blank_html)
         self.assertIn("Search Workspace", search_html)
-        self.assertIn("Поиск по workspace", search_ru_html)
+        self.assertIn("Поиск по проекту", search_ru_html)
         self.assertIn("main_handler", search_html)
         self.assertNotIn("Warm Lab", search_html)
         self.assertIn("Relation Graph", graph_html)
@@ -437,7 +437,7 @@ class ApiServerTests(unittest.TestCase):
         self.assertIn("MCP хост", settings_ru_html)
         self.assertIn("Режим: авто", settings_ru_html)
         self.assertIn('aria-label="Выбор языка"', settings_ru_html)
-        self.assertIn('aria-label="Поиск по workspace"', settings_ru_html)
+        self.assertIn('aria-label="Поиск по проекту"', settings_ru_html)
         self.assertIn('href="/ui/?lang=ru"', settings_ru_html)
         self.assertIn('action="/ui/settings?lang=ru"', settings_ru_html)
         self.assertEqual(settings_ru_html.count("language-switcher"), 1)
@@ -448,6 +448,7 @@ class ApiServerTests(unittest.TestCase):
         self.assertNotIn("Warm Lab", function_html)
         self.assertNotIn("Warm Lab", not_found_html)
         self.assertIn('class="quick-link workspace-back-link"', not_found_html)
+        self.assertIn('href="http://127.0.0.1:8764/?lang=en"', not_found_html)
         self.assertIn("Nothing is waiting right now", pending_html)
         self.assertIn("Audit Trail", audit_html)
         self.assertIn("upsert", audit_html)
@@ -531,9 +532,11 @@ class ApiServerTests(unittest.TestCase):
 
         schema_html = self._get_text("/ui/schema")
         self.assertIn("Schema Builder", schema_html)
-        self.assertIn("Add Entity Type", schema_html)
-        self.assertIn("Add Field", schema_html)
-        self.assertIn("Add Relation Type", schema_html)
+        self.assertIn("schema-card", schema_html)
+        self.assertIn("schema-chip", schema_html)
+        self.assertNotIn("Add Entity Type", schema_html)
+        self.assertNotIn("Add Field", schema_html)
+        self.assertNotIn("Add Relation Type", schema_html)
         self.assertIn("schema_json", schema_html)
 
     def test_generic_ui_schema_builder_forms_update_schema(self) -> None:
@@ -568,6 +571,170 @@ class ApiServerTests(unittest.TestCase):
         self.assertIn("status", [field["name"] for field in task["fields"]])
         self.assertIn("status", task["required"])
         self.assertIn("blocks", [item["name"] for item in schema["relation_types"]])
+
+    def test_generic_ui_entity_type_constructor_page(self) -> None:
+        entities_html = self._get_text("/ui/entities")
+        self.assertIn("New Entity Type", entities_html)
+        self.assertIn("/ui/entities/new", entities_html)
+        self.assertIn("/ui/entities/note/edit", entities_html)
+        self.assertIn("/ui/entities/note/delete", entities_html)
+
+        constructor_html = self._get_text("/ui/entities/new")
+        self.assertIn("New Entity Type", constructor_html)
+        self.assertIn("hint-wrap", constructor_html)
+        self.assertIn('name="name"', constructor_html)
+        self.assertIn('name="label"', constructor_html)
+        self.assertIn('name="description"', constructor_html)
+        self.assertIn("field_name_0", constructor_html)
+        self.assertIn("field_widget_0", constructor_html)
+        self.assertIn("addConstructorFieldRow", constructor_html)
+        self.assertIn("addConstructorRelationRow", constructor_html)
+        self.assertIn("Create Entity Type", constructor_html)
+
+    def test_generic_ui_entity_type_constructor_creates_entity(self) -> None:
+        result_html = self._post_form_text(
+            "/ui/entities/new",
+            {
+                "name": "bug",
+                "label": "Bug",
+                "description": "A reported bug",
+                "field_name_0": "title",
+                "field_label_0": "Title",
+                "field_widget_0": "text",
+                "field_required_0": "true",
+                "field_title_0": "true",
+                "field_search_0": "true",
+                "field_name_1": "priority",
+                "field_label_1": "Priority",
+                "field_widget_1": "enum",
+                "field_options_1": "low, medium, high",
+                "field_required_1": "true",
+                "field_name_2": "description",
+                "field_label_2": "Description",
+                "field_widget_2": "textarea",
+                "field_summary_2": "true",
+                "field_search_2": "true",
+            },
+        )
+        self.assertIn("Bug", result_html)
+        entities_html = self._get_text("/ui/entities")
+        self.assertIn("bug", entities_html)
+        schema = self._get_json("/schema")
+        bug_entity = next(item for item in schema["entity_types"] if item["name"] == "bug")
+        self.assertEqual(bug_entity["label"], "Bug")
+        self.assertEqual(bug_entity["description"], "A reported bug")
+        field_names = [field["name"] for field in bug_entity["fields"]]
+        self.assertIn("title", field_names)
+        self.assertIn("priority", field_names)
+        self.assertIn("description", field_names)
+        self.assertIn("title", bug_entity["required"])
+        self.assertIn("priority", bug_entity["required"])
+        self.assertEqual(bug_entity["title_field"], "title")
+        self.assertEqual(bug_entity["summary_field"], "description")
+        self.assertIn("description", bug_entity["search_fields"])
+        priority_field = next(field for field in bug_entity["fields"] if field["name"] == "priority")
+        self.assertEqual(priority_field["widget"], "enum")
+        self.assertIn("low", priority_field["options"])
+
+    def test_generic_ui_entity_type_constructor_with_relations(self) -> None:
+        result_html = self._post_form_text(
+            "/ui/entities/new",
+            {
+                "name": "milestone",
+                "label": "Milestone",
+                "description": "Project milestone",
+                "field_name_0": "title",
+                "field_label_0": "Title",
+                "field_widget_0": "text",
+                "field_required_0": "true",
+                "field_title_0": "true",
+                "field_search_0": "true",
+                "rel_name_0": "belongs_to",
+                "rel_label_0": "Belongs To",
+                "rel_from_0": "milestone",
+                "rel_to_0": "note",
+                "rel_directed_0": "true",
+            },
+        )
+        self.assertIn("Milestone", result_html)
+        schema = self._get_json("/schema")
+        self.assertIn("milestone", [item["name"] for item in schema["entity_types"]])
+        self.assertIn("belongs_to", [item["name"] for item in schema["relation_types"]])
+
+    def test_generic_ui_entity_type_constructor_accepts_sparse_dynamic_rows(self) -> None:
+        result_html = self._post_form_text(
+            "/ui/entities/new",
+            {
+                "name": "incident",
+                "label": "Incident",
+                "field_name_0": "title",
+                "field_label_0": "Title",
+                "field_widget_0": "text",
+                "field_title_0": "true",
+                "field_name_2": "impact",
+                "field_label_2": "Impact",
+                "field_widget_2": "textarea",
+                "field_summary_2": "true",
+                "rel_name_1": "caused_by",
+                "rel_label_1": "Caused By",
+                "rel_from_1": "incident",
+                "rel_to_1": "note",
+            },
+        )
+        self.assertIn("Incident", result_html)
+        schema = self._get_json("/schema")
+        incident = next(item for item in schema["entity_types"] if item["name"] == "incident")
+        self.assertIn("impact", [field["name"] for field in incident["fields"]])
+        self.assertIn("caused_by", [item["name"] for item in schema["relation_types"]])
+
+    def test_generic_ui_entity_type_edit_and_delete(self) -> None:
+        self._post_form_text(
+            "/ui/entities/new",
+            {
+                "name": "ticket",
+                "label": "Ticket",
+                "field_name_0": "title",
+                "field_label_0": "Title",
+                "field_widget_0": "text",
+                "field_title_0": "true",
+            },
+        )
+        edit_html = self._get_text("/ui/entities/ticket/edit")
+        self.assertIn("Edit Entity Type", edit_html)
+        self.assertIn("Ticket", edit_html)
+
+        entity_payload = {
+            "name": "ticket",
+            "label": "Support Ticket",
+            "description": "Updated",
+            "fields": [{"name": "title", "label": "Title", "widget": "text"}],
+            "required": [],
+            "title_field": "title",
+            "summary_field": "",
+            "slug_field": "",
+            "search_fields": ["title"],
+            "tag_fields": [],
+        }
+        updated_html = self._post_form_text("/ui/entities/ticket/edit", {"entity_json": json.dumps(entity_payload)})
+        self.assertIn("Support Ticket", updated_html)
+
+        deleted_html = self._post_form_text("/ui/entities/ticket/delete", {})
+        self.assertNotIn("Support Ticket", deleted_html)
+        schema = self._get_json("/schema")
+        self.assertNotIn("ticket", [item["name"] for item in schema["entity_types"]])
+
+    def test_generic_ui_entity_type_constructor_rejects_invalid(self) -> None:
+        result_html = self._post_form_text(
+            "/ui/entities/new",
+            {
+                "name": "",
+                "label": "",
+                "field_name_0": "title",
+                "field_label_0": "Title",
+                "field_widget_0": "text",
+            },
+        )
+        self.assertIn("Name is required", result_html)
 
     def test_generic_ui_confirm_mode_uses_generic_pending_dispatch(self) -> None:
         self.sandbox.project.write_mode = "confirm"

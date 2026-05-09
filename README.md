@@ -1,6 +1,6 @@
 # mcp-memory
 
-`mcp-memory` is a local offline-first schema-driven knowledge base for people and agents.
+`mcp-memory` 0.3.0 is a local offline-first schema-driven knowledge base for people and agents.
 
 Projects are stored as isolated Windows-local workspaces with SQLite, files on disk, a JSON HTTP API, an MCP Streamable HTTP endpoint, and a server-rendered web UI. The current vNext model is generic: each project has a portable `schema.json` that defines its entity types, fields, search metadata, and relation types.
 
@@ -22,6 +22,8 @@ Projects are stored as isolated Windows-local workspaces with SQLite, files on d
 - Generic JSON export/import with schema included
 - Workspace zip backup/restore with schema included
 - Legacy importer from the old fixed RE database shape
+- DNS/path gateway from Home UI to project UI/API/MCP endpoints
+- Schema-aware MCP prompts with tool examples and required/optional fields
 - Generic HTTP API, MCP tools, CLI, and server-rendered GUI
 
 The project is designed for simple local deployment. It avoids cloud services, external databases, background daemons, and heavy frontend stacks.
@@ -113,10 +115,21 @@ mcp-memory run-ui-home
 Default endpoints:
 
 - Home UI: `http://127.0.0.1:8764/`
-- Project workspace UI: `http://127.0.0.1:8765/ui/`
-- HTTP API health: `http://127.0.0.1:8765/health`
-- MCP health: `http://127.0.0.1:9876/health`
-- MCP endpoint: `http://127.0.0.1:9876/mcp`
+- Project workspace UI through Home gateway: `http://127.0.0.1:8764/sample/ui/`
+- Project HTTP API through Home gateway: `http://127.0.0.1:8764/sample/schema`
+- Project MCP through Home gateway: `http://127.0.0.1:8764/sample/mcp`
+- Direct project workspace UI: `http://127.0.0.1:8765/ui/`
+- Direct HTTP API health: `http://127.0.0.1:8765/health`
+- Direct MCP health: `http://127.0.0.1:9876/health`
+- Direct MCP endpoint: `http://127.0.0.1:9876/mcp`
+
+DNS/path gateway:
+
+- Point DNS such as `mcp-memory.local` to the machine running Home UI.
+- In Home UI, set Base URL to `http://mcp-memory.local:8764`.
+- Open projects at `http://mcp-memory.local:8764/<project_id>/ui/`.
+- Use MCP endpoints at `http://mcp-memory.local:8764/<project_id>/mcp`.
+- Old direct project ports stay available for local/manual use.
 
 Manual project servers:
 
@@ -244,6 +257,16 @@ Generic tools:
 
 In `confirm` mode, write tools return a pending change. Call `list_pending_changes`, review the payload, then call `confirm_change`.
 
+Agent instructions are available through MCP prompts:
+
+- `agent_workspace_guide`
+- `record_function_analysis`
+- `record_structure_analysis`
+- `record_hypothesis_evidence`
+- `search_and_graph_workflow`
+
+`agent_workspace_guide` includes example arguments for every tool. It also reads the active project `schema.json` and lists every entity type with required and optional payload fields for `upsert_record`.
+
 ## Web UI
 
 Home UI:
@@ -251,7 +274,8 @@ Home UI:
 - lists registered projects
 - starts, stops, and restarts project HTTP/MCP processes
 - creates projects from schema templates
-- shows endpoints and MCP config
+- shows gateway and local endpoints plus MCP config
+- stores optional Base URL for DNS/path links such as `http://mcp-memory.local:8764/<project_id>/ui/`
 
 Workspace UI:
 
@@ -328,3 +352,10 @@ powershell -ExecutionPolicy Bypass -File .\scripts\run_local_checks.ps1
 ```
 
 Smoke output is written under `artifacts/`.
+
+## Additional Docs
+
+- [Module guide](docs/modules.md)
+- [Generic refactor status](docs/generic-knowledge-refactor-plan.md)
+- [Release 0.3.0 notes](docs/release-0.3.0.md)
+- [Future plans](docs/future-plans.md)

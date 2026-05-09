@@ -1,13 +1,15 @@
 # AGENTS.md
 
+Project version: 0.3.0.
+
 Instructions for Codex in this repository. These notes should be treated as persistent project guidance and merged with task-specific user instructions.
 
 ## Project Context
 
-- This repository is for a local offline-first RE knowledge base on Python.
+- This repository is for a local offline-first schema-driven knowledge base on Python, aimed at both people and agents.
 - Prioritize simple local deployment on Windows over architectural purity.
 - Favor SQLite, stdlib, and a minimal offline-deployable dependency footprint.
-- Backend, MCP, and the server-rendered GUI are now implemented; preserve the simple local architecture, but allow small offline-deployable dependencies when they clearly reduce maintenance cost.
+- Generic backend, MCP, server-rendered GUI, Home UI DNS/path gateway, schema templates, legacy import, and local backup/export flows are implemented; preserve the simple local architecture, but allow small offline-deployable dependencies when they clearly reduce maintenance cost.
 - Avoid cloud dependencies, external databases, and heavy frontend stacks unless explicitly requested.
 
 ## Working Style
@@ -91,7 +93,7 @@ These guidelines are working if: fewer unnecessary changes in diffs, fewer rewri
 - Prefer a single-process or few-process local architecture that is easy to run manually on Windows.
 - Keep project data isolated per project/workspace.
 - Treat audit history and version history as user-facing features, but do not let them pollute default agent responses.
-- Keep facts and hypotheses separate in both storage and API design.
+- Keep facts, hypotheses, evidence, records, and relations separate in both storage and API design.
 - Store large artifacts as files with references in SQLite rather than embedding raw blobs in records unless explicitly needed.
 - Design search so exact/FTS-based retrieval works without embeddings.
 - Make optional features degradable: if a subsystem is not configured, core CRUD and search should still work cleanly.
@@ -172,7 +174,7 @@ Coverage should stay at or above the current project threshold.
 
 The current GUI is server-rendered and should remain server-rendered.
 
-If HTML string composition becomes difficult to maintain:
+The GUI is partly template-backed and partly helper-rendered. If more HTML string composition becomes difficult to maintain:
 
 - Prefer introducing a small template layer over adding a frontend framework.
 - `Jinja2` is the preferred candidate for templates.

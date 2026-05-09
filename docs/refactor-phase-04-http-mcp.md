@@ -1,6 +1,6 @@
 # Phase 04 - Generic HTTP And MCP Surfaces
 
-Status: generic surfaces implemented and verified; old-surface removal pending.
+Status: generic surfaces implemented and verified for v0.3.0; old fixed-code retirement remains cleanup.
 
 Goal: replace fixed RE routes and MCP tools with generic schema-aware interfaces.
 
@@ -38,6 +38,7 @@ Goal: replace fixed RE routes and MCP tools with generic schema-aware interfaces
   - pending/import/export/backup tools
 - Add generated schema-based tools as convenience wrappers over `upsert_record`.
 - Preserve MCP session and Streamable HTTP compatibility behavior.
+- Publish schema-aware agent instructions with examples for every tool and required/optional fields for record payloads.
 
 ## Acceptance Checks
 
@@ -47,6 +48,7 @@ Goal: replace fixed RE routes and MCP tools with generic schema-aware interfaces
   - MCP generic tools work in confirm and auto modes.
   - MCP no longer imports HTTP API helpers.
   - MCP publishes generic tools plus `get_project_config`; old fixed create tools are absent.
+  - MCP prompts describe every tool with example payloads and schema-derived `upsert_record` fields.
   - Full suite passes with HTTP/MCP generic route and tool coverage.
 
 - Not done yet:
@@ -62,3 +64,4 @@ Goal: replace fixed RE routes and MCP tools with generic schema-aware interfaces
 - Replaced MCP tool publishing with generic tools and removed MCP's import dependency on HTTP API helpers.
 - Switched MCP pending tools to `GenericWorkflowService`.
 - Added MCP regression tests for generic record create/search/read/archive, relation creation/traversal, evidence, and pending confirm flow.
+- Added schema-aware MCP prompt reference blocks and write-tool metadata descriptions.

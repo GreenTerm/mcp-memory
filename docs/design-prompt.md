@@ -1,16 +1,15 @@
 # GUI Design Prompt
 
-Design a calm, practical web UI for a local offline-first reverse engineering knowledge base. The UI is used daily as a working tool, not as a marketing site.
+Design a calm, practical web UI for a local offline-first schema-driven knowledge base. The UI is used daily by people and agents as a working tool, not as a marketing site.
 
 ## Product Context
 
-The app stores and displays knowledge about:
+The app stores and displays schema-defined knowledge records. Depending on the project schema, this can include reverse-engineering data, infrastructure deployment notes, research notes, or any custom entity types.
 
-- functions
-- structures
-- global hypotheses
+- entity types
+- records
 - evidence
-- relations between entities
+- typed relations between records
 - change history
 - audit trail
 - pending changes
@@ -56,16 +55,16 @@ The topbar owns:
 - write-mode status
 - language switcher
 
-The sidebar owns:
+The sidebar owns generic workspace navigation:
 
-- Binaries
-- Functions
-- Structures
-- Hypotheses
+- Entities
+- Records
 - Search
 - Graph
+- Evidence
 - Import/Export
 - Backups
+- Schema
 - Settings
 
 Do not put `Projects` in the workspace sidebar. The return to project shelf lives in the workspace header.

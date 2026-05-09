@@ -100,11 +100,17 @@ class McpServerTests(unittest.TestCase):
         self.assertNotIn("create_function", tool_names)
         by_name = {item["name"]: item for item in tools}
         self.assertEqual(by_name["upsert_record"]["inputSchema"]["required"], ["entity_type", "payload"])
-        self.assertIn("required field", by_name["upsert_record"]["inputSchema"]["properties"]["payload"]["description"])
+        self.assertIn("required payload field", by_name["upsert_record"]["inputSchema"]["properties"]["payload"]["description"])
+        self.assertIn("Optional top-level fields", by_name["upsert_record"]["description"])
+        self.assertIn("prompts/get agent_workspace_guide", by_name["upsert_record"]["description"])
         self.assertEqual(
             by_name["add_evidence"]["inputSchema"]["required"],
             ["entity_type", "record_id", "evidence_type", "description"],
         )
+        self.assertIn("Required top-level fields", by_name["add_evidence"]["description"])
+        self.assertIn("Optional top-level fields", by_name["create_relation"]["description"])
+        self.assertIn("relation_type must be allowed", by_name["create_relation"]["description"])
+        self.assertIn("archived_by", by_name["archive_record"]["description"])
 
         created = self._call_tool(
             "upsert_record",
@@ -223,8 +229,38 @@ class McpServerTests(unittest.TestCase):
         self.assertIn("Active project schema", text)
         self.assertIn("entity_type=note", text)
         self.assertIn("required payload fields: title", text)
+        self.assertIn("optional payload fields: slug, summary, body, tags", text)
+        self.assertIn("slug_field=slug; title_field=title; summary_field=summary", text)
         self.assertIn("upsert_record: entity_type, payload", text)
         self.assertIn("add_evidence: entity_type, record_id, evidence_type, description", text)
+        self.assertIn("Entity payload fields for upsert_record", text)
+        self.assertIn("Tool usage examples", text)
+        for tool_name in (
+            "get_project_config",
+            "get_schema",
+            "list_entity_types",
+            "search_records",
+            "get_record",
+            "upsert_record",
+            "archive_record",
+            "get_related",
+            "add_evidence",
+            "create_relation",
+            "list_pending_changes",
+            "confirm_change",
+            "reject_change",
+            "export_json",
+            "import_json",
+            "backup_project",
+            "restore_project",
+        ):
+            self.assertIn(f"tool: {tool_name}", text)
+        self.assertIn("required top-level fields: <none>", text)
+        self.assertIn("optional top-level fields: q, entity_types, tag, limit", text)
+        self.assertIn("required top-level fields: entity_type, payload", text)
+        self.assertIn('"title": "Note example"', text)
+        self.assertIn('"relation_type": "related_to"', text)
+        self.assertIn('"evidence_type": "excerpt"', text)
         self.assertIn('"record_id"', text)
         self.assertNotIn('"entity_id"', text)
 

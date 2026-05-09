@@ -155,6 +155,9 @@ class TransferAndArchiveTests(unittest.TestCase):
         duplicate_root = self.sandbox.root / "duplicate_project"
         with self.assertRaisesRegex(ValueError, "project_id already exists"):
             archive.restore_backup(Path(default_backup["output_path"]), duplicate_root, project_id="test-project")
+        reserved_root = self.sandbox.root / "reserved_project"
+        with self.assertRaisesRegex(ValueError, "project_id is reserved"):
+            archive.restore_backup(Path(default_backup["output_path"]), reserved_root, project_id="assets")
 
         malformed_zip = self.sandbox.root / "malformed.zip"
         with zipfile.ZipFile(malformed_zip, "w") as handle:

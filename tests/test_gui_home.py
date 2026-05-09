@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import json
 import socket
 import threading
 import unittest
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import mock
@@ -12,14 +13,17 @@ from urllib import error, parse, request
 from tests.support import ProjectSandbox
 
 from mcp_memory.config import ProjectRegistry
+from mcp_memory.api.server import build_handler as build_api_handler
 from mcp_memory.gui.home import (
     build_home_handler,
     build_project_edit_state,
     build_project_form_state,
     effective_project_root,
+    normalize_base_url,
     parse_project_create_form,
     parse_project_edit_form,
     probe_project_http_health,
+    public_base_url,
     render_home_flash,
     render_home_page,
     render_project_actions,
@@ -27,8 +31,10 @@ from mcp_memory.gui.home import (
     render_project_hint,
     render_setup_page,
     serve_ui_home,
+    set_app_base_url,
 )
 from mcp_memory.logging_utils import configure_logging, shutdown_logging
+from mcp_memory.mcp.server import build_handler as build_mcp_handler
 from mcp_memory.runtime import ProjectRuntimeInfo, ProjectRuntimeManager
 from mcp_memory.schema import load_project_schema
 
@@ -160,7 +166,10 @@ class GuiHomeTests(unittest.TestCase):
                 self.assertIn("Copy MCP config", html)
                 self.assertIn("mcp-config-test-project", html)
                 self.assertIn("Running", html)
-                self.assertIn("/ui/", html)
+                self.assertIn(f"{base_url}/test-project/ui/", html)
+                self.assertIn(f"{base_url}/test-project/mcp", html)
+                self.assertIn("Gateway HTTP", html)
+                self.assertIn("Gateway MCP", html)
                 self.assertIn("New Project", html)
                 self.assertNotIn("Warm Lab", html)
                 self.assertIn("lang=ru", russian_html)
@@ -220,6 +229,149 @@ class GuiHomeTests(unittest.TestCase):
             runtime_manager.start_project.assert_called_once()
             runtime_manager.stop_project.assert_called_once_with("test-project")
             runtime_manager.restart_project.assert_called_once()
+        finally:
+            if server is not None:
+                server.shutdown()
+                server.server_close()
+            if thread is not None:
+                thread.join(timeout=5)
+            sandbox.cleanup()
+
+    def test_home_handler_saves_base_url_setting(self) -> None:
+        sandbox = ProjectSandbox()
+        server = None
+        thread = None
+        try:
+            handler = build_home_handler(sandbox.registry, sandbox.app_home, ProjectRuntimeManager(sandbox.app_home))
+            server = HTTPServer(("127.0.0.1", 0), handler)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base_url = f"http://127.0.0.1:{server.server_port}"
+            payload = parse.urlencode({"base_url": "http://mcp-memory.local:8764/"}).encode("utf-8")
+
+            with request.urlopen(
+                request.Request(base_url + "/settings/base-url?lang=en", data=payload, method="POST")
+            ) as response:
+                html = response.read().decode("utf-8")
+
+            self.assertIn("flash=base_url_saved", response.geturl())
+            self.assertEqual(sandbox.registry.load().base_url, "http://mcp-memory.local:8764")
+            self.assertIn("http://mcp-memory.local:8764/test-project/ui/", html)
+        finally:
+            if server is not None:
+                server.shutdown()
+                server.server_close()
+            if thread is not None:
+                thread.join(timeout=5)
+            sandbox.cleanup()
+
+    def test_gateway_routes_proxy_project_http_and_mcp(self) -> None:
+        sandbox = ProjectSandbox()
+        api_server = None
+        api_thread = None
+        mcp_server = None
+        mcp_thread = None
+        home_server = None
+        home_thread = None
+        try:
+            sandbox.project.http_port = _allocate_port()
+            sandbox.project.mcp_port = _allocate_port()
+            while sandbox.project.mcp_port == sandbox.project.http_port:
+                sandbox.project.mcp_port = _allocate_port()
+            sandbox.project.write_mode = "auto"
+            sandbox.registry.upsert_project(sandbox.project)
+
+            api_server = HTTPServer(("127.0.0.1", sandbox.project.http_port), build_api_handler(sandbox.project, sandbox.registry))
+            api_thread = threading.Thread(target=api_server.serve_forever, daemon=True)
+            api_thread.start()
+            mcp_server = ThreadingHTTPServer(("127.0.0.1", sandbox.project.mcp_port), build_mcp_handler(sandbox.project, sandbox.registry))
+            mcp_thread = threading.Thread(target=mcp_server.serve_forever, daemon=True)
+            mcp_thread.start()
+
+            handler = build_home_handler(sandbox.registry, sandbox.app_home, ProjectRuntimeManager(sandbox.app_home))
+            home_server = HTTPServer(("127.0.0.1", 0), handler)
+            home_thread = threading.Thread(target=home_server.serve_forever, daemon=True)
+            home_thread.start()
+            base_url = f"http://127.0.0.1:{home_server.server_port}"
+
+            with request.urlopen(base_url + "/test-project/ui/?lang=en") as response:
+                dashboard_html = response.read().decode("utf-8")
+            with request.urlopen(base_url + "/test-project/schema") as response:
+                schema_payload = json.loads(response.read().decode("utf-8"))
+
+            record_body = json.dumps({"payload": {"slug": "via-gateway", "title": "Via Gateway"}, "created_by": "tester"}).encode("utf-8")
+            record_request = request.Request(
+                base_url + "/test-project/records/note",
+                data=record_body,
+                method="POST",
+                headers={"Content-Type": "application/json; charset=utf-8"},
+            )
+            with request.urlopen(record_request) as response:
+                record_payload = json.loads(response.read().decode("utf-8"))
+
+            initialize_request = request.Request(
+                base_url + "/test-project/mcp",
+                data=json.dumps(
+                    {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-03-26"}}
+                ).encode("utf-8"),
+                method="POST",
+                headers={"Content-Type": "application/json; charset=utf-8", "Accept": "application/json, text/event-stream"},
+            )
+            with request.urlopen(initialize_request) as response:
+                mcp_payload = json.loads(response.read().decode("utf-8"))
+                session_id = response.headers.get("Mcp-Session-Id")
+
+            self.assertIn('href="/test-project/ui/entities?lang=en"', dashboard_html)
+            self.assertIn('src="/test-project/ui/assets/ui.js"', dashboard_html)
+            self.assertIn("entity_types", schema_payload)
+            self.assertEqual(record_payload["slug"], "via-gateway")
+            self.assertEqual(mcp_payload["result"]["serverInfo"]["name"], "mcp-memory")
+            self.assertTrue(session_id)
+        finally:
+            for server, thread in (
+                (home_server, home_thread),
+                (mcp_server, mcp_thread),
+                (api_server, api_thread),
+            ):
+                if server is not None:
+                    server.shutdown()
+                    server.server_close()
+                if thread is not None:
+                    thread.join(timeout=5)
+            sandbox.cleanup()
+
+    def test_gateway_unknown_and_stopped_project_errors_are_clear(self) -> None:
+        sandbox = ProjectSandbox()
+        server = None
+        thread = None
+        try:
+            runtime_manager = mock.Mock()
+            runtime_manager.get_project_runtime.return_value = ProjectRuntimeInfo("test-project", "stopped", "not running", False)
+            handler = build_home_handler(sandbox.registry, sandbox.app_home, runtime_manager)
+            server = HTTPServer(("127.0.0.1", 0), handler)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base_url = f"http://127.0.0.1:{server.server_port}"
+
+            with self.assertRaises(error.HTTPError) as missing_ctx:
+                request.urlopen(base_url + "/missing-project/ui/")
+            with self.assertRaises(error.HTTPError) as stopped_ctx:
+                request.urlopen(base_url + "/test-project/ui/")
+            with self.assertRaises(error.HTTPError) as stopped_mcp_ctx:
+                request.urlopen(
+                    request.Request(
+                        base_url + "/test-project/mcp",
+                        data=b"{}",
+                        method="POST",
+                        headers={"Accept": "application/json"},
+                    )
+                )
+
+            self.assertEqual(missing_ctx.exception.code, 404)
+            self.assertEqual(stopped_ctx.exception.code, 503)
+            self.assertIn("Start Project", stopped_ctx.exception.read().decode("utf-8"))
+            self.assertEqual(stopped_mcp_ctx.exception.code, 503)
+            self.assertIn("project_unavailable", stopped_mcp_ctx.exception.read().decode("utf-8"))
         finally:
             if server is not None:
                 server.shutdown()
@@ -540,12 +692,13 @@ class GuiHomeTests(unittest.TestCase):
             self.assertIn("Setup Guide", setup_html)
             self.assertIn('action="/setup/project?lang=en"', setup_html)
             self.assertIn("Local Home", setup_html)
+            self.assertIn("DNS Gateway", setup_html)
             self.assertIn("MCP Endpoint", setup_html)
             self.assertIn("flash=created", final_url)
             self.assertIn("/setup?", final_url)
             self.assertIn("Project created successfully.", created_html)
             self.assertIn("Copy MCP config", created_html)
-            self.assertIn("23002/mcp", created_html)
+            self.assertIn(f"{base_url}/setup-project/mcp", created_html)
             setup_project = sandbox.registry.get_project("setup-project")
             self.assertIsNotNone(setup_project)
             self.assertEqual(load_project_schema(setup_project.schema_path).entity("server").name, "server")
@@ -742,6 +895,33 @@ class GuiHomeTests(unittest.TestCase):
             self.assertIn("mcp_port", invalid_state.errors)
             self.assertIn("write_mode", invalid_state.errors)
 
+            reserved_state = parse_project_create_form(
+                {
+                    "project_id": "ui",
+                    "display_name": "Reserved Project",
+                    "project_root": "",
+                    "http_port": "12000",
+                    "mcp_port": "12001",
+                    "write_mode": "confirm",
+                },
+                app_home,
+                registry,
+            )
+            self.assertIn("project_id", reserved_state.errors)
+            self.assertIn("reserved", reserved_state.errors["project_id"])
+
+    def test_project_form_state_uses_next_available_ports(self) -> None:
+        sandbox = ProjectSandbox()
+        try:
+            sandbox.project.http_port = 8765
+            sandbox.project.mcp_port = 9876
+            sandbox.registry.upsert_project(sandbox.project)
+            state = build_project_form_state(registry=sandbox.registry)
+            self.assertEqual(state.values["http_port"], "8766")
+            self.assertEqual(state.values["mcp_port"], "9877")
+        finally:
+            sandbox.cleanup()
+
     def test_parse_project_create_form_rejects_file_root(self) -> None:
         with TemporaryDirectory() as tmp:
             app_home = Path(tmp) / "app"
@@ -809,11 +989,12 @@ class GuiHomeTests(unittest.TestCase):
             starting = ProjectRuntimeInfo("test-project", "starting", "booting", True)
             stopped = ProjectRuntimeInfo("test-project", "stopped", "down", False)
 
-            running_actions = render_project_actions(sandbox.project, running_managed, "en")
+            running_actions = render_project_actions(sandbox.project, running_managed, "en", "http://mcp-memory.local:8764")
             self.assertIn("Open Workspace", running_actions)
+            self.assertIn("http://mcp-memory.local:8764/test-project/ui/", running_actions)
             self.assertIn("Stop", running_actions)
             self.assertIn("Restart", running_actions)
-            self.assertIn("Starting", render_project_actions(sandbox.project, starting, "en"))
+            self.assertIn("Starting", render_project_actions(sandbox.project, starting, "en", "http://mcp-memory.local:8764"))
 
             self.assertIn("outside home UI", render_project_hint(sandbox.project, sandbox.app_home, running_unmanaged, ""))
             self.assertIn("http-api.log", render_project_hint(sandbox.project, sandbox.app_home, failed, ""))
@@ -846,6 +1027,16 @@ class GuiHomeTests(unittest.TestCase):
             self.assertEqual(render_home_flash("", "en"), "")
         finally:
             sandbox.cleanup()
+
+    def test_base_url_helpers_validate_and_fallback_to_host(self) -> None:
+        with TemporaryDirectory() as tmp:
+            registry = ProjectRegistry(Path(tmp) / "app" / "app_config.json")
+            self.assertEqual(public_base_url(registry, "127.0.0.1:1234"), "http://127.0.0.1:1234")
+            self.assertEqual(set_app_base_url(registry, "http://mcp-memory.local:8764/"), "http://mcp-memory.local:8764")
+            self.assertEqual(public_base_url(registry, "127.0.0.1:1234"), "http://mcp-memory.local:8764")
+            self.assertEqual(normalize_base_url(""), "")
+            with self.assertRaisesRegex(ValueError, "without path"):
+                normalize_base_url("http://mcp-memory.local:8764/project")
 
 
 if __name__ == "__main__":

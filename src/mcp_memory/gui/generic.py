@@ -12,7 +12,7 @@ from mcp_memory.schema import ProjectSchema, copy_schema_payload, load_project_s
 from mcp_memory.services import GenericEvidenceService, GenericRelationService, GenericWorkflowService, Record, RecordService
 from mcp_memory.storage import open_database
 
-from .i18n import resolve_language, with_lang
+from .i18n import resolve_language, translate_text, with_lang
 from .render import badge, empty_state, key_value_grid, section, table
 from .templates import renderer
 
@@ -24,6 +24,12 @@ def generic_workspace_response(project: ProjectConfig, registry: ProjectRegistry
     lang = resolve_language(query.get("lang", ["en"])[0])
     if path == "/ui/entities":
         return HTTPStatus.OK, workspace_page_html(project, "Entity Types", _render_entity_types(project, lang), raw_path, lang)
+    if path == "/ui/entities/new":
+        return HTTPStatus.OK, workspace_page_html(project, "New Entity Type", _render_entity_type_constructor(project, None, lang), raw_path, lang)
+    if path.startswith("/ui/entities/"):
+        parts = [segment for segment in path.split("/") if segment]
+        if len(parts) == 4 and parts[3] == "edit":
+            return HTTPStatus.OK, workspace_page_html(project, "Edit Entity Type", _render_entity_type_edit(project, parts[2], None, lang), raw_path, lang)
     if path == "/ui/records":
         return HTTPStatus.OK, workspace_page_html(project, "Records", _render_records(project, query, lang), raw_path, lang)
     if path == "/ui/search":
@@ -50,6 +56,14 @@ def generic_workspace_post_action(project: ProjectConfig, registry: ProjectRegis
     path, _, query_string = raw_path.partition("?")
     query = parse_qs(query_string)
     lang = resolve_language(query.get("lang", [form_data.get("lang", "en")])[0])
+    if path == "/ui/entities/new":
+        return _submit_entity_type_constructor(project, form_data, lang)
+    if path.startswith("/ui/entities/"):
+        parts = [segment for segment in path.split("/") if segment]
+        if len(parts) == 4 and parts[3] == "edit":
+            return _submit_entity_type_edit(project, parts[2], form_data, lang)
+        if len(parts) == 4 and parts[3] == "delete":
+            return _submit_entity_type_delete(project, parts[2], lang)
     if path.startswith("/ui/records/"):
         parts = [segment for segment in path.split("/") if segment]
         if len(parts) == 4 and parts[3] == "new":
@@ -101,22 +115,39 @@ def generic_workspace_post_action(project: ProjectConfig, registry: ProjectRegis
 
 
 def _render_entity_types(project: ProjectConfig, lang: str) -> str:
+    return renderer.render(
+        "generic_shell.html",
+        header_html="<section class=\"entity-hero\"><h2>Entity Types</h2><p class=\"entity-subtitle\">Schema-defined record types for this project.</p></section>",
+        body_html=_entity_types_body(project, lang),
+    )
+
+
+def _entity_types_body(project: ProjectConfig, lang: str) -> str:
     schema = load_project_schema(project.schema_path)
     rows = []
     for entity in schema.entity_types:
+        edit_href = with_lang(f"/ui/entities/{entity.name}/edit", lang)
+        new_href = with_lang(f"/ui/records/{entity.name}/new", lang)
+        delete_action = with_lang(f"/ui/entities/{entity.name}/delete", lang)
+        actions = (
+            '<div class="inline-actions">'
+            f'<a class="button button-secondary button-small" href="{escape(new_href, quote=True)}">New</a>'
+            f'<a class="button button-secondary button-small" href="{escape(edit_href, quote=True)}">Edit</a>'
+            f'<form method="post" action="{escape(delete_action, quote=True)}">'
+            '<button class="button button-secondary button-small button-danger" type="submit">Delete</button>'
+            "</form>"
+            "</div>"
+        )
         rows.append(
             [
                 f'<a href="{escape(with_lang(f"/ui/records?entity_type={entity.name}", lang), quote=True)}">{escape(entity.label)}</a>',
                 escape(entity.name),
                 escape(", ".join(entity.required)),
-                f'<a class="button button-secondary" href="{escape(with_lang(f"/ui/records/{entity.name}/new", lang), quote=True)}">New</a>',
+                actions,
             ]
         )
-    return renderer.render(
-        "generic_shell.html",
-        header_html="<section class=\"entity-hero\"><h2>Entity Types</h2><p class=\"entity-subtitle\">Schema-defined record types for this project.</p></section>",
-        body_html=section("Types", table(["Label", "Name", "Required", "Action"], rows)),
-    )
+    create_button = f'<div class="page-actions"><a class="button button-primary" href="{escape(with_lang("/ui/entities/new", lang), quote=True)}">New Entity Type</a></div>'
+    return create_button + section("Types", table(["Label", "Name", "Required", "Action"], rows))
 
 
 def _render_records(project: ProjectConfig, query: dict[str, list[str]], lang: str) -> str:
@@ -150,7 +181,8 @@ def _render_records(project: ProjectConfig, query: dict[str, list[str]], lang: s
     create_link = ""
     if entity_type:
         create_link = f'<a class="button button-primary" href="{escape(with_lang(f"/ui/records/{entity_type}/new", lang), quote=True)}">New Record</a>'
-    content = create_link + (table(["Type", "Title", "Slug", "Summary"], rows) if rows else empty_state("No records yet", "Create the first record for this schema."))
+    records_content = table(["Type", "Title", "Slug", "Summary"], rows) if rows else empty_state("No records yet", "Create the first record for this schema.")
+    content = f'<div class="section-stack">{create_link}{records_content}</div>'
     return renderer.render(
         "generic_shell.html",
         header_html="<section class=\"entity-hero\"><h2>Records</h2><p class=\"entity-subtitle\">Generic schema-backed records.</p></section>",
@@ -480,9 +512,6 @@ def _render_schema_builder(project: ProjectConfig, error: str | None, lang: str)
         header_html="<section class=\"entity-hero\"><h2>Schema Builder</h2><p class=\"entity-subtitle\">Edit project schema metadata.</p></section>",
         body_html=(
             section("Schema Overview", _schema_overview(schema))
-            + section("Add Entity Type", _entity_type_builder_form(lang))
-            + section("Add Field", _field_builder_form(schema, lang))
-            + section("Add Relation Type", _relation_type_builder_form(schema, lang))
             + section("Schema JSON", form)
         ),
     )
@@ -493,23 +522,119 @@ def _schema_payload_from_form(form_data: dict[str, str]) -> dict[str, Any]:
 
 
 def _schema_overview(schema: ProjectSchema) -> str:
-    entity_rows = []
+    entity_cards = []
     for entity in schema.entity_types:
-        entity_rows.append(
-            [
-                escape(entity.label),
-                escape(entity.name),
-                escape(", ".join(field.name for field in entity.fields)),
-                escape(", ".join(entity.required)),
-            ]
+        fields = "".join(
+            f'<span class="schema-chip{" schema-chip-required" if field.name in entity.required else ""}">{escape(field.name)}<small>{escape(field.widget)}</small></span>'
+            for field in entity.fields
         )
-    relation_rows = [
-        [escape(relation.label), escape(relation.name), escape(", ".join(relation.from_types)), escape(", ".join(relation.to_types))]
-        for relation in schema.relation_types
-    ]
-    return section("Entity Types", table(["Label", "Name", "Fields", "Required"], entity_rows)) + section(
-        "Relation Types",
-        table(["Label", "Name", "From", "To"], relation_rows) if relation_rows else empty_state("No relation types yet", "Add relation types below."),
+        meta = [
+            ("Name", entity.name),
+            ("Title", entity.title_field or "-"),
+            ("Summary", entity.summary_field or "-"),
+            ("Slug", entity.slug_field or "-"),
+        ]
+        entity_cards.append(
+            "<article class=\"schema-card\">"
+            f"<div class=\"schema-card-head\"><div><h3>{escape(entity.label)}</h3><p>{escape(entity.description or entity.name)}</p></div><code>{escape(entity.name)}</code></div>"
+            f"{key_value_grid(meta)}"
+            f"<div class=\"schema-chip-row\">{fields}</div>"
+            "</article>"
+        )
+    relation_cards = []
+    for relation in schema.relation_types:
+        relation_cards.append(
+            "<article class=\"schema-card schema-relation-card\">"
+            f"<div class=\"schema-card-head\"><div><h3>{escape(relation.label)}</h3><p>{escape(relation.name)}</p></div>{badge('directed' if relation.directed else 'undirected', 'neutral')}</div>"
+            f"{key_value_grid([('From', ', '.join(relation.from_types)), ('To', ', '.join(relation.to_types))])}"
+            "</article>"
+        )
+    return (
+        '<div class="schema-overview-stack">'
+        + section("Entity Types", f'<div class="schema-card-grid">{"".join(entity_cards)}</div>')
+        + section(
+            "Relation Types",
+            f'<div class="schema-card-grid schema-relation-grid">{"".join(relation_cards)}</div>' if relation_cards else empty_state("No relation types yet", "Create relation types from the entity type constructor."),
+        )
+        + "</div>"
+    )
+
+
+def _render_entity_type_edit(project: ProjectConfig, entity_name: str, error: str | None, lang: str) -> str:
+    schema = load_project_schema(project.schema_path)
+    try:
+        entity = schema.entity(entity_name)
+    except ValueError as exc:
+        return empty_state("Entity type not found", str(exc))
+    entity_json = json.dumps(entity.to_dict(), ensure_ascii=False, indent=2)
+    error_html = f'<div class="flash flash-warning">{escape(error)}</div>' if error else ""
+    form = (
+        f'{error_html}<form class="project-form" method="post" action="{escape(with_lang(f"/ui/entities/{entity.name}/edit", lang), quote=True)}">'
+        '<label class="form-field"><span class="field-label">Entity JSON</span>'
+        f'<textarea name="entity_json" rows="22">{escape(entity_json)}</textarea></label>'
+        '<div class="form-actions">'
+        '<button class="button button-primary" type="submit">Save Entity Type</button>'
+        f'<a class="button button-secondary" href="{escape(with_lang("/ui/entities", lang), quote=True)}">Cancel</a>'
+        '</div></form>'
+    )
+    return renderer.render(
+        "generic_shell.html",
+        header_html=f'<section class="entity-hero"><h2>Edit Entity Type</h2><p class="entity-subtitle">{escape(entity.label)} / {escape(entity.name)}</p></section>',
+        body_html=section("Entity Definition", form, "Edit this entity type as schema JSON. Existing records are not rewritten automatically."),
+    )
+
+
+def _submit_entity_type_edit(project: ProjectConfig, entity_name: str, form_data: dict[str, str], lang: str) -> dict[str, Any]:
+    try:
+        entity_payload = json.loads(form_data.get("entity_json", "{}"))
+        payload = load_project_schema(project.schema_path).to_dict()
+        entities = payload.get("entity_types", [])
+        for idx, entity in enumerate(entities):
+            if str(entity.get("name", "")) == entity_name:
+                entities[idx] = entity_payload
+                break
+        else:
+            raise ValueError(f"unknown entity type: {entity_name}")
+        ProjectSchema.from_dict(payload)
+        copy_schema_payload(project.schema_path, payload)
+    except (ValueError, KeyError, json.JSONDecodeError) as exc:
+        return {"status": HTTPStatus.BAD_REQUEST, "html": _render_entity_type_edit(project, entity_name, str(exc), lang)}
+    return {"location": with_lang("/ui/entities?flash=updated", lang)}
+
+
+def _submit_entity_type_delete(project: ProjectConfig, entity_name: str, lang: str) -> dict[str, Any]:
+    try:
+        payload = load_project_schema(project.schema_path).to_dict()
+        entities = payload.get("entity_types", [])
+        if len(entities) <= 1:
+            raise ValueError("schema must keep at least one entity type")
+        with open_database(project.database_path) as database:
+            count = database.connection.execute(
+                "SELECT COUNT(*) AS count FROM records WHERE project_id = ? AND entity_type = ?",
+                (project.project_id, entity_name),
+            ).fetchone()["count"]
+        if count:
+            raise ValueError("entity type has records and cannot be deleted")
+        payload["entity_types"] = [entity for entity in entities if str(entity.get("name", "")) != entity_name]
+        if len(payload["entity_types"]) == len(entities):
+            raise ValueError(f"unknown entity type: {entity_name}")
+        payload["relation_types"] = [
+            relation
+            for relation in payload.get("relation_types", [])
+            if entity_name not in relation.get("from", []) and entity_name not in relation.get("to", [])
+        ]
+        ProjectSchema.from_dict(payload)
+        copy_schema_payload(project.schema_path, payload)
+    except (ValueError, KeyError, json.JSONDecodeError) as exc:
+        return {"status": HTTPStatus.BAD_REQUEST, "html": _render_entity_types_with_error(project, str(exc), lang)}
+    return {"location": with_lang("/ui/entities?flash=deleted", lang)}
+
+
+def _render_entity_types_with_error(project: ProjectConfig, error: str, lang: str) -> str:
+    return renderer.render(
+        "generic_shell.html",
+        header_html="<section class=\"entity-hero\"><h2>Entity Types</h2><p class=\"entity-subtitle\">Schema-defined record types for this project.</p></section>",
+        body_html=f'<div class="flash flash-warning">{escape(error)}</div>' + _entity_types_body(project, lang),
     )
 
 
@@ -643,6 +768,258 @@ def _schema_entity_payload(payload: dict[str, Any], entity_name: str) -> dict[st
 
 def _split_csv(raw: str) -> list[str]:
     return [item.strip() for item in raw.replace("\n", ",").split(",") if item.strip()]
+
+
+def _indexed_form_suffixes(form_data: dict[str, str], prefix: str) -> list[int]:
+    suffixes = []
+    for key in form_data:
+        if not key.startswith(prefix):
+            continue
+        suffix = key[len(prefix) :]
+        if suffix.isdigit():
+            suffixes.append(int(suffix))
+    return sorted(set(suffixes))
+
+
+def _render_entity_type_constructor(project: ProjectConfig, error: str | None, lang: str) -> str:
+    error_html = f'<div class="flash flash-warning">{escape(error)}</div>' if error else ""
+    widgets = ["text", "textarea", "number", "bool", "enum", "tags", "json", "datetime", "url", "path"]
+    widget_options_html = "".join(f'<option value="{w}">{w}</option>' for w in widgets)
+    body = (
+        error_html
+        + '<form class="project-form" method="post" action="' + escape(with_lang("/ui/entities/new", lang), quote=True) + '">'
+        + section(
+            "Basic Properties",
+            '<div class="form-grid">'
+            + _labeled_field(
+                "Name",
+                "Unique identifier for API and URLs. Lowercase letters, digits, underscores. Example: function, structure, note",
+                '<input name="name" required pattern="[a-z][a-z0-9_]*" placeholder="my_entity">',
+                lang,
+            )
+            + _labeled_field(
+                "Label",
+                "Human-readable name shown in the UI. Example: Function, Structure, Note",
+                '<input name="label" required placeholder="My Entity">',
+                lang,
+            )
+            + _labeled_field(
+                "Description",
+                "Short explanation of what this entity type represents.",
+                '<textarea name="description" rows="6" class="description-textarea"></textarea>',
+                lang,
+            )
+            + "</div>",
+        )
+        + section(
+            "Fields",
+            '<div id="constructor-fields">'
+            + _constructor_field_row(0, widget_options_html, is_first=True, lang=lang)
+            + "</div>"
+            '<div class="form-actions">'
+            '<button type="button" class="button button-secondary" onclick="addConstructorFieldRow()">Add Field</button>'
+            "</div>",
+        )
+        + section(
+            "Relation Types (optional)",
+            '<div id="constructor-relations"></div>'
+            '<div class="form-actions">'
+            '<button type="button" class="button button-secondary" onclick="addConstructorRelationRow()">Add Relation Type</button>'
+            "</div>",
+        )
+        + '<div class="form-actions"><button class="button button-primary" type="submit">Create Entity Type</button></div></form>'
+        + "<script>"
+        "var _cfIdx=1;var _crIdx=0;"
+        "function addConstructorFieldRow(){"
+        'var c=document.getElementById("constructor-fields");'
+        "c.insertAdjacentHTML('beforeend'," + json.dumps(_constructor_field_row_js_template(lang)) + ".replace(/__IDX__/g,_cfIdx));"
+        "_cfIdx++;"
+        "}"
+        "function removeConstructorFieldRow(btn){"
+        'btn.closest(".constructor-field-row").remove();'
+        "}"
+        "function addConstructorRelationRow(){"
+        'var c=document.getElementById("constructor-relations");'
+        "c.insertAdjacentHTML('beforeend'," + json.dumps(_constructor_relation_row_js_template(lang)) + ".replace(/__IDX__/g,_crIdx));"
+        "_crIdx++;"
+        "}"
+        "function removeConstructorRelationRow(btn){"
+        'btn.closest(".constructor-relation-row").remove();'
+        "}"
+        "function toggleEnumOptions(sel){"
+        'var row=sel.closest(".constructor-field-row");'
+        'var el=row.querySelector(".constructor-enum-line");'
+        'if(el)el.style.display=sel.value==="enum"?"":"none";'
+        "}"
+        + "</script>"
+    )
+    return renderer.render(
+        "generic_shell.html",
+        header_html='<section class="entity-hero"><h2>New Entity Type</h2><p class="entity-subtitle">Create a new entity type for this project.</p></section>',
+        body_html=body,
+    )
+
+
+def _hint(text: str, lang: str = "en") -> str:
+    translated = escape(translate_text(lang, text), quote=True)
+    svg = '<svg class="hint-icon-svg" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="7"/><line x1="8" y1="7.5" x2="8" y2="11.5"/><circle cx="8" cy="5" r="0.5" fill="currentColor" stroke="none"/></svg>'
+    return f'<span class="hint-wrap" aria-label="{translated}">{svg}<span class="hint-tooltip">{translated}</span></span>'
+
+
+def _labeled_field(label: str, hint: str, control_html: str, lang: str = "en") -> str:
+    return f'<label class="form-field"><span class="field-label">{escape(label)} {_hint(hint, lang)}</span>{control_html}</label>'
+
+
+def _labeled_checkbox(label: str, hint: str, name: str, value: str, checked: bool = False, lang: str = "en") -> str:
+    checked_attr = " checked" if checked else ""
+    return f'<label class="form-field checkbox-field"><span class="field-label">{escape(label)} {_hint(hint, lang)}</span><input type="checkbox" name="{escape(name, quote=True)}" value="{escape(value, quote=True)}"{checked_attr}></label>'
+
+
+def _constructor_field_row(idx: int, widget_options_html: str, is_first: bool = False, lang: str = "en") -> str:
+    remove_btn = '<button type="button" class="button button-secondary button-small" onclick="removeConstructorFieldRow(this)">Remove</button>' if not is_first else ""
+    return (
+        '<div class="constructor-field-row">'
+        '<div class="constructor-field-main">'
+        + _labeled_field("Field Name", "Identifier for this field in the record payload. Lowercase letters, digits, underscores.", f'<input name="field_name_{idx}" required pattern="[a-z][a-z0-9_]*" placeholder="title">', lang)
+        + _labeled_field("Field Label", "Human-readable name shown in forms and tables.", f'<input name="field_label_{idx}" required placeholder="Title">', lang)
+        + _labeled_field("Widget", "Controls how the field is displayed and edited. text: single line, textarea: multi-line, number: numeric, bool: true/false, enum: dropdown, tags: tag list, json: arbitrary JSON, datetime: date/time, url: URL, path: file path.", f'<select name="field_widget_{idx}" onchange="toggleEnumOptions(this)">{widget_options_html}</select>', lang)
+        + "</div>"
+        '<div class="constructor-flag-grid">'
+        + _labeled_checkbox("Required", "This field must be filled when creating a record.", f"field_required_{idx}", "true", lang=lang)
+        + _labeled_checkbox("Title", "Value of this field is used as the record title in lists and search results. Only one field can be the title.", f"field_title_{idx}", "true", lang=lang)
+        + _labeled_checkbox("Summary", "Value of this field is used as a short description in lists. Only one field can be the summary.", f"field_summary_{idx}", "true", lang=lang)
+        + _labeled_checkbox("Slug", "Value of this field is used as a human-friendly URL identifier. Must be unique. Only one field can be the slug.", f"field_slug_{idx}", "true", lang=lang)
+        + _labeled_checkbox("Search", "Value of this field is included in full-text search indexing.", f"field_search_{idx}", "true", lang=lang)
+        + _labeled_checkbox("Tag", "Value of this field is indexed as tags for tag-based filtering.", f"field_tag_{idx}", "true", lang=lang)
+        + "</div>"
+        '<div class="constructor-field-line constructor-enum-line" style="display:none">'
+        + _labeled_field("Enum Options", "Comma-separated list of allowed values for enum widget.", f'<input name="field_options_{idx}" placeholder="one, two, three">', lang)
+        + "</div>"
+        + remove_btn
+        + "</div>"
+    )
+
+
+def _constructor_field_row_js_template(lang: str = "en") -> str:
+    widgets = ["text", "textarea", "number", "bool", "enum", "tags", "json", "datetime", "url", "path"]
+    widget_options_html = "".join(f'<option value="{w}">{w}</option>' for w in widgets)
+    return (
+        '<div class="constructor-field-row">'
+        '<div class="constructor-field-main">'
+        + _labeled_field("Field Name", "Identifier for this field in the record payload. Lowercase letters, digits, underscores.", '<input name="field_name___IDX__" required pattern="[a-z][a-z0-9_]*" placeholder="title">', lang)
+        + _labeled_field("Field Label", "Human-readable name shown in forms and tables.", '<input name="field_label___IDX__" required placeholder="Title">', lang)
+        + _labeled_field("Widget", "Controls how the field is displayed and edited. text: single line, textarea: multi-line, number: numeric, bool: true/false, enum: dropdown, tags: tag list, json: arbitrary JSON, datetime: date/time, url: URL, path: file path.", f'<select name="field_widget___IDX__" onchange="toggleEnumOptions(this)">{widget_options_html}</select>', lang)
+        + "</div>"
+        '<div class="constructor-flag-grid">'
+        + _labeled_checkbox("Required", "This field must be filled when creating a record.", "field_required___IDX__", "true", lang=lang)
+        + _labeled_checkbox("Title", "Value of this field is used as the record title in lists and search results. Only one field can be the title.", "field_title___IDX__", "true", lang=lang)
+        + _labeled_checkbox("Summary", "Value of this field is used as a short description in lists. Only one field can be the summary.", "field_summary___IDX__", "true", lang=lang)
+        + _labeled_checkbox("Slug", "Value of this field is used as a human-friendly URL identifier. Must be unique. Only one field can be the slug.", "field_slug___IDX__", "true", lang=lang)
+        + _labeled_checkbox("Search", "Value of this field is included in full-text search indexing.", "field_search___IDX__", "true", lang=lang)
+        + _labeled_checkbox("Tag", "Value of this field is indexed as tags for tag-based filtering.", "field_tag___IDX__", "true", lang=lang)
+        + "</div>"
+        '<div class="constructor-field-line constructor-enum-line" style="display:none">'
+        + _labeled_field("Enum Options", "Comma-separated list of allowed values for enum widget.", '<input name="field_options___IDX__" placeholder="one, two, three">', lang)
+        + "</div>"
+        '<button type="button" class="button button-secondary button-small" onclick="removeConstructorFieldRow(this)">Remove</button>'
+        "</div>"
+    )
+
+
+def _constructor_relation_row_js_template(lang: str = "en") -> str:
+    return (
+        '<div class="constructor-relation-row">'
+        '<div class="form-grid">'
+        + _labeled_field("Relation Name", "Unique identifier for this relation type. Lowercase letters, digits, underscores.", '<input name="rel_name___IDX__" required pattern="[a-z][a-z0-9_]*" placeholder="related_to">', lang)
+        + _labeled_field("Relation Label", "Human-readable name for this relation type.", '<input name="rel_label___IDX__" required placeholder="Related To">', lang)
+        + _labeled_field("From", "Comma-separated list of entity type names that can be the source. Use * for any.", '<input name="rel_from___IDX__" placeholder="note, source or *" required>', lang)
+        + _labeled_field("To", "Comma-separated list of entity type names that can be the target. Use * for any.", '<input name="rel_to___IDX__" placeholder="note, source or *" required>', lang)
+        + _labeled_checkbox("Directed", "If checked, the relation has direction (from to). If unchecked, it is bidirectional.", "rel_directed___IDX__", "true", checked=True, lang=lang)
+        + "</div>"
+        '<button type="button" class="button button-secondary button-small" onclick="removeConstructorRelationRow(this)">Remove</button>'
+        "</div>"
+    )
+
+
+def _submit_entity_type_constructor(project: ProjectConfig, form_data: dict[str, str], lang: str) -> dict[str, Any]:
+    name = form_data.get("name", "").strip()
+    label = form_data.get("label", "").strip() or name
+    description = form_data.get("description", "").strip()
+    if not name:
+        return {"status": HTTPStatus.BAD_REQUEST, "html": _render_entity_type_constructor(project, "Name is required", lang)}
+    fields = []
+    required = []
+    title_field = ""
+    summary_field = ""
+    slug_field = ""
+    search_fields = []
+    tag_fields = []
+    for idx in _indexed_form_suffixes(form_data, "field_name_"):
+        field_name_key = f"field_name_{idx}"
+        field_name = form_data.get(field_name_key, "").strip()
+        if not field_name:
+            continue
+        field_label = form_data.get(f"field_label_{idx}", "").strip() or field_name
+        widget = form_data.get(f"field_widget_{idx}", "text").strip() or "text"
+        field_payload: dict[str, Any] = {"name": field_name, "label": field_label, "widget": widget}
+        options = _split_csv(form_data.get(f"field_options_{idx}", ""))
+        if options:
+            field_payload["options"] = options
+        fields.append(field_payload)
+        if form_data.get(f"field_required_{idx}") == "true":
+            required.append(field_name)
+        if form_data.get(f"field_title_{idx}") == "true":
+            title_field = field_name
+        if form_data.get(f"field_summary_{idx}") == "true":
+            summary_field = field_name
+        if form_data.get(f"field_slug_{idx}") == "true":
+            slug_field = field_name
+        if form_data.get(f"field_search_{idx}") == "true":
+            search_fields.append(field_name)
+        if form_data.get(f"field_tag_{idx}") == "true":
+            tag_fields.append(field_name)
+    if not fields:
+        fields = [{"name": "title", "label": "Title", "widget": "text"}]
+        required = ["title"]
+        title_field = "title"
+        search_fields = ["title"]
+    entity_type_payload: dict[str, Any] = {
+        "name": name,
+        "label": label,
+        "description": description,
+        "fields": fields,
+        "required": required,
+        "title_field": title_field,
+        "summary_field": summary_field,
+        "slug_field": slug_field,
+        "search_fields": search_fields,
+        "tag_fields": tag_fields,
+    }
+    relation_types = []
+    for ridx in _indexed_form_suffixes(form_data, "rel_name_"):
+        rel_name_key = f"rel_name_{ridx}"
+        rel_name = form_data.get(rel_name_key, "").strip()
+        if not rel_name:
+            continue
+        relation_types.append(
+            {
+                "name": rel_name,
+                "label": form_data.get(f"rel_label_{ridx}", "").strip() or rel_name,
+                "from": _split_csv(form_data.get(f"rel_from_{ridx}", "")),
+                "to": _split_csv(form_data.get(f"rel_to_{ridx}", "")),
+                "directed": form_data.get(f"rel_directed_{ridx}") == "true",
+            }
+        )
+    try:
+        payload = load_project_schema(project.schema_path).to_dict()
+        payload.setdefault("entity_types", []).append(entity_type_payload)
+        if relation_types:
+            payload.setdefault("relation_types", []).extend(relation_types)
+        ProjectSchema.from_dict(payload)
+        copy_schema_payload(project.schema_path, payload)
+    except (ValueError, KeyError, json.JSONDecodeError) as exc:
+        return {"status": HTTPStatus.BAD_REQUEST, "html": _render_entity_type_constructor(project, str(exc), lang)}
+    return {"location": with_lang("/ui/entities?flash=created", lang)}
 
 
 def _render_evidence_page(project: ProjectConfig, query: dict[str, list[str]], error: str | None, lang: str) -> str:

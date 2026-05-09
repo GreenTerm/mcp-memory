@@ -1,6 +1,6 @@
 # Phase 03 - Project Lifecycle, CLI, Transfer, And Legacy Import
 
-Status: complete for generic project lifecycle, transfer, backup portability, and legacy DB import.
+Status: complete for v0.3.0 generic project lifecycle, transfer, backup portability, and legacy DB import.
 
 Goal: make generic schemas part of project lifecycle and provide import/export paths for generic and legacy data.
 
@@ -36,6 +36,7 @@ Current decision: legacy data migration is explicit and opt-in through `import-l
 ## Already Done
 
 - Project creation accepts explicit schema paths and bundled schema templates.
+- Project IDs are validated for DNS/path gateway use; reserved root paths such as `assets`, `projects`, `setup`, `health`, `mcp`, and `ui` are rejected.
 - Project creation copies selected schema into `<project-root>/schema.json`.
 - CLI supports:
   - `create-project --schema <path>`

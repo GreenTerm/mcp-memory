@@ -471,6 +471,146 @@ def _schema_agent_reference(project: ProjectConfig) -> str:
     return "\n".join(lines)
 
 
+def entity_payload_reference(schema: ProjectSchema) -> str:
+    lines = ["Entity payload fields for upsert_record:"]
+    for entity in schema.entity_types:
+        all_fields = [field.name for field in entity.fields]
+        optional = [field_name for field_name in all_fields if field_name not in set(entity.required)]
+        required = ", ".join(entity.required) or "<none>"
+        optional_text = ", ".join(optional) or "<none>"
+        slug = entity.slug_field or "<none>"
+        title = entity.title_field or "<none>"
+        summary = entity.summary_field or "<none>"
+        lines.extend(
+            [
+                f"entity_type={entity.name}",
+                f"required payload fields: {required}",
+                f"optional payload fields: {optional_text}",
+                f"slug_field={slug}; title_field={title}; summary_field={summary}",
+                "example upsert_record:",
+                _json_example(
+                    {
+                        "entity_type": entity.name,
+                        "payload": _example_payload_for_entity(schema, entity.name),
+                        "created_by": "agent",
+                        "updated_by": "agent",
+                    }
+                ),
+            ]
+        )
+    return "\n".join(lines)
+
+
+def tool_usage_reference(project: ProjectConfig, focus_entity: str = "") -> str:
+    schema = load_project_schema(project.schema_path)
+    specs = _tool_usage_specs()
+    lines = ["Tool usage examples:"]
+    for tool_name, fields in specs.items():
+        required = ", ".join(fields["required"]) or "<none>"
+        optional = ", ".join(fields["optional"]) or "<none>"
+        lines.extend(
+            [
+                f"tool: {tool_name}",
+                f"required top-level fields: {required}",
+                f"optional top-level fields: {optional}",
+                "example:",
+                _json_example(tool_example(tool_name, schema, project, focus_entity)),
+            ]
+        )
+        if tool_name == "create_relation" and not schema.relation_types:
+            lines.append("relation_type note: choose or create a relation type in schema before calling create_relation.")
+    return "\n".join(lines)
+
+
+def tool_example(tool_name: str, schema: ProjectSchema, project: ProjectConfig, focus_entity: str = "") -> dict[str, Any]:
+    entity_type = _first_entity(schema)
+    record_id = focus_entity.strip() or f"{entity_type}-example"
+    relation = schema.relation_types[0] if schema.relation_types else None
+    from_entity_type = _relation_example_type(relation.from_types if relation else [], entity_type)
+    to_entity_type = _relation_example_type(relation.to_types if relation else [], entity_type)
+    examples: dict[str, dict[str, Any]] = {
+        "get_project_config": {},
+        "get_schema": {},
+        "list_entity_types": {},
+        "search_records": {"q": "startup", "entity_types": [entity_type], "limit": 20},
+        "get_record": {"entity_type": entity_type, "record_id": record_id},
+        "upsert_record": {
+            "entity_type": entity_type,
+            "payload": _example_payload_for_entity(schema, entity_type),
+            "created_by": "agent",
+            "updated_by": "agent",
+        },
+        "archive_record": {"entity_type": entity_type, "record_id": record_id, "archived_by": "agent"},
+        "get_related": {"entity_type": entity_type, "record_id": record_id, "hops": 1},
+        "add_evidence": {
+            "entity_type": entity_type,
+            "record_id": record_id,
+            "evidence_type": "excerpt",
+            "description": "Short source excerpt that supports this record.",
+            "excerpt": "Relevant source text or observation.",
+            "created_by": "agent",
+        },
+        "create_relation": {
+            "from_entity_type": from_entity_type,
+            "from_record_id": f"{from_entity_type}-source",
+            "to_entity_type": to_entity_type,
+            "to_record_id": f"{to_entity_type}-target",
+            "relation_type": relation.name if relation else "<schema_relation_type>",
+            "created_by": "agent",
+        },
+        "list_pending_changes": {"status": "pending"},
+        "confirm_change": {"pending_change_id": "pending-change-id", "confirmed_by": "agent"},
+        "reject_change": {"pending_change_id": "pending-change-id", "rejected_by": "agent"},
+        "export_json": {"output_path": str(project.exports_dir / "agent-export.json")},
+        "import_json": {"input_path": str(project.exports_dir / "agent-export.json"), "replace_existing": False},
+        "backup_project": {"output_path": str(project.backups_dir / "agent-backup.zip")},
+        "restore_project": {
+            "input_path": str(project.backups_dir / "agent-backup.zip"),
+            "project_root": str(project.project_root.parent / "restored-project"),
+            "project_id": "restored-project",
+            "display_name": "Restored Project",
+        },
+    }
+    return examples[tool_name]
+
+
+def _tool_usage_specs() -> dict[str, dict[str, list[str]]]:
+    return {
+        "get_project_config": {"required": [], "optional": []},
+        "get_schema": {"required": [], "optional": []},
+        "list_entity_types": {"required": [], "optional": []},
+        "search_records": {"required": [], "optional": ["q", "entity_types", "tag", "limit"]},
+        "get_record": {"required": ["entity_type", "record_id"], "optional": ["include_archived"]},
+        "upsert_record": {"required": ["entity_type", "payload"], "optional": ["record_id", "source_origin", "created_by", "updated_by"]},
+        "archive_record": {"required": ["entity_type", "record_id"], "optional": ["archived_by"]},
+        "get_related": {"required": ["entity_type", "record_id"], "optional": ["hops"]},
+        "add_evidence": {
+            "required": ["entity_type", "record_id", "evidence_type", "description"],
+            "optional": ["evidence_id", "excerpt", "source_url", "attachment_refs", "created_by"],
+        },
+        "create_relation": {
+            "required": ["from_entity_type", "from_record_id", "to_entity_type", "to_record_id", "relation_type"],
+            "optional": ["created_by"],
+        },
+        "list_pending_changes": {"required": [], "optional": ["status"]},
+        "confirm_change": {"required": ["pending_change_id"], "optional": ["confirmed_by"]},
+        "reject_change": {"required": ["pending_change_id"], "optional": ["rejected_by"]},
+        "export_json": {"required": [], "optional": ["output_path"]},
+        "import_json": {"required": ["input_path"], "optional": ["replace_existing"]},
+        "backup_project": {"required": [], "optional": ["output_path"]},
+        "restore_project": {
+            "required": ["input_path", "project_root"],
+            "optional": ["project_id", "display_name", "http_port", "mcp_port", "write_mode"],
+        },
+    }
+
+
+def _relation_example_type(candidates: list[str], fallback: str) -> str:
+    if not candidates or candidates[0] == "*":
+        return fallback
+    return candidates[0]
+
+
 def _first_entity(schema: ProjectSchema) -> str:
     return schema.entity_types[0].name
 
@@ -513,6 +653,8 @@ Use this server as a local offline-first schema-first knowledge base. The projec
 
 {_schema_agent_reference(project)}
 
+{entity_payload_reference(schema)}
+
 Recommended workflow:
 1. Call get_project_config first and check write_mode.
 2. Call get_schema or list_entity_types before writing. Never invent entity types or relation types outside the schema.
@@ -531,6 +673,8 @@ Required top-level fields by write tool:
 - confirm_change/reject_change: pending_change_id.
 - import_json: input_path.
 - restore_project: input_path, project_root.
+
+{tool_usage_reference(project, focus_entity)}
 
 Safe search example:
 {_json_example({"q": "startup", "entity_types": [entity_type], "limit": 20})}
@@ -558,6 +702,8 @@ Use upsert_record to create or update analysis records. The old fixed create_fun
 
 {_schema_agent_reference(project)}
 
+{entity_payload_reference(schema)}
+
 For upsert_record, required top-level fields are entity_type and payload. The payload must include the required payload fields listed for that entity type above. Include created_by and updated_by for audit clarity.
 
 Good upsert_record payload:
@@ -579,6 +725,8 @@ def _render_structure_prompt(project: ProjectConfig, arguments: dict[str, str]) 
 Use upsert_record for recovered layouts or any other schema-defined entity. The old fixed create_structure/update_structure tools are not part of the generic MCP surface.
 
 {_schema_agent_reference(project)}
+
+{entity_payload_reference(schema)}
 
 For upsert_record, required top-level fields are entity_type and payload. The payload must include the required payload fields listed for that entity type above.
 
@@ -602,6 +750,8 @@ def _render_hypothesis_evidence_prompt(project: ProjectConfig, arguments: dict[s
 Use records for claims and notes, add_evidence for concrete support such as blocks, excerpts, xrefs, or attachments, and create_relation for graph edges between records.
 
 {_schema_agent_reference(project)}
+
+{entity_payload_reference(schema)}
 
 Required top-level fields:
 - upsert_record: entity_type, payload. Payload must include the required fields for the chosen entity type.
@@ -647,6 +797,8 @@ def _render_search_graph_prompt(project: ProjectConfig, arguments: dict[str, str
 Use search_records for discovery, get_record for exact reads, and get_related for graph expansion. Prefer a small loop: search -> read -> related -> read linked records -> write only what is supported.
 
 {_schema_agent_reference(project)}
+
+{entity_payload_reference(schema)}
 
 Search examples:
 {_json_example({"q": "Synthetic", "limit": 50})}
@@ -716,7 +868,11 @@ def _build_generic_tools() -> dict[str, ToolSpec]:
         ),
         "upsert_record": ToolSpec(
             name="upsert_record",
-            description="Create or update a generic record. In confirm mode, returns a pending change.",
+            description=(
+                "Create or update a generic record. Required top-level fields: entity_type, payload. "
+                "Optional top-level fields: record_id, source_origin, created_by, updated_by. "
+                "Payload fields are schema-specific; call prompts/get agent_workspace_guide or get_schema before writing."
+            ),
             input_schema={
                 "type": "object",
                 "properties": {
@@ -724,7 +880,10 @@ def _build_generic_tools() -> dict[str, ToolSpec]:
                     "record_id": {"type": "string", "description": "Optional UUID or existing record id/slug to update."},
                     "payload": {
                         "type": "object",
-                        "description": "Record fields. Must include every required field from get_schema for this entity_type.",
+                        "description": (
+                            "Schema-specific record fields. Must include every required payload field for this entity_type. "
+                            "Optional payload fields also come from get_schema or prompts/get agent_workspace_guide."
+                        ),
                     },
                     "source_origin": {"type": "string"},
                     "created_by": {"type": "string"},
@@ -737,7 +896,10 @@ def _build_generic_tools() -> dict[str, ToolSpec]:
         ),
         "archive_record": ToolSpec(
             name="archive_record",
-            description="Soft-archive a generic record. In confirm mode, returns a pending change.",
+            description=(
+                "Soft-archive a generic record. Required top-level fields: entity_type, record_id. "
+                "Optional top-level fields: archived_by. In confirm mode, returns a pending change."
+            ),
             input_schema={
                 "type": "object",
                 "properties": {
@@ -767,7 +929,11 @@ def _build_generic_tools() -> dict[str, ToolSpec]:
         ),
         "add_evidence": ToolSpec(
             name="add_evidence",
-            description="Attach evidence to a generic record.",
+            description=(
+                "Attach evidence to a generic record. Required top-level fields: entity_type, record_id, "
+                "evidence_type, description. Optional top-level fields: evidence_id, excerpt, source_url, "
+                "attachment_refs, created_by."
+            ),
             input_schema={
                 "type": "object",
                 "properties": {
@@ -788,7 +954,11 @@ def _build_generic_tools() -> dict[str, ToolSpec]:
         ),
         "create_relation": ToolSpec(
             name="create_relation",
-            description="Create a typed relation between two generic records.",
+            description=(
+                "Create a typed relation between two generic records. Required top-level fields: "
+                "from_entity_type, from_record_id, to_entity_type, to_record_id, relation_type. "
+                "Optional top-level fields: created_by. relation_type must be allowed by the active schema."
+            ),
             input_schema={
                 "type": "object",
                 "properties": {

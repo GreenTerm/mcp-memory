@@ -67,6 +67,10 @@ from .render import (
 from .i18n import language_switcher, localize_markup, resolve_language, translate_text, with_lang
 
 
+def home_ui_href(lang: str) -> str:
+    return with_lang("http://127.0.0.1:8764/", lang)
+
+
 def workspace_asset_response(path: str) -> tuple[str, bytes] | None:
     if path == "/ui/assets/app.css":
         return ("text/css; charset=utf-8", load_asset_text("app.css").encode("utf-8"))
@@ -111,12 +115,9 @@ def workspace_page_html(
 
 def workspace_sidebar(current_url: str, lang: str) -> str:
     items = [
+        ("Projects", home_ui_href(lang), "home"),
         ("Entities", with_lang("/ui/entities", lang), "workspace"),
         ("Records", with_lang("/ui/records", lang), "workspace"),
-        ("Binaries", with_lang("/ui/search?entity_type=binary", lang), "entities"),
-        ("Functions", with_lang("/ui/functions", lang), "entities"),
-        ("Structures", with_lang("/ui/structures", lang), "entities"),
-        ("Hypotheses", with_lang("/ui/global-hypotheses", lang), "entities"),
         ("Search", with_lang("/ui/search", lang), "workspace"),
         ("Graph", with_lang("/ui/graph", lang), "workspace"),
         ("Import/Export", with_lang("/ui/import-export", lang), "project"),
@@ -1258,7 +1259,7 @@ def workspace_header(project: ProjectConfig, title: str, current_url: str, lang:
         f"<h1>{escape(title)}</h1>"
         f"<p class=\"workspace-subtitle\">{escape(project.display_name)} - {escape(project.project_id)}</p>"
         "</div>"
-        f"<a class=\"quick-link workspace-back-link\" href=\"{escape(with_lang('/', lang), quote=True)}\">Back to Projects</a>"
+        f"<a class=\"quick-link workspace-back-link\" href=\"{escape(home_ui_href(lang), quote=True)}\">Back to Projects</a>"
         "</header>"
     )
 
@@ -1341,18 +1342,18 @@ def overview_quick_entries(schema: Any | None = None) -> str:
             "<span class=\"action-card-description\">{2}</span>"
             "</a>".format(escape(href, quote=True), escape(title), escape(description))
         )
-    return f"<div class=\"link-grid\">{''.join(cards)}</div>"
+    return f"<div class=\"link-grid action-grid\">{''.join(cards)}</div>"
 
 
 def overview_storage_paths(project: ProjectConfig) -> str:
-    return key_value_grid(
+    return '<div class="path-list">' + key_value_grid(
         [
             ("DB Path", str(project.database_path)),
             ("Exports Dir", str(project.exports_dir)),
             ("Backups Dir", str(project.backups_dir)),
             ("Project Root", str(project.project_root)),
         ]
-    )
+    ) + "</div>"
 
 
 def render_recent_updates(project: ProjectConfig, items: list[dict[str, Any]]) -> str:

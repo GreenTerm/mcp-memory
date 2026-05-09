@@ -1,273 +1,71 @@
 # Module Guide
 
-Краткая навигация по коду `mcp-memory`: где искать поведение, какие модули являются точками входа и какие границы важно сохранять.
+Version: 0.3.0.
+
+Short navigation for the current `mcp-memory` codebase. The project is now a schema-driven local knowledge base: old reverse-engineering services still exist for legacy compatibility/import paths, but the public v0.3.0 surface is generic records, typed relations, evidence, search, HTTP, MCP, CLI, and server-rendered GUI.
 
 ## High-Level Layout
 
 ```text
 src/mcp_memory/
-  api/
-  cli/
-  config/
-  domain/
-  gui/
-  mcp/
-  services/
-  storage/
+  api/        HTTP JSON API and project UI binding
+  cli/        command line entrypoint
+  config/     app/project config and registry
+  domain/     legacy dataclasses and shared data shapes
+  gui/        Home UI, workspace UI, rendering, assets, i18n
+  mcp/        Streamable HTTP MCP server, tools, prompts
+  schemas/    bundled project schema templates
+  services/   project, generic record/relation/evidence/workflow logic
+  storage/    SQLite connection and migrations
 ```
 
 ## Entry Points
 
-### `mcp_memory.cli`
-
-Главный файл:
-
-- [src/mcp_memory/cli/main.py](../src/mcp_memory/cli/main.py)
-
-Отвечает за:
-
-- parsing CLI arguments
-- `init-app`, `create-project`, `list-projects`
-- `run-http-api`, `run-mcp`, `run-ui-home`
-- import/export/backup/restore commands
-- pending change commands
-- logging bootstrap
-
-### `mcp_memory.api`
-
-Главный файл:
-
-- [src/mcp_memory/api/server.py](../src/mcp_memory/api/server.py)
-
-Локальный JSON HTTP API и project workspace UI живут в одном project HTTP server. Модуль отвечает за:
-
-- `GET` / `POST` routing
-- JSON serialization
-- UTF-8 responses
-- health/config endpoints
-- binding GUI handlers to `/ui/...`
-- request logging
-- conversion of JSON payloads into service calls
-
-### `mcp_memory.mcp`
-
-Главный файл:
-
-- [src/mcp_memory/mcp/server.py](../src/mcp_memory/mcp/server.py)
-
-Stdlib MCP HTTP server. Отвечает за:
-
-- MCP Streamable HTTP compatible `POST /mcp`
-- JSON-RPC request/response handling
-- session lifecycle through `Mcp-Session-Id`
-- `initialize`, `ping`
-- `tools/list`, `tools/call`
-- `resources/list`, `resources/templates/list`
-- `prompts/list`, `prompts/get`
-- prompt registry
-- mapping MCP tools to service operations
-
-Важно: `GET /mcp` и `DELETE /mcp` возвращают `405`. Отдельный SSE stream сейчас не предоставляется.
-
-### `mcp_memory.gui`
-
-Главные файлы:
-
-- [src/mcp_memory/gui/home.py](../src/mcp_memory/gui/home.py)
-- [src/mcp_memory/gui/workspace.py](../src/mcp_memory/gui/workspace.py)
-- [src/mcp_memory/gui/render.py](../src/mcp_memory/gui/render.py)
-- [src/mcp_memory/gui/i18n.py](../src/mcp_memory/gui/i18n.py)
-- [src/mcp_memory/gui/assets/app.css](../src/mcp_memory/gui/assets/app.css)
-- [src/mcp_memory/gui/assets/ui.js](../src/mcp_memory/gui/assets/ui.js)
-
-Роли:
-
-- `home.py`: home server, project shelf, start/stop/restart, edit/delete project actions
-- `workspace.py`: workspace routes, entity pages, graph, settings, import/export, backups, pending, audit
-- `render.py`: shared HTML helpers, shell, cards, forms, empty states
-- `i18n.py`: English/Russian phrase translations
-- `app.css`: shared visual system
-- `ui.js`: theme toggle, sidebar collapse, copy interactions, light page transitions
-
-## Config Layer
-
-### `mcp_memory.config.models`
-
-Файл:
-
-- [src/mcp_memory/config/models.py](../src/mcp_memory/config/models.py)
-
-Содержит:
-
-- `ProjectConfig`
-- `AppConfig`
-
-`ProjectConfig` хранит identity проекта, paths, HTTP/MCP host/port и `write_mode`.
-
-### `mcp_memory.config.registry`
-
-Отвечает за:
-
-- чтение и запись `app_config.json`
-- регистрацию проектов
-- поиск проекта по `project_id`
-- обновление project config из GUI/CLI
-
-### `mcp_memory.config.paths`
-
-Отвечает за выбор `app_home`:
-
-1. `MCP_MEMORY_HOME`
-2. `%LOCALAPPDATA%\mcp-memory`
-3. local fallback
-
-## Domain Layer
-
-### `mcp_memory.domain.models`
-
-Файл:
-
-- [src/mcp_memory/domain/models.py](../src/mcp_memory/domain/models.py)
-
-Содержит dataclasses и enums для:
-
-- function writes/records
-- structure writes/records
-- global hypothesis writes/records
-- evidence records
-- observed facts
-- hypothesis items
-- statuses and timestamps
-
-Если нужно понять форму данных, начинать стоит здесь.
-
-## Storage Layer
-
-### `mcp_memory.storage.database`
-
-Отвечает за:
-
-- opening SQLite database
-- connection wrapper
-- transaction access
-
-### `mcp_memory.storage.migrations`
-
-Отвечает за:
-
-- schema bootstrap
-- applying SQL migrations
-
-SQL migrations:
-
-- [sql/migrations](../sql/migrations)
-
-## Service Layer
-
-Service layer - основной слой бизнес-логики. HTTP API, MCP и GUI должны оставаться тонкими адаптерами поверх него.
-
-### `services.projects`
-
-Отвечает за:
-
-- app bootstrap
-- project workspace creation
-- directory creation
-- registry updates
-
-### `services.functions`
-
-Отвечает за:
-
-- upsert function records
-- facts/hypotheses/tags
-- version snapshots
-- audit rows
-- address conflict handling
-- search document updates
-
-### `services.structures`
-
-Отвечает за:
-
-- upsert structure records
-- fields serialization
-- facts/hypotheses/tags
-- versions/audit/search updates
-
-### `services.hypotheses`
-
-Отвечает за:
-
-- global hypothesis writes
-- facts/tags
-- versions/audit/search updates
-
-### `services.evidence`
-
-Отвечает за:
-
-- evidence rows
-- attachment references
-- audit rows
-
-### `services.relations`
-
-Отвечает за:
-
-- create relation
-- list relations
-- related traversal
-- graph source data
-
-### `services.search`
-
-Отвечает за:
-
-- exact search
-- FTS5 search
-- tag filtering
-- entity type filtering
-
-Known caveat: FTS strings with hyphens can be parsed as expressions. Search by separate words or tags until escaping is fixed.
-
-### `services.transfer`
-
-Отвечает за:
-
-- JSON export
-- JSON import
-- replace-existing behavior
-
-### `services.archive`
-
-Отвечает за:
-
-- zip backup
-- restore project workspace
-
-### `services.pending`
-
-Отвечает за:
-
-- pending change proposals
-- confirm/reject flow
-- write-mode integration for agent and GUI writes
+- `mcp_memory.cli.main`: CLI commands for app init, project creation, schema commands, API/MCP/Home servers, import/export, backup/restore, and pending changes.
+- `mcp_memory.api.server`: project HTTP API, generic routes, legacy-compatible routes, and `/ui/...` workspace rendering.
+- `mcp_memory.mcp.server`: MCP Streamable HTTP endpoint at `/mcp`, generic tools, schema-aware prompts, session handling, and empty resources compatibility.
+- `mcp_memory.gui.home`: Home UI on port `8764`, project shelf, start/stop/restart, Base URL setting, and DNS/path gateway proxy.
+- `mcp_memory.gui.workspace`: server-rendered project UI pages for dashboard, records, entities, search, graph, evidence, schema, pending, import/export, backups, audit, and settings.
+
+## Core Data Flow
+
+- Project creation copies a bundled or explicit schema into `<project-root>/schema.json` and stores `schema_path` in `ProjectConfig`.
+- Generic writes go through services and workflow helpers so `confirm` mode queues pending changes and `auto` mode applies immediately.
+- Search documents are derived from schema `title_field`, `summary_field`, `search_fields`, and `tag_fields`.
+- Records use UUID `record_id`; schemas can define an optional unique `slug_field` for human/agent friendly lookup.
+- Records are archived with `status=archived`; default list/search/read behavior hides archived records unless explicitly requested.
+
+## Public Surfaces
+
+- HTTP generic routes include `/schema`, `/entity-types`, `/records`, `/relations`, `/related`, `/evidence`, `/search`, `/pending-changes`, `/export/json`, `/import/json`, `/backup`, and `/restore`.
+- MCP publishes generic tools only: schema discovery, record CRUD/archive, relation/evidence writes, pending review, import/export, and backup/restore.
+- MCP prompts include schema-aware instructions and examples for every tool. `agent_workspace_guide` is the best first prompt for agents.
+- Home UI gateway exposes projects at `/<project_id>/ui/...`, `/<project_id>/schema`, `/<project_id>/records/...`, and `/<project_id>/mcp`.
+- Direct project HTTP/MCP ports remain available for local/manual use.
+
+## Important Boundaries
+
+- `services/` is the main behavior boundary. Keep HTTP/MCP/GUI handlers thin.
+- `storage/` should not import API, MCP, GUI, or service-specific behavior.
+- `mcp/` should not import HTTP API helpers.
+- `gui/` should preserve server-rendered HTML and avoid frontend build steps.
+- Use small shared helpers for duplicated request/form/tool conversion only when duplication is already costly.
 
 ## Tests
 
-Основные группы тестов:
+Main suites:
 
 - `tests/test_services.py`
+- `tests/test_generic_records.py`
 - `tests/test_api_server.py`
 - `tests/test_mcp_server.py`
 - `tests/test_gui_home.py`
+- `tests/test_transfer_archive.py`
 - `scripts/local_smoke_check.py`
 
-Полный локальный check:
+Run full verification:
 
 ```powershell
+python -X utf8 -m unittest discover -s tests -v
 powershell -ExecutionPolicy Bypass -File .\scripts\run_local_checks.ps1
 ```
-
-Порог coverage: `>=95%`.

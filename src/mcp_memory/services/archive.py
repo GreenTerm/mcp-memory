@@ -9,6 +9,7 @@ from typing import Any
 
 from mcp_memory.config import ProjectConfig, ProjectRegistry
 from mcp_memory.logging_utils import get_logger, log_event
+from mcp_memory.services.projects import validate_project_id
 from mcp_memory.storage import open_database
 
 
@@ -78,6 +79,7 @@ class ProjectArchiveService:
             manifest = json.loads(archive.read("manifest.json").decode("utf-8"))
             source_project = manifest["project"]
             target_project_id = str(project_id or source_project["project_id"])
+            validate_project_id(target_project_id)
             if self._registry.get_project(target_project_id) is not None:
                 raise ValueError(f"project_id already exists: {target_project_id}")
 

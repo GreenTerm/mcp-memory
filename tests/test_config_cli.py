@@ -53,10 +53,13 @@ class ConfigAndCliTests(unittest.TestCase):
             app_home=Path("C:/tmp/app"),
             registry_path=Path("C:/tmp/app/app_config.json"),
             projects=[project],
+            base_url="http://mcp-memory.local:8764",
         )
         restored = AppConfig.from_dict(app.to_dict())
         self.assertEqual(restored.app_home.name, "app")
         self.assertEqual(len(restored.projects), 1)
+        self.assertEqual(restored.base_url, "http://mcp-memory.local:8764")
+        self.assertEqual(AppConfig.from_dict({"app_home": "C:/tmp/app", "registry_path": "C:/tmp/app/app_config.json"}).base_url, "")
 
     def test_resolve_app_home_priority(self) -> None:
         explicit = resolve_app_home("C:/explicit/home")
@@ -127,6 +130,10 @@ class ConfigAndCliTests(unittest.TestCase):
 
             with self.assertRaisesRegex(ValueError, "project_id is required"):
                 service.create_project("", "Project One", Path(tmp) / "project-a", 10001, 10002)
+            with self.assertRaisesRegex(ValueError, "project_id is reserved"):
+                service.create_project("assets", "Project One", Path(tmp) / "project-reserved", 10001, 10002)
+            with self.assertRaisesRegex(ValueError, "may contain only"):
+                service.create_project("bad/project", "Project One", Path(tmp) / "project-bad", 10001, 10002)
             with self.assertRaisesRegex(ValueError, "display_name is required"):
                 service.create_project("p1", "", Path(tmp) / "project-a", 10001, 10002)
             with self.assertRaisesRegex(ValueError, "write_mode must be one of"):
