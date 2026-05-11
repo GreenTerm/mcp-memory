@@ -20,7 +20,7 @@ class FunctionService:
         self._database = database
         self._logger = get_logger("services")
 
-    def upsert_function(self, payload: FunctionWrite, actor_type: str = "system") -> FunctionRecord:
+    def upsert_function(self, payload: FunctionWrite, actor_type: str = "system", commit: bool = True) -> FunctionRecord:
         self._validate(payload)
         existing = self.get_function(payload.project_id, payload.binary_id, payload.function_id)
         conflict = self._lookup_by_address(payload.project_id, payload.binary_id, payload.address)
@@ -194,7 +194,8 @@ class FunctionService:
         self._upsert_search_document(record)
         self._append_version(record)
         self._append_audit(record, "upsert", actor_type)
-        connection.commit()
+        if commit:
+            connection.commit()
         log_event(
             self._logger,
             logging.INFO,

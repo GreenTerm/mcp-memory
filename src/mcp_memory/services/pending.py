@@ -139,18 +139,22 @@ class PendingChangeService:
         if record.status != "pending":
             raise PendingChangeValidationError("pending change is not in pending status")
 
-        applied = self._apply_operation(record, actor_type)
         connection = self._database.transaction()
-        connection.execute(
-            """
-            UPDATE pending_changes
-            SET status = 'confirmed'
-            WHERE project_id = ? AND pending_change_id = ?
-            """,
-            (project_id, pending_change_id),
-        )
-        self._append_audit(record, "confirm_pending", confirmed_by, "manual")
-        connection.commit()
+        try:
+            applied = self._apply_operation(record, actor_type, commit=False)
+            connection.execute(
+                """
+                UPDATE pending_changes
+                SET status = 'confirmed'
+                WHERE project_id = ? AND pending_change_id = ?
+                """,
+                (project_id, pending_change_id),
+            )
+            self._append_audit(record, "confirm_pending", confirmed_by, "manual")
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
         log_event(
             self._logger,
             logging.INFO,
@@ -195,7 +199,7 @@ class PendingChangeService:
         )
         return updated
 
-    def _apply_operation(self, record: PendingChangeRecord, actor_type: str) -> Any:
+    def _apply_operation(self, record: PendingChangeRecord, actor_type: str, commit: bool = True) -> Any:
         from mcp_memory.services.legacy_payloads import (
             evidence_write_from_payload,
             function_write_from_payload,
@@ -207,21 +211,25 @@ class PendingChangeService:
             return FunctionService(self._database).upsert_function(
                 function_write_from_payload(record.project_id, record.payload),
                 actor_type=actor_type,
+                commit=commit,
             )
         if record.operation == "upsert_structure":
             return StructureService(self._database).upsert_structure(
                 structure_write_from_payload(record.project_id, record.payload),
                 actor_type=actor_type,
+                commit=commit,
             )
         if record.operation == "upsert_global_hypothesis":
             return GlobalHypothesisService(self._database).upsert_hypothesis(
                 global_hypothesis_write_from_payload(record.project_id, record.payload),
                 actor_type=actor_type,
+                commit=commit,
             )
         if record.operation == "create_evidence":
             return EvidenceService(self._database).create_evidence(
                 evidence_write_from_payload(record.project_id, record.payload),
                 actor_type=actor_type,
+                commit=commit,
             )
         if record.operation == "create_relation":
             return RelationService(self._database).create_relation(
@@ -235,6 +243,7 @@ class PendingChangeService:
                     created_by=str(record.payload.get("created_by", "pending-confirm")),
                 ),
                 actor_type=actor_type,
+                commit=commit,
             )
         raise PendingChangeValidationError(f"unsupported pending operation: {record.operation}")
 

@@ -28,6 +28,7 @@ from mcp_memory.services.records import RecordService, RecordWrite
 from mcp_memory.services.structures import StructureService
 from mcp_memory.logging_utils import get_logger, log_event
 from mcp_memory.schema import ProjectSchema, copy_schema_payload, load_project_schema
+from mcp_memory.services.schema_updates import validate_schema_compatible_with_project_data
 from mcp_memory.storage import Database, open_database
 
 
@@ -60,7 +61,7 @@ class ProjectTransferService:
 
     def export_bundle(self, project: ProjectConfig) -> dict[str, Any]:
         with open_database(project.database_path) as database:
-            records = [asdict(item) for item in RecordService(database, project).list_records(include_archived=True, limit=100000)]
+            records = [asdict(item) for item in RecordService(database, project).list_records(include_archived=True, limit=None)]
             record_keys = {(item["entity_type"], item["record_id"]) for item in records}
             relations = [
                 asdict(item)
@@ -130,28 +131,49 @@ class ProjectTransferService:
         schema_payload = bundle.get("schema")
         if not isinstance(schema_payload, dict):
             raise ValueError("Bundle schema must be an object")
-        ProjectSchema.from_dict(schema_payload)
-        copy_schema_payload(project.schema_path, schema_payload)
+        schema = ProjectSchema.from_dict(schema_payload)
 
         with open_database(project.database_path) as database:
-            if replace_existing:
-                self._clear_project_data(database, project.project_id)
+            if not replace_existing:
+                validate_schema_compatible_with_project_data(database, schema)
 
-            record_service = RecordService(database, project)
-            relation_service = GenericRelationService(database, project)
-            evidence_service = GenericEvidenceService(database, project)
+            connection = database.transaction()
+            old_schema_text = project.schema_path.read_text(encoding="utf-8") if project.schema_path.exists() else None
             record_items = records.get("items", [])
             evidence_items = records.get("evidence", [])
             relation_items = records.get("relations", [])
 
-            for item in record_items:
-                record = record_service.upsert_record(self._record_write(item))
-                if str(item.get("status", "active")) == "archived":
-                    record_service.archive_record(record.entity_type, record.record_id, archived_by=str(item.get("updated_by", "import")))
-            for item in relation_items:
-                relation_service.create_relation(self._generic_relation_write(item))
-            for item in evidence_items:
-                evidence_service.create_evidence(self._generic_evidence_write(item))
+            try:
+                if replace_existing:
+                    self._clear_project_data(database, project.project_id, commit=False)
+
+                record_service = RecordService(database, project, schema=schema)
+                relation_service = GenericRelationService(database, project, schema=schema)
+                evidence_service = GenericEvidenceService(database, project, schema=schema)
+
+                for item in record_items:
+                    record = record_service.upsert_record(self._record_write(item), commit=False)
+                    if str(item.get("status", "active")) == "archived":
+                        record_service.archive_record(
+                            record.entity_type,
+                            record.record_id,
+                            archived_by=str(item.get("updated_by", "import")),
+                            commit=False,
+                        )
+                for item in relation_items:
+                    relation_service.create_relation(self._generic_relation_write(item), commit=False)
+                for item in evidence_items:
+                    evidence_service.create_evidence(self._generic_evidence_write(item), commit=False)
+                copy_schema_payload(project.schema_path, schema_payload)
+                connection.commit()
+            except Exception:
+                connection.rollback()
+                if old_schema_text is None:
+                    if project.schema_path.exists():
+                        project.schema_path.unlink()
+                else:
+                    project.schema_path.write_text(old_schema_text, encoding="utf-8")
+                raise
 
         log_event(
             self._logger,
@@ -174,7 +196,7 @@ class ProjectTransferService:
             },
         }
 
-    def _clear_project_data(self, database: Database, project_id: str) -> None:
+    def _clear_project_data(self, database: Database, project_id: str, commit: bool = True) -> None:
         connection = database.transaction()
         connection.execute("DELETE FROM duplicate_candidates WHERE project_id = ?", (project_id,))
         connection.execute("DELETE FROM entity_versions WHERE project_id = ?", (project_id,))
@@ -191,7 +213,8 @@ class ProjectTransferService:
         connection.execute("DELETE FROM search_documents_fts WHERE project_id = ?", (project_id,))
         connection.execute("DELETE FROM search_documents WHERE project_id = ?", (project_id,))
         connection.execute("DELETE FROM records WHERE project_id = ?", (project_id,))
-        connection.commit()
+        if commit:
+            connection.commit()
 
     def _generic_evidence_rows(self, database: Database, project_id: str) -> list[dict[str, Any]]:
         rows = database.connection.execute(

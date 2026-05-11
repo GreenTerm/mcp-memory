@@ -65,6 +65,7 @@ class UpsertRecordCommand:
     created_by: str = "system"
     updated_by: str = "system"
     actor_type: str = "system"
+    commit: bool = True
 
 
 @dataclass(slots=True)
@@ -73,6 +74,7 @@ class ArchiveRecordCommand:
     record_id_or_slug: str
     archived_by: str = "system"
     actor_type: str = "system"
+    commit: bool = True
 
 
 @dataclass(slots=True)
@@ -84,6 +86,7 @@ class CreateRelationCommand:
     relation_type: str
     created_by: str = "system"
     actor_type: str = "system"
+    commit: bool = True
 
 
 @dataclass(slots=True)
@@ -107,6 +110,7 @@ class AddEvidenceCommand:
     created_by: str = "system"
     source_origin: str = "manual"
     actor_type: str = "system"
+    commit: bool = True
 
 
 ProtocolMessage = (
@@ -169,6 +173,7 @@ class ProjectDispatcher:
                     updated_by=message.updated_by,
                 ),
                 actor_type=message.actor_type,
+                commit=message.commit,
             )
             return ProtocolResult("created", record)
         if isinstance(message, ArchiveRecordCommand):
@@ -177,6 +182,7 @@ class ProjectDispatcher:
                 message.record_id_or_slug,
                 archived_by=message.archived_by,
                 actor_type=message.actor_type,
+                commit=message.commit,
             )
             return ProtocolResult("ok", record)
         if isinstance(message, CreateRelationCommand):
@@ -190,6 +196,7 @@ class ProjectDispatcher:
                     created_by=message.created_by,
                 ),
                 actor_type=message.actor_type,
+                commit=message.commit,
             )
             return ProtocolResult("created", relation)
         if isinstance(message, GetRelatedQuery):
@@ -215,6 +222,7 @@ class ProjectDispatcher:
                     source_origin=message.source_origin,
                 ),
                 actor_type=message.actor_type,
+                commit=message.commit,
             )
             return ProtocolResult("created", evidence)
         raise TypeError(f"Unsupported protocol message: {type(message).__name__}")

@@ -48,8 +48,10 @@ from mcp_memory.services import (
     GenericPendingValidationError,
     GenericRelationValidationError,
     GenericEvidenceValidationError,
+    SchemaUpdateValidationError,
     RecordService,
     RecordValidationError,
+    update_project_schema,
 )
 from mcp_memory.services.legacy_payloads import (
     evidence_write_from_payload,
@@ -124,6 +126,7 @@ def build_handler(
                     entity_type = self._optional_query_value(query, "entity_type")
                     include_archived = self._optional_query_value(query, "include_archived") == "true"
                     limit = int(self._optional_query_value(query, "limit") or "100")
+                    _validate_public_limit(limit)
                     with open_database(project.database_path) as database:
                         result = ProjectDispatcher(database, project).dispatch(
                             ListRecordsQuery(entity_type=entity_type, include_archived=include_archived, limit=limit)
@@ -311,13 +314,18 @@ def build_handler(
             path = parsed.path
 
             try:
-                form_data = self._read_form_body()
-                ui_action = workspace_post_action(project, registry, self.path, form_data)
-                if ui_action is not None:
-                    if "location" in ui_action:
-                        self._redirect(str(ui_action["location"]))
-                    else:
-                        self._send_html(str(ui_action["html"]), status=ui_action.get("status", HTTPStatus.OK))
+                if path == "/ui" or path.startswith("/ui/"):
+                    form_data = self._read_form_body()
+                    if form_data is None:
+                        return
+                    ui_action = workspace_post_action(project, registry, self.path, form_data)
+                    if ui_action is not None:
+                        if "location" in ui_action:
+                            self._redirect(str(ui_action["location"]))
+                        else:
+                            self._send_html(str(ui_action["html"]), status=ui_action.get("status", HTTPStatus.OK))
+                        return
+                    self._send_error_json(HTTPStatus.NOT_FOUND, "not_found", "Unknown UI route")
                     return
 
                 payload = self._read_json_body()
@@ -524,10 +532,7 @@ def build_handler(
                 if payload is None:
                     return
                 if path == "/schema":
-                    from mcp_memory.schema import ProjectSchema, copy_schema_payload
-
-                    ProjectSchema.from_dict(payload)
-                    copy_schema_payload(project.schema_path, payload)
+                    update_project_schema(project, payload)
                     self._send_json({"status": "updated", "schema_path": str(project.schema_path)})
                     return
                 if path.startswith("/records/"):
@@ -557,7 +562,7 @@ def build_handler(
                     self._send_json(serialize(result), status=HTTPStatus.ACCEPTED if project.write_mode == "confirm" else HTTPStatus.OK)
                     return
                 self._send_error_json(HTTPStatus.NOT_FOUND, "not_found", "Unknown route")
-            except (GenericPendingValidationError, RecordValidationError, SchemaValidationError, KeyError, ValueError) as exc:
+            except (GenericPendingValidationError, RecordValidationError, SchemaUpdateValidationError, SchemaValidationError, KeyError, ValueError) as exc:
                 self._send_error_json(HTTPStatus.BAD_REQUEST, "validation_error", str(exc))
             except Exception:
                 log_event(
@@ -579,13 +584,29 @@ def build_handler(
                 return result.data if hasattr(result, "data") else result
 
         def _read_json_body(self) -> dict[str, Any] | None:
-            content_length = int(self.headers.get("Content-Length", "0"))
+            content_length = self._read_content_length()
+            if content_length is None:
+                return None
             raw_body = self.rfile.read(content_length)
             try:
                 return json.loads(raw_body.decode("utf-8")) if raw_body else {}
             except json.JSONDecodeError:
                 self._send_error_json(HTTPStatus.BAD_REQUEST, "invalid_json", "Request body must be valid JSON")
                 return None
+
+        def _read_content_length(self) -> int | None:
+            raw_content_length = self.headers.get("Content-Length")
+            if raw_content_length is None:
+                return 0
+            try:
+                content_length = int(raw_content_length)
+            except ValueError:
+                self._send_error_json(HTTPStatus.BAD_REQUEST, "invalid_content_length", "Content-Length must be a non-negative integer")
+                return None
+            if content_length < 0:
+                self._send_error_json(HTTPStatus.BAD_REQUEST, "invalid_content_length", "Content-Length must be a non-negative integer")
+                return None
+            return content_length
 
         def _required_query_value(self, query: dict[str, list[str]], name: str) -> str:
             values = query.get(name)
@@ -625,13 +646,15 @@ def build_handler(
             self.send_header("Content-Length", "0")
             self.end_headers()
 
-        def _read_form_body(self) -> dict[str, str]:
+        def _read_form_body(self) -> dict[str, str] | None:
             if self.command != "POST":
                 return {}
             content_type = self.headers.get("Content-Type", "")
             if "application/x-www-form-urlencoded" not in content_type:
                 return {}
-            content_length = int(self.headers.get("Content-Length", "0"))
+            content_length = self._read_content_length()
+            if content_length is None:
+                return None
             raw_body = self.rfile.read(content_length)
             parsed = parse_qs(raw_body.decode("utf-8"))
             return {key: values[0] for key, values in parsed.items() if values}
@@ -651,6 +674,11 @@ def serialize(value: Any) -> Any:
     if isinstance(value, list):
         return [serialize(item) for item in value]
     return value
+
+
+def _validate_public_limit(limit: int) -> None:
+    if limit < 0 or limit > 1000:
+        raise ValueError("limit must be between 0 and 1000")
 
 
 def _pending_change_id_from_path(path: str, action: str) -> str:

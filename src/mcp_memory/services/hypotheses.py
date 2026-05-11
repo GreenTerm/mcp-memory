@@ -24,6 +24,7 @@ class GlobalHypothesisService:
         self,
         payload: GlobalHypothesisWrite,
         actor_type: str = "system",
+        commit: bool = True,
     ) -> GlobalHypothesisRecord:
         self._validate(payload)
         existing = self.get_hypothesis(payload.project_id, payload.hypothesis_id)
@@ -74,7 +75,8 @@ class GlobalHypothesisService:
         self._upsert_search_document(record)
         self._append_version(record)
         self._append_audit(record, actor_type)
-        connection.commit()
+        if commit:
+            connection.commit()
         log_event(
             self._logger,
             logging.INFO,

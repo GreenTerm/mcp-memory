@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from importlib import resources
 from pathlib import Path
@@ -8,6 +9,7 @@ from typing import Any
 
 
 ALLOWED_WIDGETS = {"text", "textarea", "number", "bool", "enum", "tags", "json", "datetime", "url", "path"}
+IDENTIFIER_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
 
 
 class SchemaValidationError(ValueError):
@@ -25,6 +27,7 @@ class FieldDefinition:
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "FieldDefinition":
         name = _required_text(payload, "name")
+        _validate_identifier(name, "field name")
         widget = str(payload.get("widget", "text")).strip() or "text"
         if widget not in ALLOWED_WIDGETS:
             raise SchemaValidationError(f"field {name} has unsupported widget: {widget}")
@@ -68,7 +71,11 @@ class EntityTypeDefinition:
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "EntityTypeDefinition":
         name = _required_text(payload, "name")
+        _validate_identifier(name, "entity type name")
         fields = [FieldDefinition.from_dict(item) for item in payload.get("fields", [])]
+        names = [item.name for item in fields]
+        if len(names) != len(set(names)):
+            raise SchemaValidationError(f"entity {name} field names must be unique")
         field_names = {item.name for item in fields}
         required = [str(item) for item in payload.get("required", [])]
         for field_name in required:
@@ -125,6 +132,7 @@ class RelationTypeDefinition:
     @classmethod
     def from_dict(cls, payload: dict[str, Any], entity_names: set[str]) -> "RelationTypeDefinition":
         name = _required_text(payload, "name")
+        _validate_identifier(name, "relation type name")
         from_types = [str(item) for item in payload.get("from", [])]
         to_types = [str(item) for item in payload.get("to", [])]
         if not from_types or not to_types:
@@ -241,3 +249,8 @@ def _required_text(payload: dict[str, Any], name: str) -> str:
     if not value:
         raise SchemaValidationError(f"{name} is required")
     return value
+
+
+def _validate_identifier(value: str, label: str) -> None:
+    if not IDENTIFIER_PATTERN.fullmatch(value):
+        raise SchemaValidationError(f"{label} must start with a lowercase letter and contain only lowercase letters, digits, and underscores")

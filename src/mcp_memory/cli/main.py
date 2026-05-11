@@ -11,8 +11,9 @@ from mcp_memory.api.server import serve_project_http_api
 from mcp_memory.gui import serve_ui_home
 from mcp_memory.logging_utils import configure_logging, log_event
 from mcp_memory.mcp import serve_project_mcp_api
-from mcp_memory.schema import ProjectSchema, copy_schema_payload, list_bundled_schema_templates, load_schema_payload
+from mcp_memory.schema import ProjectSchema, list_bundled_schema_templates, load_schema_payload
 from mcp_memory.services import LegacyDatabaseImporter, PendingChangeService, ProjectArchiveService, ProjectService, ProjectTransferService
+from mcp_memory.services import update_project_schema
 from mcp_memory.storage import open_database
 
 
@@ -226,8 +227,7 @@ def run(argv: list[str] | None = None) -> int:
             parser.error(f"Unknown project_id: {args.project_id}")
         source_path = Path(args.schema).expanduser().resolve()
         payload = load_schema_payload(source_path)
-        ProjectSchema.from_dict(payload)
-        copy_schema_payload(project.schema_path, payload)
+        update_project_schema(project, payload)
         log_event(
             logger,
             logging.INFO,

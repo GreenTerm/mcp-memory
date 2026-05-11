@@ -20,7 +20,7 @@ class StructureService:
         self._database = database
         self._logger = get_logger("services")
 
-    def upsert_structure(self, payload: StructureWrite, actor_type: str = "system") -> StructureRecord:
+    def upsert_structure(self, payload: StructureWrite, actor_type: str = "system", commit: bool = True) -> StructureRecord:
         self._validate(payload)
         existing = self.get_structure(payload.project_id, payload.structure_id)
         now = utc_now()
@@ -72,7 +72,8 @@ class StructureService:
         self._upsert_search_document(record)
         self._append_version(record)
         self._append_audit(record, actor_type)
-        connection.commit()
+        if commit:
+            connection.commit()
         log_event(
             self._logger,
             logging.INFO,

@@ -19,7 +19,7 @@ class EvidenceService:
         self._database = database
         self._logger = get_logger("services")
 
-    def create_evidence(self, payload: EvidenceWrite, actor_type: str = "system") -> EvidenceRecord:
+    def create_evidence(self, payload: EvidenceWrite, actor_type: str = "system", commit: bool = True) -> EvidenceRecord:
         self._validate(payload)
         now = utc_now()
         attachment_id = None
@@ -78,7 +78,8 @@ class EvidenceService:
             ),
         )
         self._append_audit(record, actor_type)
-        connection.commit()
+        if commit:
+            connection.commit()
         log_event(
             self._logger,
             logging.INFO,

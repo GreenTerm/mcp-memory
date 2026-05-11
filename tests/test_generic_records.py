@@ -20,7 +20,11 @@ from mcp_memory.services import (
     GenericPendingValidationError,
     ProjectTransferService,
     ProjectArchiveService,
+    SchemaUpdateValidationError,
+    update_project_schema,
 )
+from mcp_memory.services.schema_updates import validate_record_payload
+from mcp_memory.schema import ProjectSchema, SchemaValidationError, load_project_schema
 from mcp_memory.protocol import (
     ArchiveRecordCommand,
     GetRecordQuery,
@@ -89,6 +93,19 @@ class GenericRecordTests(unittest.TestCase):
                 SearchQuery(project_id=self.sandbox.project.project_id, query_text="!!!")
             )
             self.assertEqual(punctuation_only, [])
+            self.assertEqual(service.list_records("note", limit=0), [])
+            with self.assertRaisesRegex(ValueError, "limit must be between 0 and 1000"):
+                service.list_records("note", limit=-1)
+            with self.assertRaisesRegex(ValueError, "limit must be between 0 and 1000"):
+                service.list_records("note", limit=1001)
+            self.assertEqual(
+                SearchService(database).search(SearchQuery(project_id=self.sandbox.project.project_id, query_text="Searchable", limit=0)),
+                [],
+            )
+            with self.assertRaisesRegex(ValueError, "limit must be between 0 and 1000"):
+                SearchService(database).search(SearchQuery(project_id=self.sandbox.project.project_id, limit=-1))
+            with self.assertRaisesRegex(ValueError, "limit must be between 0 and 1000"):
+                SearchService(database).search(SearchQuery(project_id=self.sandbox.project.project_id, limit=1001))
 
             archived = service.archive_record("note", "first-note", archived_by="tester")
             self.assertEqual(archived.status, "archived")
@@ -255,6 +272,30 @@ class GenericRecordTests(unittest.TestCase):
             with self.assertRaisesRegex(GenericPendingValidationError, "pending change is not in pending status"):
                 workflow.confirm_change(rejected_pending.pending_change_id)
 
+    def test_generic_pending_confirm_rolls_back_apply_when_audit_fails(self) -> None:
+        with self.sandbox.open_database() as database:
+            workflow = GenericWorkflowService(database, self.sandbox.project)
+            pending = workflow.create_pending_change(
+                "upsert_record",
+                {
+                    "entity_type": "note",
+                    "payload": {"slug": "atomic-note", "title": "Atomic Note"},
+                    "created_by": "tester",
+                    "updated_by": "tester",
+                },
+                created_by="tester",
+            )
+
+            def fail_audit(*args: object) -> None:
+                raise RuntimeError("audit exploded")
+
+            workflow._append_audit = fail_audit  # type: ignore[method-assign]
+            with self.assertRaisesRegex(RuntimeError, "audit exploded"):
+                workflow.confirm_change(pending.pending_change_id, confirmed_by="tester")
+
+            self.assertEqual(workflow.get_pending_change(pending.pending_change_id).status, "pending")
+            self.assertIsNone(RecordService(database, self.sandbox.project).get_record("note", "atomic-note"))
+
     def test_generic_transfer_round_trips_schema_records_relations_and_evidence(self) -> None:
         with self.sandbox.open_database() as database:
             records = RecordService(database, self.sandbox.project)
@@ -304,6 +345,149 @@ class GenericRecordTests(unittest.TestCase):
             self.assertEqual(records.get_record("note", "transfer-one").title, "Transfer One")
             self.assertEqual(len(GenericRelationService(database, target).list_relations("note", "transfer-one")), 1)
             self.assertEqual(len(GenericEvidenceService(database, target).list_evidence("note", "transfer-one")), 1)
+
+    def test_schema_update_rejects_incompatible_existing_records_and_relations(self) -> None:
+        with self.sandbox.open_database() as database:
+            records = RecordService(database, self.sandbox.project)
+            first = records.upsert_record(RecordWrite("note", {"slug": "schema-one", "title": "Schema One"}))
+            second = records.upsert_record(RecordWrite("note", {"slug": "schema-two", "title": "Schema Two"}))
+            GenericRelationService(database, self.sandbox.project).create_relation(
+                GenericRelationWrite("note", first.record_id, "note", second.record_id, "related_to")
+            )
+
+        original_schema = self.sandbox.project.schema_path.read_text(encoding="utf-8")
+        payload = load_project_schema(self.sandbox.project.schema_path).to_dict()
+        payload["entity_types"][0]["fields"].append({"name": "must", "label": "Must"})
+        payload["entity_types"][0]["required"].append("must")
+        with self.assertRaisesRegex(SchemaUpdateValidationError, "missing required field"):
+            update_project_schema(self.sandbox.project, payload)
+        self.assertEqual(self.sandbox.project.schema_path.read_text(encoding="utf-8"), original_schema)
+
+        payload = load_project_schema(self.sandbox.project.schema_path).to_dict()
+        payload["relation_types"] = []
+        with self.assertRaisesRegex(SchemaUpdateValidationError, "must keep relation type"):
+            update_project_schema(self.sandbox.project, payload)
+        self.assertEqual(self.sandbox.project.schema_path.read_text(encoding="utf-8"), original_schema)
+
+    def test_schema_validation_rejects_duplicate_and_unsafe_identifiers(self) -> None:
+        with self.assertRaisesRegex(SchemaValidationError, "field names must be unique"):
+            ProjectSchema.from_dict(
+                {
+                    "entity_types": [
+                        {
+                            "name": "note",
+                            "fields": [
+                                {"name": "title", "label": "Title"},
+                                {"name": "title", "label": "Title Again"},
+                            ],
+                        }
+                    ]
+                }
+            )
+        with self.assertRaisesRegex(SchemaValidationError, "entity type name"):
+            ProjectSchema.from_dict({"entity_types": [{"name": "bad/name", "fields": [{"name": "title", "label": "Title"}]}]})
+
+    def test_schema_update_validation_covers_field_shapes_and_existing_links(self) -> None:
+        schema = ProjectSchema.from_dict(
+            {
+                "entity_types": [
+                    {
+                        "name": "note",
+                        "fields": [
+                            {"name": "title", "label": "Title"},
+                            {"name": "count", "label": "Count", "widget": "number"},
+                            {"name": "flag", "label": "Flag", "widget": "bool"},
+                            {"name": "state", "label": "State", "widget": "enum", "options": ["open"]},
+                            {"name": "tags", "label": "Tags", "widget": "tags"},
+                        ],
+                        "required": ["title"],
+                    }
+                ]
+            }
+        )
+        entity = schema.entity("note")
+        validate_record_payload(entity, {"title": "Ok", "tags": None})
+        validate_record_payload(entity, {"title": "Ok", "tags": "a,b"})
+        validate_record_payload(entity, {"title": "Ok", "tags": ["a"]})
+        validate_record_payload(entity, {"title": "Ok", "tags": 1})
+        with self.assertRaisesRegex(SchemaUpdateValidationError, "payload must be an object"):
+            validate_record_payload(entity, [], "bad")
+        with self.assertRaisesRegex(SchemaUpdateValidationError, "must be a number"):
+            validate_record_payload(entity, {"title": "Bad", "count": "1"})
+        with self.assertRaisesRegex(SchemaUpdateValidationError, "must be a boolean"):
+            validate_record_payload(entity, {"title": "Bad", "flag": "true"})
+        with self.assertRaisesRegex(SchemaUpdateValidationError, "must be one of"):
+            validate_record_payload(entity, {"title": "Bad", "state": "closed"})
+        with self.assertRaisesRegex(SchemaUpdateValidationError, "must be strings or arrays"):
+            validate_record_payload(entity, {"title": "Bad", "tags": {"bad": True}})
+
+        with self.sandbox.open_database() as database:
+            records = RecordService(database, self.sandbox.project)
+            first = records.upsert_record(RecordWrite("note", {"slug": "linked-one", "title": "Linked One"}))
+            second = records.upsert_record(RecordWrite("note", {"slug": "linked-two", "title": "Linked Two"}))
+            GenericRelationService(database, self.sandbox.project).create_relation(
+                GenericRelationWrite("note", first.record_id, "note", second.record_id, "related_to")
+            )
+
+        incompatible = load_project_schema(self.sandbox.project.schema_path).to_dict()
+        incompatible["entity_types"].append({"name": "other", "fields": [{"name": "title", "label": "Title"}]})
+        incompatible["relation_types"][0]["from"] = ["other"]
+        with self.assertRaisesRegex(SchemaUpdateValidationError, "must still allow"):
+            update_project_schema(self.sandbox.project, incompatible)
+
+        incompatible = {
+            "entity_types": [{"name": "other", "fields": [{"name": "title", "label": "Title"}]}],
+            "relation_types": [],
+        }
+        with self.assertRaisesRegex(SchemaUpdateValidationError, "must keep entity type with records"):
+            update_project_schema(self.sandbox.project, incompatible)
+
+        with self.sandbox.open_database() as database:
+            database.connection.execute("DELETE FROM records WHERE project_id = ?", (self.sandbox.project.project_id,))
+            database.connection.execute(
+                """
+                INSERT INTO evidence (
+                  evidence_id, project_id, entity_type, entity_id, evidence_type, description,
+                  source_origin, created_at, created_by
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                ("orphan-evidence", self.sandbox.project.project_id, "orphan_type", "missing", "note", "Description", "test", "now", "tester"),
+            )
+            database.connection.commit()
+        with self.assertRaisesRegex(SchemaUpdateValidationError, "must keep entity type with evidence"):
+            update_project_schema(self.sandbox.project, incompatible)
+
+    def test_failed_v2_import_preserves_existing_schema_and_data(self) -> None:
+        with self.sandbox.open_database() as database:
+            RecordService(database, self.sandbox.project).upsert_record(
+                RecordWrite("note", {"slug": "keep", "title": "Keep"})
+            )
+        original_schema = self.sandbox.project.schema_path.read_text(encoding="utf-8")
+        schema_payload = load_project_schema(self.sandbox.project.schema_path).to_dict()
+        schema_payload["entity_types"][0]["fields"].append({"name": "must", "label": "Must"})
+        schema_payload["entity_types"][0]["required"].append("must")
+        bundle = {
+            "bundle_version": 2,
+            "schema": schema_payload,
+            "records": {
+                "items": [
+                    {
+                        "entity_type": "note",
+                        "record_id": "bad-import",
+                        "payload": {"slug": "bad", "title": "Bad"},
+                    }
+                ],
+                "relations": [],
+                "evidence": [],
+                "attachments": [],
+            },
+        }
+        with self.assertRaisesRegex(ValueError, "must is required"):
+            ProjectTransferService().import_bundle(self.sandbox.project, bundle, replace_existing=True)
+        self.assertEqual(self.sandbox.project.schema_path.read_text(encoding="utf-8"), original_schema)
+        with self.sandbox.open_database() as database:
+            self.assertIsNotNone(RecordService(database, self.sandbox.project).get_record("note", "keep"))
+            self.assertIsNone(RecordService(database, self.sandbox.project).get_record("note", "bad"))
 
     def test_backup_restore_preserves_generic_schema_and_records(self) -> None:
         with self.sandbox.open_database() as database:

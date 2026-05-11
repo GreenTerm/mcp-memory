@@ -8,8 +8,8 @@ from urllib.parse import parse_qs
 
 from mcp_memory.config import ProjectConfig, ProjectRegistry
 from mcp_memory.protocol import ListRecordsQuery, ProjectDispatcher, SearchRecordsQuery
-from mcp_memory.schema import ProjectSchema, copy_schema_payload, load_project_schema
-from mcp_memory.services import GenericEvidenceService, GenericRelationService, GenericWorkflowService, Record, RecordService
+from mcp_memory.schema import ProjectSchema, load_project_schema
+from mcp_memory.services import GenericEvidenceService, GenericRelationService, GenericWorkflowService, Record, RecordService, update_project_schema
 from mcp_memory.storage import open_database
 
 from .i18n import resolve_language, translate_text, with_lang
@@ -102,8 +102,7 @@ def generic_workspace_post_action(project: ProjectConfig, registry: ProjectRegis
     if path == "/ui/schema":
         try:
             payload = _schema_payload_from_form(form_data)
-            ProjectSchema.from_dict(payload)
-            copy_schema_payload(project.schema_path, payload)
+            update_project_schema(project, payload)
         except (ValueError, KeyError, json.JSONDecodeError) as exc:
             return {"status": HTTPStatus.BAD_REQUEST, "html": _render_schema_builder(project, str(exc), lang)}
         return {"location": with_lang("/ui/schema?flash=updated", lang)}
@@ -817,8 +816,7 @@ def _submit_entity_type_edit(project: ProjectConfig, entity_name: str, form_data
             raise ValueError(f"unknown entity type: {entity_name}")
         if form_data.get("form_mode") != "raw" and any(key.startswith("rel_name_") for key in form_data):
             payload["relation_types"] = _relation_payloads_from_editor_form(form_data)
-        ProjectSchema.from_dict(payload)
-        copy_schema_payload(project.schema_path, payload)
+        update_project_schema(project, payload)
     except (ValueError, KeyError, json.JSONDecodeError) as exc:
         return {"status": HTTPStatus.BAD_REQUEST, "html": _render_entity_type_edit(project, entity_name, str(exc), lang)}
     return {"location": with_lang("/ui/entities?flash=updated", lang)}
@@ -845,8 +843,7 @@ def _submit_entity_type_delete(project: ProjectConfig, entity_name: str, lang: s
             for relation in payload.get("relation_types", [])
             if entity_name not in relation.get("from", []) and entity_name not in relation.get("to", [])
         ]
-        ProjectSchema.from_dict(payload)
-        copy_schema_payload(project.schema_path, payload)
+        update_project_schema(project, payload)
     except (ValueError, KeyError, json.JSONDecodeError) as exc:
         return {"status": HTTPStatus.BAD_REQUEST, "html": _render_entity_type_delete(project, entity_name, str(exc), lang)}
     return {"location": with_lang("/ui/entities?flash=deleted", lang)}
@@ -1086,8 +1083,7 @@ def _submit_schema_builder_action(project: ProjectConfig, lang: str, mutate) -> 
     try:
         payload = load_project_schema(project.schema_path).to_dict()
         mutate(payload)
-        ProjectSchema.from_dict(payload)
-        copy_schema_payload(project.schema_path, payload)
+        update_project_schema(project, payload)
     except (ValueError, KeyError, json.JSONDecodeError) as exc:
         return {"status": HTTPStatus.BAD_REQUEST, "html": _render_schema_builder(project, str(exc), lang)}
     return {"location": with_lang("/ui/schema?flash=updated", lang)}
@@ -1595,8 +1591,7 @@ def _submit_entity_type_constructor(project: ProjectConfig, form_data: dict[str,
         payload.setdefault("entity_types", []).append(entity_type_payload)
         if relation_types:
             payload.setdefault("relation_types", []).extend(relation_types)
-        ProjectSchema.from_dict(payload)
-        copy_schema_payload(project.schema_path, payload)
+        update_project_schema(project, payload)
     except (ValueError, KeyError, json.JSONDecodeError) as exc:
         return {"status": HTTPStatus.BAD_REQUEST, "html": _render_entity_type_constructor(project, str(exc), lang)}
     return {"location": with_lang("/ui/entities?flash=created", lang)}

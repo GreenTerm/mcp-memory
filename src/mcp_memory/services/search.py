@@ -23,6 +23,7 @@ class SearchService:
         self._database = database
 
     def search(self, query: SearchQuery) -> list[dict[str, Any]]:
+        _validate_public_limit(query.limit)
         filters: list[str] = ["sd.project_id = ?"]
         params: list[Any] = [query.project_id]
 
@@ -94,3 +95,8 @@ class SearchService:
 def _fts_match_query(raw_query: str) -> str:
     tokens = re.findall(r"[\w-]+", raw_query, flags=re.UNICODE)
     return " ".join(f'"{token.replace(chr(34), chr(34) + chr(34))}"' for token in tokens)
+
+
+def _validate_public_limit(limit: int) -> None:
+    if limit < 0 or limit > 1000:
+        raise ValueError("limit must be between 0 and 1000")

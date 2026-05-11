@@ -42,14 +42,14 @@ class GenericRelationRecord:
 
 
 class GenericRelationService:
-    def __init__(self, database: Database, project: ProjectConfig) -> None:
+    def __init__(self, database: Database, project: ProjectConfig, schema=None) -> None:
         self._database = database
         self._project = project
-        self._schema = load_project_schema(project.schema_path)
-        self._records = RecordService(database, project)
+        self._schema = schema or load_project_schema(project.schema_path)
+        self._records = RecordService(database, project, schema=self._schema)
         self._logger = get_logger("services")
 
-    def create_relation(self, write: GenericRelationWrite, actor_type: str = "system") -> GenericRelationRecord:
+    def create_relation(self, write: GenericRelationWrite, actor_type: str = "system", commit: bool = True) -> GenericRelationRecord:
         relation_type = self._relation_type(write.relation_type)
         if not relation_type.allows(write.from_entity_type, write.to_entity_type):
             raise GenericRelationValidationError(
@@ -94,7 +94,8 @@ class GenericRelationService:
             ),
         )
         self._append_audit(record, actor_type)
-        connection.commit()
+        if commit:
+            connection.commit()
         log_event(
             self._logger,
             logging.INFO,

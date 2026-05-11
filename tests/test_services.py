@@ -552,6 +552,38 @@ class ServiceTests(unittest.TestCase):
             with self.assertRaises(PendingChangeValidationError):
                 service.confirm_change("test-project", rejected.pending_change_id)
 
+    def test_pending_confirm_rolls_back_apply_when_audit_fails(self) -> None:
+        with self.sandbox.open_database() as database:
+            service = PendingChangeService(database)
+            pending = service.create_pending_change(
+                "test-project",
+                "function",
+                "fn_atomic",
+                "upsert_function",
+                {
+                    "binary_id": "bin-main",
+                    "function_id": "fn_atomic",
+                    "address": "0x401400",
+                    "raw_name": "sub_401400",
+                    "current_name": "atomic_fn",
+                    "summary": "Summary",
+                    "behavior_description": "Behavior",
+                    "created_by": "tester",
+                    "updated_by": "tester",
+                },
+                created_by="tester",
+            )
+
+            def fail_audit(*args: object) -> None:
+                raise RuntimeError("audit exploded")
+
+            service._append_audit = fail_audit  # type: ignore[method-assign]
+            with self.assertRaisesRegex(RuntimeError, "audit exploded"):
+                service.confirm_change("test-project", pending.pending_change_id, confirmed_by="tester")
+
+            self.assertEqual(service.get_pending_change("test-project", pending.pending_change_id).status, "pending")
+            self.assertIsNone(FunctionService(database).get_function("test-project", "bin-main", "fn_atomic"))
+
     def test_pending_change_service_other_operations_and_errors(self) -> None:
         with self.sandbox.open_database() as database:
             service = PendingChangeService(database)

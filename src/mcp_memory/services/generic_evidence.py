@@ -52,14 +52,14 @@ class GenericEvidenceRecord:
 
 
 class GenericEvidenceService:
-    def __init__(self, database: Database, project: ProjectConfig) -> None:
+    def __init__(self, database: Database, project: ProjectConfig, schema=None) -> None:
         self._database = database
         self._project = project
-        self._schema = load_project_schema(project.schema_path)
-        self._records = RecordService(database, project)
+        self._schema = schema or load_project_schema(project.schema_path)
+        self._records = RecordService(database, project, schema=self._schema)
         self._logger = get_logger("services")
 
-    def create_evidence(self, write: GenericEvidenceWrite, actor_type: str = "system") -> GenericEvidenceRecord:
+    def create_evidence(self, write: GenericEvidenceWrite, actor_type: str = "system", commit: bool = True) -> GenericEvidenceRecord:
         self._validate_schema_entity(write.entity_type)
         record = self._records.get_record(write.entity_type, write.record_id)
         if record is None:
@@ -129,7 +129,8 @@ class GenericEvidenceService:
             ),
         )
         self._append_audit(evidence, actor_type)
-        connection.commit()
+        if commit:
+            connection.commit()
         log_event(
             self._logger,
             logging.INFO,

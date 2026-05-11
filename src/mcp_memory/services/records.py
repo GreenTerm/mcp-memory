@@ -47,16 +47,16 @@ class Record:
 
 
 class RecordService:
-    def __init__(self, database: Database, project: ProjectConfig) -> None:
+    def __init__(self, database: Database, project: ProjectConfig, schema: ProjectSchema | None = None) -> None:
         self._database = database
         self._project = project
-        self._schema = load_project_schema(project.schema_path)
+        self._schema = schema or load_project_schema(project.schema_path)
         self._logger = get_logger("services")
 
     def list_entity_types(self) -> list[dict[str, Any]]:
         return [item.to_dict() for item in self._schema.entity_types]
 
-    def upsert_record(self, write: RecordWrite, actor_type: str = "system") -> Record:
+    def upsert_record(self, write: RecordWrite, actor_type: str = "system", commit: bool = True) -> Record:
         entity = self._entity(write.entity_type)
         payload = self._normalized_payload(entity, write.payload)
         record_id = write.record_id or str(uuid.uuid4())
@@ -120,7 +120,8 @@ class RecordService:
             self._delete_search_document(record)
         else:
             self._upsert_search_document(record, entity)
-        connection.commit()
+        if commit:
+            connection.commit()
         log_event(
             self._logger,
             logging.INFO,
@@ -146,7 +147,9 @@ class RecordService:
         ).fetchone()
         return None if row is None else self._row_to_record(row)
 
-    def list_records(self, entity_type: str | None = None, include_archived: bool = False, limit: int = 100) -> list[Record]:
+    def list_records(self, entity_type: str | None = None, include_archived: bool = False, limit: int | None = 100) -> list[Record]:
+        if limit is not None:
+            _validate_public_limit(limit)
         params: list[Any] = [self._project.project_id]
         filters = ["project_id = ?"]
         if entity_type:
@@ -155,20 +158,30 @@ class RecordService:
             params.append(entity_type)
         if not include_archived:
             filters.append("status = 'active'")
-        params.append(limit)
+        limit_clause = ""
+        if limit is not None:
+            limit_clause = "LIMIT ?"
+            params.append(limit)
         rows = self._database.connection.execute(
             f"""
             SELECT *
             FROM records
             WHERE {' AND '.join(filters)}
             ORDER BY updated_at DESC
-            LIMIT ?
+            {limit_clause}
             """,
             params,
         ).fetchall()
         return [self._row_to_record(row) for row in rows]
 
-    def archive_record(self, entity_type: str, record_id_or_slug: str, archived_by: str = "system", actor_type: str = "system") -> Record:
+    def archive_record(
+        self,
+        entity_type: str,
+        record_id_or_slug: str,
+        archived_by: str = "system",
+        actor_type: str = "system",
+        commit: bool = True,
+    ) -> Record:
         record = self.get_record(entity_type, record_id_or_slug, include_archived=True)
         if record is None:
             raise RecordValidationError("record not found")
@@ -190,7 +203,8 @@ class RecordService:
         self._append_version(archived)
         self._append_audit(archived, "archive_record", actor_type, archived_by)
         self._delete_search_document(archived)
-        connection.commit()
+        if commit:
+            connection.commit()
         return archived
 
     def _entity(self, entity_type: str) -> EntityTypeDefinition:
@@ -419,3 +433,8 @@ class RecordService:
 
     def _is_empty(self, value: Any) -> bool:
         return value is None or (isinstance(value, str) and not value.strip()) or value == []
+
+
+def _validate_public_limit(limit: int) -> None:
+    if limit < 0 or limit > 1000:
+        raise ValueError("limit must be between 0 and 1000")

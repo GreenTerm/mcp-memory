@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import socket
 import threading
 import unittest
 from http import HTTPStatus
@@ -507,6 +508,38 @@ class McpServerTests(unittest.TestCase):
         ping = self._rpc("ping", {}, request_id=11)
         self.assertEqual(ping["result"], {})
 
+    def test_search_records_limit_schema_and_validation(self) -> None:
+        tools = self._rpc("tools/list", {}, request_id=20)["result"]["tools"]
+        search_schema = next(tool["inputSchema"] for tool in tools if tool["name"] == "search_records")
+        limit_schema = search_schema["properties"]["limit"]
+        self.assertEqual(limit_schema["minimum"], 0)
+        self.assertEqual(limit_schema["maximum"], 1000)
+
+        zero_limit = self._call_tool("search_records", {"limit": 0})
+        self.assertEqual(zero_limit["result"]["structuredContent"]["items"], [])
+
+        negative_limit = self._call_tool("search_records", {"limit": -1})
+        self.assertEqual(negative_limit["error"]["code"], -32602)
+
+        huge_limit = self._call_tool("search_records", {"limit": 1001})
+        self.assertEqual(huge_limit["error"]["code"], -32602)
+
+    def test_malformed_content_length_returns_json_rpc_error(self) -> None:
+        for content_length in (b"bad", b"-1"):
+            with self.subTest(content_length=content_length):
+                status_line, body = self._raw_http(
+                    b"POST /mcp HTTP/1.1\r\n"
+                    b"Host: 127.0.0.1\r\n"
+                    b"Content-Type: application/json\r\n"
+                    b"Content-Length: " + content_length + b"\r\n"
+                    b"Connection: close\r\n"
+                    b"\r\n"
+                )
+                self.assertIn("200", status_line)
+                response = json.loads(body.decode("utf-8"))
+                self.assertEqual(response["error"]["code"], -32600)
+                self.assertIn("Content-Length", response["error"]["message"])
+
     def test_additional_tool_handlers(self) -> None:
         created_structure = self._call_tool(
             "upsert_record",
@@ -592,6 +625,20 @@ class McpServerTests(unittest.TestCase):
 
     def _call_tool(self, name: str, arguments: dict) -> dict:
         return self._rpc("tools/call", {"name": name, "arguments": arguments}, request_id=3)
+
+    def _raw_http(self, payload: bytes) -> tuple[str, bytes]:
+        with socket.create_connection(("127.0.0.1", self.server.server_port), timeout=5) as sock:
+            sock.sendall(payload)
+            chunks: list[bytes] = []
+            while True:
+                chunk = sock.recv(4096)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+        raw_response = b"".join(chunks)
+        header_bytes, _, body = raw_response.partition(b"\r\n\r\n")
+        status_line = header_bytes.splitlines()[0].decode("ascii")
+        return status_line, body
 
 
 if __name__ == "__main__":

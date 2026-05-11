@@ -42,7 +42,7 @@ class RelationService:
         self._database = database
         self._logger = get_logger("services")
 
-    def create_relation(self, payload: RelationWrite, actor_type: str = "system") -> RelationRecord:
+    def create_relation(self, payload: RelationWrite, actor_type: str = "system", commit: bool = True) -> RelationRecord:
         self._validate(payload)
         record = RelationRecord(
             relation_id=str(uuid.uuid4()),
@@ -92,7 +92,8 @@ class RelationService:
                 record.created_at,
             ),
         )
-        connection.commit()
+        if commit:
+            connection.commit()
         log_event(
             self._logger,
             logging.INFO,

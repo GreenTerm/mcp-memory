@@ -329,7 +329,9 @@ def build_handler(
             log_event(request_logger, logging.INFO, "server_message", project_id=project.project_id, message=format % args if args else format)
 
         def _read_json_body(self) -> dict[str, Any] | None:
-            content_length = int(self.headers.get("Content-Length", "0"))
+            content_length = self._read_content_length()
+            if content_length is None:
+                return None
             raw_body = self.rfile.read(content_length)
             try:
                 parsed = json.loads(raw_body.decode("utf-8")) if raw_body else {}
@@ -340,6 +342,20 @@ def build_handler(
                 self._send_rpc_error(None, -32600, "MCP request must be a JSON object")
                 return None
             return parsed
+
+        def _read_content_length(self) -> int | None:
+            raw_content_length = self.headers.get("Content-Length")
+            if raw_content_length is None:
+                return 0
+            try:
+                content_length = int(raw_content_length)
+            except ValueError:
+                self._send_rpc_error(None, -32600, "Content-Length must be a non-negative integer")
+                return None
+            if content_length < 0:
+                self._send_rpc_error(None, -32600, "Content-Length must be a non-negative integer")
+                return None
+            return content_length
 
         def _send_json(
             self,
@@ -864,7 +880,7 @@ def _build_generic_tools() -> dict[str, ToolSpec]:
                     "q": {"type": "string"},
                     "entity_types": {"type": "array", "items": {"type": "string"}},
                     "tag": {"type": "string"},
-                    "limit": {"type": "integer"},
+                    "limit": {"type": "integer", "minimum": 0, "maximum": 1000},
                 },
                 "additionalProperties": False,
             },

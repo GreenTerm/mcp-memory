@@ -105,14 +105,18 @@ class GenericWorkflowService:
             raise GenericPendingValidationError("pending change not found")
         if record.status != "pending":
             raise GenericPendingValidationError("pending change is not in pending status")
-        applied = self._apply_operation(record.operation, record.payload, actor_type=actor_type)
         connection = self._database.transaction()
-        connection.execute(
-            "UPDATE pending_changes SET status = 'confirmed' WHERE project_id = ? AND pending_change_id = ?",
-            (self._project.project_id, pending_change_id),
-        )
-        self._append_audit(record, "confirm_pending", confirmed_by)
-        connection.commit()
+        try:
+            applied = self._apply_operation(record.operation, record.payload, actor_type=actor_type, commit=False)
+            connection.execute(
+                "UPDATE pending_changes SET status = 'confirmed' WHERE project_id = ? AND pending_change_id = ?",
+                (self._project.project_id, pending_change_id),
+            )
+            self._append_audit(record, "confirm_pending", confirmed_by)
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
         return {"pending_change": self.get_pending_change(pending_change_id), "applied": applied.data}
 
     def reject_change(self, pending_change_id: str, rejected_by: str = "system") -> GenericPendingChangeRecord:
@@ -140,7 +144,7 @@ class GenericWorkflowService:
         ).fetchone()
         return None if row is None else self._row_to_record(row)
 
-    def _apply_operation(self, operation: str, payload: dict[str, Any], actor_type: str) -> Any:
+    def _apply_operation(self, operation: str, payload: dict[str, Any], actor_type: str, commit: bool = True) -> Any:
         from mcp_memory.protocol import (
             AddEvidenceCommand,
             ArchiveRecordCommand,
@@ -160,6 +164,7 @@ class GenericWorkflowService:
                     created_by=str(payload.get("created_by", "pending")),
                     updated_by=str(payload.get("updated_by", payload.get("created_by", "pending"))),
                     actor_type=actor_type,
+                    commit=commit,
                 )
             )
         if operation == "archive_record":
@@ -169,6 +174,7 @@ class GenericWorkflowService:
                     record_id_or_slug=str(payload["record_id_or_slug"]),
                     archived_by=str(payload.get("archived_by", "pending")),
                     actor_type=actor_type,
+                    commit=commit,
                 )
             )
         if operation == "create_relation":
@@ -181,6 +187,7 @@ class GenericWorkflowService:
                     relation_type=str(payload["relation_type"]),
                     created_by=str(payload.get("created_by", "pending")),
                     actor_type=actor_type,
+                    commit=commit,
                 )
             )
         if operation == "add_evidence":
@@ -198,6 +205,7 @@ class GenericWorkflowService:
                     created_by=str(payload.get("created_by", "pending")),
                     source_origin=str(payload.get("source_origin", "pending")),
                     actor_type=actor_type,
+                    commit=commit,
                 )
             )
         raise GenericPendingValidationError(f"unsupported pending operation: {operation}")

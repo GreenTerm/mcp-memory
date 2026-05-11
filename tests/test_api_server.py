@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import socket
 import threading
 import unittest
 from http.server import HTTPServer
@@ -1167,8 +1168,53 @@ class ApiServerTests(unittest.TestCase):
         self.assertEqual(ctx.exception.code, 400)
 
         with self.assertRaises(error.HTTPError) as ctx:
+            self._post_json("/search", {"limit": -1})
+        self.assertEqual(ctx.exception.code, 400)
+
+        with self.assertRaises(error.HTTPError) as ctx:
+            self._post_json("/search", {"limit": 1001})
+        self.assertEqual(ctx.exception.code, 400)
+
+        with self.assertRaises(error.HTTPError) as ctx:
+            self._get_json("/records?limit=-1")
+        self.assertEqual(ctx.exception.code, 400)
+
+        with self.assertRaises(error.HTTPError) as ctx:
+            self._get_json("/records?limit=1001")
+        self.assertEqual(ctx.exception.code, 400)
+
+        with self.assertRaises(error.HTTPError) as ctx:
             self._post_json("/pending-changes//confirm", {})
         self.assertEqual(ctx.exception.code, 400)
+
+    def test_zero_limit_returns_empty_results(self) -> None:
+        self.assertEqual(self._post_json("/search", {"limit": 0})["items"], [])
+        self.assertEqual(self._get_json("/records?limit=0")["items"], [])
+
+    def test_api_post_reads_json_once_without_form_preparse(self) -> None:
+        req = request.Request(
+            self.base_url + "/search",
+            data=json.dumps({"q": "definitely-not-present", "limit": 100}).encode("utf-8"),
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            method="POST",
+        )
+        with request.urlopen(req) as response:
+            result = json.loads(response.read().decode("utf-8"))
+        self.assertEqual(result["items"], [])
+
+    def test_malformed_content_length_returns_bad_request(self) -> None:
+        for content_length in (b"bad", b"-1"):
+            with self.subTest(content_length=content_length):
+                status_line, body = self._raw_http(
+                    b"POST /search HTTP/1.1\r\n"
+                    b"Host: 127.0.0.1\r\n"
+                    b"Content-Type: application/json\r\n"
+                    b"Content-Length: " + content_length + b"\r\n"
+                    b"Connection: close\r\n"
+                    b"\r\n"
+                )
+                self.assertIn("400", status_line)
+                self.assertEqual(json.loads(body.decode("utf-8"))["error"], "invalid_content_length")
 
     def test_confirm_mode_queues_global_hypothesis_and_evidence(self) -> None:
         self.sandbox.project.write_mode = "confirm"
@@ -1502,6 +1548,20 @@ class ApiServerTests(unittest.TestCase):
         except error.HTTPError as exc:
             return exc.code
         return 200
+
+    def _raw_http(self, payload: bytes) -> tuple[str, bytes]:
+        with socket.create_connection(("127.0.0.1", self.server.server_port), timeout=5) as sock:
+            sock.sendall(payload)
+            chunks: list[bytes] = []
+            while True:
+                chunk = sock.recv(4096)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+        raw_response = b"".join(chunks)
+        header_bytes, _, body = raw_response.partition(b"\r\n\r\n")
+        status_line = header_bytes.splitlines()[0].decode("ascii")
+        return status_line, body
 
 
 if __name__ == "__main__":
