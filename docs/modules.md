@@ -41,6 +41,7 @@ src/mcp_memory/
 - MCP publishes generic tools only: schema discovery, record CRUD/archive, relation/evidence writes, pending review, import/export, and backup/restore.
 - MCP prompts include schema-aware instructions and examples for every tool. `agent_workspace_guide` is the best first prompt for agents.
 - Home UI gateway exposes projects at `/<project_id>/ui/...`, `/<project_id>/schema`, `/<project_id>/records/...`, and `/<project_id>/mcp`.
+- DNS/path gateway setup, reverse proxy notes, and failure modes are documented in `docs/dns-path-gateway.md`.
 - Direct project HTTP/MCP ports remain available for local/manual use.
 
 ## Important Boundaries

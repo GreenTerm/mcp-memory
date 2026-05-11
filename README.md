@@ -130,6 +130,7 @@ DNS/path gateway:
 - Open projects at `http://mcp-memory.local:8764/<project_id>/ui/`.
 - Use MCP endpoints at `http://mcp-memory.local:8764/<project_id>/mcp`.
 - Old direct project ports stay available for local/manual use.
+- Detailed setup and troubleshooting: [docs/dns-path-gateway.md](docs/dns-path-gateway.md).
 
 Manual project servers:
 
