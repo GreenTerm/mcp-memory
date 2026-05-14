@@ -13,7 +13,7 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 
-EXPECTED_VERSION = "1.0.0"
+EXPECTED_VERSION = "1.0.2"
 
 
 def main() -> int:
@@ -42,7 +42,6 @@ def main() -> int:
         "docs/future-plans.md",
         "docs/modules.md",
         "docs/generic-knowledge-refactor-plan.md",
-        "docs/release-1.0.0.md",
     ]
     for relative in required_version_files:
         text = (ROOT / relative).read_text(encoding="utf-8")

@@ -97,7 +97,13 @@ def app_shell(
     )
 
 
-def sidebar_nav(items: list[tuple[str, str, str]], active_href: str = "", brand_href: str = "/ui/", footer_html: str = "") -> str:
+def sidebar_nav(
+    items: list[tuple[str, str, str] | tuple[str, str, str, str]],
+    active_href: str = "",
+    brand_href: str = "/ui/",
+    footer_html: str = "",
+    brand_label: str = "mcp-memory",
+) -> str:
     sections: list[str] = []
     links: list[str] = []
     current_group = ""
@@ -107,7 +113,9 @@ def sidebar_nav(items: list[tuple[str, str, str]], active_href: str = "", brand_
         "project": "Operations",
     }
     active_path = active_href.split("?", 1)[0].rstrip("/") or "/"
-    for label, href, group in items:
+    for item in items:
+        label, href, group = item[:3]
+        icon_label = item[3] if len(item) > 3 else label
         if group != current_group:
             if links:
                 sections.append(
@@ -118,10 +126,14 @@ def sidebar_nav(items: list[tuple[str, str, str]], active_href: str = "", brand_
             group_label = group_labels.get(group, group.replace("_", " ").title())
             links.append(f"<p class=\"sidebar-section-title\">{escape(group_label)}</p>")
         href_path = href.split("?", 1)[0].rstrip("/") or "/"
-        active_class = " is-active" if href_path == active_path or (href_path != "/" and active_path.startswith(href_path + "/")) else ""
+        active_class = (
+            " is-active"
+            if href_path == active_path or (href_path not in {"/", "/ui"} and active_path.startswith(href_path + "/"))
+            else ""
+        )
         links.append(
             f"<a class=\"sidebar-link{active_class}\" href=\"{escape(href, quote=True)}\" data-nav-group=\"{escape(group)}\" title=\"{escape(label, quote=True)}\" aria-label=\"{escape(label, quote=True)}\">"
-            f"{sidebar_icon(label)}"
+            f"{sidebar_icon(icon_label)}"
             f"<span class=\"app-sidebar-label\">{escape(label)}</span>"
             "</a>"
         )
@@ -130,7 +142,7 @@ def sidebar_nav(items: list[tuple[str, str, str]], active_href: str = "", brand_
     return (
         "<aside class=\"app-sidebar\">"
         "<div class=\"sidebar-head\">"
-        f"<a class=\"brand-mark\" href=\"{escape(brand_href, quote=True)}\">mcp-memory</a>"
+        f"<a class=\"brand-mark\" href=\"{escape(brand_href, quote=True)}\">{escape(brand_label)}</a>"
         "<button class=\"button button-secondary sidebar-toggle\" type=\"button\" data-sidebar-toggle aria-expanded=\"true\" aria-label=\"Toggle sidebar\" title=\"Toggle sidebar\">"
         f"{sidebar_icon('Toggle sidebar')}"
         "</button>"

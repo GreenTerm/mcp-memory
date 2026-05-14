@@ -77,6 +77,15 @@ def home_ui_href(lang: str) -> str:
     return with_lang("http://127.0.0.1:8764/", lang)
 
 
+def public_mcp_endpoint(project: ProjectConfig, registry: ProjectRegistry, mcp_host: str | None = None, mcp_port: str | int | None = None) -> str:
+    public_root = registry.load().base_url.strip().rstrip("/")
+    if public_root:
+        return f"{public_root}/{project.project_id}/mcp"
+    host = mcp_host if mcp_host is not None else project.mcp_host
+    port = mcp_port if mcp_port is not None else project.mcp_port
+    return f"http://{host}:{port}/mcp"
+
+
 def workspace_asset_response(path: str) -> tuple[str, bytes] | None:
     if path == "/ui/assets/app.css":
         return ("text/css; charset=utf-8", load_asset_text("app.css").encode("utf-8"))
@@ -121,7 +130,7 @@ def workspace_page_html(
 
 def workspace_sidebar(project: ProjectConfig, current_url: str, lang: str) -> str:
     items = [
-        ("Projects", home_ui_href(lang), "home"),
+        (project.display_name, with_lang("/ui/", lang), "home", "Projects"),
         ("Entities", with_lang("/ui/entities", lang), "workspace"),
         ("Records", with_lang("/ui/records", lang), "workspace"),
         ("Search", with_lang("/ui/search", lang), "workspace"),
@@ -139,7 +148,7 @@ def workspace_sidebar(project: ProjectConfig, current_url: str, lang: str) -> st
         f'<span>Mode: {escape(project.write_mode)}</span></div>'
         '</div>'
     )
-    return sidebar_nav(items, active_href=path, brand_href=with_lang("/ui/", lang), footer_html=footer)
+    return sidebar_nav(items, active_href=path, brand_href=home_ui_href(lang), footer_html=footer, brand_label="Home")
 
 
 def render_workspace_response(project: ProjectConfig, registry: ProjectRegistry, raw_path: str) -> tuple[HTTPStatus, str] | None:
@@ -152,7 +161,7 @@ def render_workspace_response(project: ProjectConfig, registry: ProjectRegistry,
         return generic_response
 
     if path in ("/ui", "/ui/"):
-        return (HTTPStatus.OK, render_workspace_dashboard(project, lang))
+        return (HTTPStatus.OK, render_workspace_dashboard(project, registry, lang))
     if path == "/ui/search":
         return (HTTPStatus.OK, render_search_page(project, query, raw_path, lang))
     if path == "/ui/graph":
@@ -162,7 +171,7 @@ def render_workspace_response(project: ProjectConfig, registry: ProjectRegistry,
     if path == "/ui/audit":
         return (HTTPStatus.OK, render_audit_page(project, query, raw_path, lang))
     if path == "/ui/settings":
-        return (HTTPStatus.OK, render_project_settings_page(project, raw_path, project_settings_form_defaults(project), None, False, lang))
+        return (HTTPStatus.OK, render_project_settings_page(project, registry, raw_path, project_settings_form_defaults(project), None, False, lang))
     if path == "/ui/import-export":
         return (HTTPStatus.OK, render_import_export_page(project, query, raw_path, None, lang))
     if path == "/ui/backups":
@@ -297,7 +306,7 @@ def workspace_post_action(project: ProjectConfig, registry: ProjectRegistry, raw
     return None
 
 
-def render_workspace_dashboard(project: ProjectConfig, lang: str) -> str:
+def render_workspace_dashboard(project: ProjectConfig, registry: ProjectRegistry, lang: str) -> str:
     with open_database(project.database_path) as database:
         record_service = RecordService(database, project)
         schema = load_project_schema(project.schema_path)
@@ -313,7 +322,7 @@ def render_workspace_dashboard(project: ProjectConfig, lang: str) -> str:
         ).fetchone()["count"]
         pending_count = len(GenericWorkflowService(database, project).list_pending_changes("pending"))
 
-    mcp_endpoint = f"http://{project.mcp_host}:{project.mcp_port}/mcp"
+    mcp_endpoint = public_mcp_endpoint(project, registry)
     overview = property_grid(
         [
             ("Project ID", project.project_id),
@@ -1079,6 +1088,7 @@ def render_global_hypothesis_form_page(
 
 def render_project_settings_page(
     project: ProjectConfig,
+    registry: ProjectRegistry,
     current_url: str,
     form_data: dict[str, str],
     error_message: str | None,
@@ -1104,7 +1114,7 @@ def render_project_settings_page(
             "warning",
         )
 
-    mcp_endpoint = f"http://{form_data['mcp_host']}:{form_data['mcp_port']}/mcp"
+    mcp_endpoint = public_mcp_endpoint(project, registry, form_data["mcp_host"], form_data["mcp_port"])
     body = (
         "<main class=\"workspace-shell\">"
         f"{workspace_header(project, 'Project Settings', path or '/ui/settings', lang)}"
@@ -2304,7 +2314,7 @@ def submit_project_settings_form(
         )
     except ValueError as exc:
         log_event(logger, logging.WARNING, "project_settings_validation_error", project_id=project.project_id, error=str(exc))
-        html = render_project_settings_page(project, "/ui/settings", values, str(exc), False, lang)
+        html = render_project_settings_page(project, registry, "/ui/settings", values, str(exc), False, lang)
         return {"status": HTTPStatus.BAD_REQUEST, "html": html}
 
     project.display_name = updated.display_name

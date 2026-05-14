@@ -3277,6 +3277,80 @@ button.button-secondary,
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 }
 
+.record-fields-panel .record-field-values {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.record-field-card {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(13, 22, 36, 0.44);
+}
+
+.record-field-card-wide {
+  grid-column: span 2;
+}
+
+.record-field-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.record-field-label {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.record-field-value,
+.record-field-link,
+.record-field-code,
+.record-field-empty,
+.record-field-json {
+  overflow-wrap: anywhere;
+}
+
+.record-field-value {
+  white-space: pre-wrap;
+}
+
+.record-field-empty {
+  color: var(--muted);
+}
+
+.record-field-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.record-field-json {
+  max-height: 260px;
+  margin: 0;
+  padding: 10px 12px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(5, 12, 23, 0.58);
+}
+
+.record-field-code {
+  display: inline-block;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(5, 12, 23, 0.58);
+}
+
 .payload-panel .raw-schema-panel {
   display: grid;
   gap: 12px;

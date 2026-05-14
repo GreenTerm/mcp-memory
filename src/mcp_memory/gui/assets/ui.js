@@ -15,7 +15,18 @@
     applyTheme(savedTheme);
   }
 
+  const closeConstructorRoleMenus = (except) => {
+    document.querySelectorAll(".constructor-role-menu[open]").forEach((menu) => {
+      if (menu !== except) {
+        menu.open = false;
+      }
+    });
+  };
+
   document.addEventListener("click", async (event) => {
+    const roleMenu = event.target.closest(".constructor-role-menu");
+    closeConstructorRoleMenus(roleMenu);
+
     const themeToggle = event.target.closest("[data-theme-toggle]");
     if (themeToggle) {
       const nextTheme = root.dataset.theme === "light" ? "dark" : "light";

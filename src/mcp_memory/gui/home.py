@@ -543,6 +543,7 @@ def rewrite_gateway_html(body: bytes, project: ProjectConfig, public_root: str) 
     for attr in ("href", "src", "action"):
         for root in ("/ui", "/schema", "/entity-types", "/records", "/relations", "/related", "/evidence", "/search", "/pending-changes", "/project"):
             text = text.replace(f'{attr}="{root}', f'{attr}="{prefix}{root}')
+    text = text.replace(f"http://{project.mcp_host}:{project.mcp_port}/mcp", project_gateway_url(public_root, project, "/mcp"))
     text = text.replace("http://127.0.0.1:8764/", f"{public_root}/")
     return text.encode("utf-8")
 

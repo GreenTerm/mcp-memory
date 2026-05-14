@@ -387,6 +387,10 @@ class ApiServerTests(unittest.TestCase):
         self.assertIn('class="app-sidebar"', dashboard_html)
         self.assertIn('class="sidebar-icon"', dashboard_html)
         self.assertIn('aria-label="Toggle sidebar"', dashboard_html)
+        self.assertIn('<a class="brand-mark" href="http://127.0.0.1:8764/?lang=en">Home</a>', dashboard_html)
+        self.assertIn('aria-label="Test Project"', dashboard_html)
+        self.assertIn('<span class="app-sidebar-label">Test Project</span>', dashboard_html)
+        self.assertNotIn('<span class="app-sidebar-label">Projects</span>', dashboard_html)
         self.assertNotIn(">Nav</button>", dashboard_html)
         self.assertIn('class="top-search"', dashboard_html)
         self.assertIn('href="#main-content"', dashboard_html)
@@ -521,6 +525,21 @@ class ApiServerTests(unittest.TestCase):
         self.assertIn(".record-form .record-field-control", css)
         self.assertIn("mcp-memory-theme", js)
 
+    def test_project_pages_show_gateway_mcp_endpoint_when_base_url_is_configured(self) -> None:
+        config = self.sandbox.registry.load()
+        config.base_url = "http://mcp-memory.local:8764"
+        self.sandbox.registry.save(config)
+
+        dashboard_html = self._get_text("/ui/")
+        settings_html = self._get_text("/ui/settings")
+
+        gateway_mcp = "http://mcp-memory.local:8764/test-project/mcp"
+        direct_mcp = "http://127.0.0.1:19876/mcp"
+        self.assertIn(gateway_mcp, dashboard_html)
+        self.assertIn(gateway_mcp, settings_html)
+        self.assertNotIn(direct_mcp, dashboard_html)
+        self.assertNotIn(direct_mcp, settings_html)
+
     def test_generic_ui_record_flow_and_schema_page(self) -> None:
         entities_html = self._get_text("/ui/entities")
         self.assertIn("Entity Types", entities_html)
@@ -558,6 +577,13 @@ class ApiServerTests(unittest.TestCase):
 
         detail = self._get_text("/ui/records/note/ui-note")
         self.assertIn("UI Note", detail)
+        self.assertIn("Record Fields", detail)
+        self.assertIn('class="record-field-values"', detail)
+        self.assertIn('data-field-name="summary"', detail)
+        self.assertIn("Created from GUI", detail)
+        self.assertIn('data-field-name="body"', detail)
+        self.assertIn("body text", detail)
+        self.assertIn('data-field-name="tags"', detail)
         self.assertIn("Payload", detail)
         self.assertIn("Add Evidence", detail)
 
