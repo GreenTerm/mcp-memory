@@ -23,5 +23,5 @@ package-dir = {"" = "src"}
 where = ["src"]
 
 [tool.setuptools.package-data]
-"mcp_memory.gui" = ["assets/*.css", "assets/*.js", "templates/*.html"]
+"mcp_memory.gui" = ["assets/*.css", "assets/*.js", "assets/vendor/*.js", "assets/vendor/*.txt", "templates/*.html"]
 "mcp_memory.schemas" = ["*.schema.json"]

@@ -88,9 +88,16 @@ class CoverageTargetTests(unittest.TestCase):
 
         self.assertIn("No graph links yet", workspace.render_graph_svg(self.sandbox.project, nodes, set(), [], "en"))
         one_node = workspace.render_graph_svg(self.sandbox.project, nodes, {("function", "fn1")}, [], "en")
-        self.assertIn("Function One With A Long...", one_node)
+        self.assertIn("Function One With A Long Display Name", one_node)
         graph = workspace.render_graph_svg(self.sandbox.project, nodes, set(nodes), relations, "ru")
-        self.assertIn("graph-edge", graph)
+        self.assertIn("data-graph-canvas", graph)
+        self.assertIn("data-graph-cytoscape", graph)
+        self.assertIn("data-graph-elements", graph)
+        self.assertIn('data-graph-action="zoom-in"', graph)
+        self.assertIn("data-graph-layout-select", graph)
+        self.assertIn('data-graph-action="fullscreen"', graph)
+        self.assertIn('"group": "edges"', graph)
+        self.assertIn("function:fn1", graph)
         self.assertIn("lang=ru", graph)
         self.assertIn("No nodes selected", workspace.render_graph_side_list(self.sandbox.project, nodes, set(), "en"))
         side = workspace.render_graph_side_list(self.sandbox.project, nodes, set(nodes), "en")
@@ -174,7 +181,7 @@ class CoverageTargetTests(unittest.TestCase):
         self.assertIn("No matches yet", no_match)
 
         graph_html = workspace.render_graph_page(self.sandbox.project, {}, "/ui/graph", "en")
-        self.assertIn("graph-edge", graph_html)
+        self.assertIn("data-graph-cytoscape", graph_html)
         focused_graph = workspace.render_graph_page(
             self.sandbox.project,
             {"focus_type": ["function"], "focus_id": ["fn_graph"], "hops": ["2"], "entity_type": [""], "binary_id": ["bin"], "status": [""], "min_confidence": ["0.7"]},

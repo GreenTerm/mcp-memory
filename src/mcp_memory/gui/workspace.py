@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import logging
-import math
 import zipfile
 from html import escape
 from http import HTTPStatus
@@ -57,6 +56,7 @@ from .render import (
     icon_span,
     inner_empty_state,
     key_value_grid,
+    load_asset_bytes,
     load_asset_text,
     mcp_config_block,
     nav_tile_grid,
@@ -91,6 +91,10 @@ def workspace_asset_response(path: str) -> tuple[str, bytes] | None:
         return ("text/css; charset=utf-8", load_asset_text("app.css").encode("utf-8"))
     if path == "/ui/assets/ui.js":
         return ("text/javascript; charset=utf-8", load_asset_text("ui.js").encode("utf-8"))
+    if path == "/ui/assets/vendor/cytoscape.min.js":
+        return ("text/javascript; charset=utf-8", load_asset_bytes("vendor/cytoscape.min.js"))
+    if path == "/ui/assets/vendor/cytoscape.LICENSE.txt":
+        return ("text/plain; charset=utf-8", load_asset_bytes("vendor/cytoscape.LICENSE.txt"))
     return None
 
 
@@ -122,8 +126,16 @@ def workspace_page_html(
     )
     body = app_shell(sidebar, topbar, trail, main_content)
     html_title = title_suffix or f"{page_title} - {project.display_name}"
+    script_hrefs = ["/ui/assets/vendor/cytoscape.min.js"] if page_title == "Graph" else None
     return localize_markup(
-        html_page(html_title, body, "/ui/assets/app.css", page_class="workspace-page has-app-shell", html_lang=lang),
+        html_page(
+            html_title,
+            body,
+            "/ui/assets/app.css",
+            page_class="workspace-page has-app-shell",
+            html_lang=lang,
+            script_hrefs=script_hrefs,
+        ),
         lang,
     )
 
@@ -1652,60 +1664,67 @@ def render_graph_svg(
     ordered_keys = sorted(node_keys, key=lambda key: (key[0], key[1]))[:50]
     if not ordered_keys:
         return empty_state("No graph links yet", "Create relations first, or loosen one graph filter.")
-    width = 860
-    height = 520
-    center_x = width / 2
-    center_y = height / 2
-    radius_x = 320
-    radius_y = 170
-    positions: dict[tuple[str, str], tuple[float, float]] = {}
-    if len(ordered_keys) == 1:
-        positions[ordered_keys[0]] = (center_x, center_y)
-    else:
-        for index, key in enumerate(ordered_keys):
-            angle = (2 * math.pi * index) / len(ordered_keys)
-            positions[key] = (center_x + math.cos(angle) * radius_x, center_y + math.sin(angle) * radius_y)
 
-    edge_markup = []
-    for relation in relations:
-        from_key = (relation.from_entity_type, relation.from_entity_id)
-        to_key = (relation.to_entity_type, relation.to_entity_id)
-        if from_key not in positions or to_key not in positions:
-            continue
-        x1, y1 = positions[from_key]
-        x2, y2 = positions[to_key]
-        mid_x = (x1 + x2) / 2
-        mid_y = (y1 + y2) / 2
-        edge_markup.append(
-            f"<line class=\"graph-edge\" x1=\"{x1:.1f}\" y1=\"{y1:.1f}\" x2=\"{x2:.1f}\" y2=\"{y2:.1f}\"></line>"
-            f"<text class=\"graph-edge-label\" x=\"{mid_x:.1f}\" y=\"{mid_y:.1f}\">{escape(relation.relation_type)}</text>"
-        )
-
-    node_markup = []
+    selected = set(ordered_keys)
+    elements: list[dict[str, Any]] = []
     for key in ordered_keys:
         node = nodes[key]
-        x, y = positions[key]
         label = str(node["label"])
-        short_label = label[:24] + ("..." if len(label) > 24 else "")
-        tone = str(node["entity_type"]).replace("_", "-")
-        link = with_lang(str(node["link"]), lang)
-        node_markup.append(
-            f"<a href=\"{escape(link, quote=True)}\">"
-            f"<g class=\"graph-node graph-node-{escape(tone)}\">"
-            f"<circle cx=\"{x:.1f}\" cy=\"{y:.1f}\" r=\"25\"></circle>"
-            f"<text x=\"{x:.1f}\" y=\"{(y + 43):.1f}\">{escape(short_label)}</text>"
-            "</g>"
-            "</a>"
+        node_key = graph_interaction_node_key(*key)
+        elements.append(
+            {
+                "group": "nodes",
+                "data": {
+                    "id": node_key,
+                    "label": label,
+                    "entityType": str(node["entity_type"]),
+                    "href": with_lang(str(node["link"]), lang),
+                    "title": f"{node['entity_type']}: {label}",
+                },
+            }
         )
 
+    for index, relation in enumerate(relations):
+        from_key = (relation.from_entity_type, relation.from_entity_id)
+        to_key = (relation.to_entity_type, relation.to_entity_id)
+        if from_key not in selected or to_key not in selected:
+            continue
+        elements.append(
+            {
+                "group": "edges",
+                "data": {
+                    "id": f"edge-{index}",
+                    "source": graph_interaction_node_key(*from_key),
+                    "target": graph_interaction_node_key(*to_key),
+                    "label": relation.relation_type,
+                },
+            }
+        )
+
+    elements_json = json.dumps(elements, ensure_ascii=False).replace("</", "<\\/")
     return (
-        "<div class=\"graph-canvas\">"
-        f"<svg viewBox=\"0 0 {width} {height}\" role=\"img\" aria-label=\"Relation graph\">"
-        f"{''.join(edge_markup)}"
-        f"{''.join(node_markup)}"
-        "</svg>"
+        "<div class=\"graph-canvas\" data-graph-canvas>"
+        "<div class=\"graph-toolbar\" aria-label=\"Graph controls\">"
+        "<select class=\"graph-layout-select\" data-graph-layout-select title=\"Graph layout\" aria-label=\"Graph layout\">"
+        "<option value=\"force\">Force</option>"
+        "<option value=\"tree\">Tree</option>"
+        "<option value=\"circle\">Circle</option>"
+        "<option value=\"grid\">Grid</option>"
+        "<option value=\"radial\">Radial</option>"
+        "</select>"
+        "<button class=\"icon-button icon-button-secondary\" type=\"button\" data-graph-action=\"zoom-in\" title=\"Zoom in\" aria-label=\"Zoom in\">+</button>"
+        "<button class=\"icon-button icon-button-secondary\" type=\"button\" data-graph-action=\"zoom-out\" title=\"Zoom out\" aria-label=\"Zoom out\">-</button>"
+        "<button class=\"icon-button icon-button-secondary\" type=\"button\" data-graph-action=\"reset\" title=\"Fit graph to view\" aria-label=\"Fit graph to view\">Fit</button>"
+        "<button class=\"icon-button icon-button-secondary\" type=\"button\" data-graph-action=\"fullscreen\" title=\"Expand graph\" aria-label=\"Expand graph\">Full</button>"
+        "</div>"
+        "<div class=\"graph-cytoscape\" data-graph-cytoscape role=\"img\" aria-label=\"Relation graph\"></div>"
+        f"<script type=\"application/json\" data-graph-elements>{elements_json}</script>"
         "</div>"
     )
+
+
+def graph_interaction_node_key(entity_type: str, entity_id: str) -> str:
+    return f"{entity_type}:{entity_id}"
 
 
 def render_graph_side_list(

@@ -346,47 +346,64 @@ def _render_graph(project: ProjectConfig, query: dict[str, list[str]], lang: str
 
 
 def _render_generic_graph_svg(record_map: dict[tuple[str, str], Record], node_keys: set[tuple[str, str]], relations: list[Any], lang: str) -> str:
-    import math
-
     ordered_keys = sorted(node_keys, key=lambda key: (key[0], key[1]))[:50]
-    width = 860
-    height = 520
-    center_x = width / 2
-    center_y = height / 2
-    radius_x = 320
-    radius_y = 170
-    positions: dict[tuple[str, str], tuple[float, float]] = {}
-    if len(ordered_keys) == 1:
-        positions[ordered_keys[0]] = (center_x, center_y)
-    else:
-        for index, key in enumerate(ordered_keys):
-            angle = (2 * math.pi * index) / len(ordered_keys)
-            positions[key] = (center_x + math.cos(angle) * radius_x, center_y + math.sin(angle) * radius_y)
-    edges = []
-    for relation in relations:
-        from_key = (relation.from_entity_type, relation.from_record_id)
-        to_key = (relation.to_entity_type, relation.to_record_id)
-        if from_key not in positions or to_key not in positions:
-            continue
-        x1, y1 = positions[from_key]
-        x2, y2 = positions[to_key]
-        edges.append(
-            f"<line class=\"graph-edge\" x1=\"{x1:.1f}\" y1=\"{y1:.1f}\" x2=\"{x2:.1f}\" y2=\"{y2:.1f}\"></line>"
-            f"<text class=\"graph-edge-label\" x=\"{((x1 + x2) / 2):.1f}\" y=\"{((y1 + y2) / 2):.1f}\">{escape(relation.relation_type)}</text>"
-        )
-    nodes = []
+    selected = set(ordered_keys)
+    elements: list[dict[str, Any]] = []
     for key in ordered_keys:
         record = record_map[key]
-        x, y = positions[key]
-        short_label = record.title[:24] + ("..." if len(record.title) > 24 else "")
-        link = with_lang(f"/ui/records/{record.entity_type}/{record.record_id}", lang)
-        nodes.append(
-            f"<a href=\"{escape(link, quote=True)}\"><g class=\"graph-node graph-node-{escape(record.entity_type)}\">"
-            f"<circle cx=\"{x:.1f}\" cy=\"{y:.1f}\" r=\"25\"></circle>"
-            f"<text x=\"{x:.1f}\" y=\"{(y + 43):.1f}\">{escape(short_label)}</text>"
-            "</g></a>"
+        node_key = _graph_node_key(*key)
+        elements.append(
+            {
+                "group": "nodes",
+                "data": {
+                    "id": node_key,
+                    "label": record.title,
+                    "entityType": record.entity_type,
+                    "href": with_lang(f"/ui/records/{record.entity_type}/{record.record_id}", lang),
+                    "title": f"{record.entity_type}: {record.title}",
+                },
+            }
         )
-    return f"<div class=\"graph-canvas\"><svg viewBox=\"0 0 {width} {height}\" role=\"img\" aria-label=\"Relation graph\">{''.join(edges)}{''.join(nodes)}</svg></div>"
+    for index, relation in enumerate(relations):
+        from_key = (relation.from_entity_type, relation.from_record_id)
+        to_key = (relation.to_entity_type, relation.to_record_id)
+        if from_key not in selected or to_key not in selected:
+            continue
+        elements.append(
+            {
+                "group": "edges",
+                "data": {
+                    "id": f"edge-{index}",
+                    "source": _graph_node_key(*from_key),
+                    "target": _graph_node_key(*to_key),
+                    "label": relation.relation_type,
+                },
+            }
+        )
+    elements_json = json.dumps(elements, ensure_ascii=False).replace("</", "<\\/")
+    return (
+        '<div class="graph-canvas" data-graph-canvas>'
+        '<div class="graph-toolbar" aria-label="Graph controls">'
+        '<select class="graph-layout-select" data-graph-layout-select title="Graph layout" aria-label="Graph layout">'
+        '<option value="force">Force</option>'
+        '<option value="tree">Tree</option>'
+        '<option value="circle">Circle</option>'
+        '<option value="grid">Grid</option>'
+        '<option value="radial">Radial</option>'
+        "</select>"
+        '<button class="icon-button icon-button-secondary" type="button" data-graph-action="zoom-in" title="Zoom in" aria-label="Zoom in">+</button>'
+        '<button class="icon-button icon-button-secondary" type="button" data-graph-action="zoom-out" title="Zoom out" aria-label="Zoom out">-</button>'
+        '<button class="icon-button icon-button-secondary" type="button" data-graph-action="reset" title="Fit graph to view" aria-label="Fit graph to view">Fit</button>'
+        '<button class="icon-button icon-button-secondary" type="button" data-graph-action="fullscreen" title="Expand graph" aria-label="Expand graph">Full</button>'
+        "</div>"
+        '<div class="graph-cytoscape" data-graph-cytoscape role="img" aria-label="Relation graph"></div>'
+        f'<script type="application/json" data-graph-elements>{elements_json}</script>'
+        "</div>"
+    )
+
+
+def _graph_node_key(entity_type: str, record_id: str) -> str:
+    return f"{entity_type}:{record_id}"
 
 
 def _render_graph_nodes(record_map: dict[tuple[str, str], Record], node_keys: set[tuple[str, str]], lang: str) -> str:

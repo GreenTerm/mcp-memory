@@ -11,6 +11,10 @@ def load_asset_text(name: str) -> str:
     return (ASSETS_DIR / name).read_text(encoding="utf-8")
 
 
+def load_asset_bytes(name: str) -> bytes:
+    return (ASSETS_DIR / name).read_bytes()
+
+
 def html_page(
     title: str,
     body: str,
@@ -18,14 +22,18 @@ def html_page(
     page_class: str = "",
     html_lang: str = "en",
     script_href: str | None = None,
+    script_hrefs: list[str] | None = None,
     theme: str = "dark",
 ) -> str:
     page_class_attr = f' class="{escape(page_class)}"' if page_class else ""
     script = ""
     if script_href is None and stylesheet_href.endswith("/app.css"):
         script_href = stylesheet_href[: -len("app.css")] + "ui.js"
+    scripts = list(script_hrefs or [])
     if script_href:
-        script = f"<script src=\"{escape(script_href)}\" defer></script>"
+        scripts.append(script_href)
+    if scripts:
+        script = "".join(f"<script src=\"{escape(href)}\" defer></script>" for href in scripts)
     return (
         "<!DOCTYPE html>"
         f"<html lang=\"{escape(html_lang)}\" data-theme=\"{escape(theme)}\">"
