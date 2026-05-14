@@ -13,7 +13,7 @@ from mcp_memory.gui import generic as generic_ui
 from mcp_memory.gui import render as gui_render
 from mcp_memory.gui import templates as gui_templates
 from mcp_memory.gui import workspace
-from mcp_memory.schema import FieldDefinition, ProjectSchema, SchemaValidationError, copy_schema_payload, save_project_schema
+from mcp_memory.schema import FieldDefinition, ProjectSchema, SchemaValidationError, copy_schema_payload, load_project_schema, save_project_schema
 from mcp_memory.storage.migrations import bootstrap_project_database
 from mcp_memory.services import (
     EvidenceService,
@@ -88,9 +88,16 @@ class CoverageTargetTests(unittest.TestCase):
 
         self.assertIn("No graph links yet", workspace.render_graph_svg(self.sandbox.project, nodes, set(), [], "en"))
         one_node = workspace.render_graph_svg(self.sandbox.project, nodes, {("function", "fn1")}, [], "en")
-        self.assertIn("Function One With A Long...", one_node)
+        self.assertIn("Function One With A Long Display Name", one_node)
         graph = workspace.render_graph_svg(self.sandbox.project, nodes, set(nodes), relations, "ru")
-        self.assertIn("graph-edge", graph)
+        self.assertIn("data-graph-canvas", graph)
+        self.assertIn("data-graph-cytoscape", graph)
+        self.assertIn("data-graph-elements", graph)
+        self.assertIn('data-graph-action="zoom-in"', graph)
+        self.assertIn("data-graph-layout-select", graph)
+        self.assertIn('data-graph-action="fullscreen"', graph)
+        self.assertIn('"group": "edges"', graph)
+        self.assertIn("function:fn1", graph)
         self.assertIn("lang=ru", graph)
         self.assertIn("No nodes selected", workspace.render_graph_side_list(self.sandbox.project, nodes, set(), "en"))
         side = workspace.render_graph_side_list(self.sandbox.project, nodes, set(nodes), "en")
@@ -174,7 +181,7 @@ class CoverageTargetTests(unittest.TestCase):
         self.assertIn("No matches yet", no_match)
 
         graph_html = workspace.render_graph_page(self.sandbox.project, {}, "/ui/graph", "en")
-        self.assertIn("graph-edge", graph_html)
+        self.assertIn("data-graph-cytoscape", graph_html)
         focused_graph = workspace.render_graph_page(
             self.sandbox.project,
             {"focus_type": ["function"], "focus_id": ["fn_graph"], "hops": ["2"], "entity_type": [""], "binary_id": ["bin"], "status": [""], "min_confidence": ["0.7"]},
@@ -420,6 +427,112 @@ class CoverageTargetTests(unittest.TestCase):
             shell,
         )[1]
         self.assertIn("Record not found", missing_evidence)
+
+    def test_entity_pages_filter_relation_types_for_entity(self) -> None:
+        shell = lambda project, title, body, current_url, lang, **kwargs: body
+        schema = ProjectSchema.from_dict(
+            {
+                "schema_version": "1",
+                "entity_types": [
+                    {
+                        "name": "note",
+                        "label": "Note",
+                        "fields": [{"name": "title", "label": "Title", "widget": "text"}],
+                        "required": ["title"],
+                        "title_field": "title",
+                    },
+                    {
+                        "name": "source",
+                        "label": "Source",
+                        "fields": [{"name": "title", "label": "Title", "widget": "text"}],
+                        "title_field": "title",
+                    },
+                    {
+                        "name": "claim",
+                        "label": "Claim",
+                        "fields": [{"name": "title", "label": "Title", "widget": "text"}],
+                        "title_field": "title",
+                    },
+                ],
+                "relation_types": [
+                    {"name": "note_source", "label": "Note Source", "from": ["note"], "to": ["source"], "directed": True},
+                    {"name": "claim_note", "label": "Claim Note", "from": ["claim"], "to": ["note"], "directed": True},
+                    {"name": "any_to_claim", "label": "Any To Claim", "from": ["*"], "to": ["claim"], "directed": True},
+                    {"name": "source_to_any", "label": "Source To Any", "from": ["source"], "to": ["*"], "directed": True},
+                    {"name": "source_claim", "label": "Source Claim", "from": ["source"], "to": ["claim"], "directed": True},
+                ],
+            }
+        )
+        save_project_schema(self.sandbox.project.schema_path, schema)
+        edit_status, edit_html = generic_ui.generic_workspace_response(
+            self.sandbox.project,
+            self.sandbox.registry,
+            "/ui/entities/note/edit",
+            shell,
+        )
+
+        self.assertEqual(edit_status, 200)
+        self.assertIn("note_source", edit_html)
+        self.assertIn("claim_note", edit_html)
+        self.assertIn("any_to_claim", edit_html)
+        self.assertIn("source_to_any", edit_html)
+        self.assertNotIn("source_claim", edit_html)
+
+        updated = generic_ui.generic_workspace_post_action(
+            self.sandbox.project,
+            self.sandbox.registry,
+            "/ui/entities/note/edit",
+            {
+                "form_mode": "gui",
+                "name": "note",
+                "label": "Note",
+                "field_name_0": "title",
+                "field_label_0": "Title",
+                "field_widget_0": "text",
+                "field_required_0": "true",
+                "field_title_0": "true",
+                "rel_name_0": "note_source",
+                "rel_label_0": "Note Source",
+                "rel_from_0": "note",
+                "rel_to_0": "source",
+                "rel_directed_0": "true",
+                "rel_name_1": "claim_note",
+                "rel_label_1": "Claim Note",
+                "rel_from_1": "claim",
+                "rel_to_1": "note",
+                "rel_directed_1": "true",
+                "rel_name_2": "any_to_claim",
+                "rel_label_2": "Any To Claim",
+                "rel_from_2": "*",
+                "rel_to_2": "claim",
+                "rel_directed_2": "true",
+                "rel_name_3": "source_to_any",
+                "rel_label_3": "Source To Any",
+                "rel_from_3": "source",
+                "rel_to_3": "*",
+                "rel_directed_3": "true",
+            },
+        )
+        self.assertIn("flash=updated", updated["location"])
+        saved_relation_names = {relation.name for relation in load_project_schema(self.sandbox.project.schema_path).relation_types}
+        self.assertIn("source_claim", saved_relation_names)
+
+        with self.sandbox.open_database() as database:
+            record = RecordService(database, self.sandbox.project).upsert_record(RecordWrite("note", {"title": "Filtered Relations"}))
+
+        status, html = generic_ui.generic_workspace_response(
+            self.sandbox.project,
+            self.sandbox.registry,
+            f"/ui/records/note/{record.record_id}",
+            shell,
+        )
+
+        self.assertEqual(status, 200)
+        self.assertIn("note_source", html)
+        self.assertIn("claim_note", html)
+        self.assertIn("any_to_claim", html)
+        self.assertIn("source_to_any", html)
+        self.assertNotIn("source_claim", html)
 
     def test_generic_schema_builder_private_edges(self) -> None:
         self.assertIn("selected", generic_ui._widget_options("json"))

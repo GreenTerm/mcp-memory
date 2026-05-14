@@ -346,47 +346,64 @@ def _render_graph(project: ProjectConfig, query: dict[str, list[str]], lang: str
 
 
 def _render_generic_graph_svg(record_map: dict[tuple[str, str], Record], node_keys: set[tuple[str, str]], relations: list[Any], lang: str) -> str:
-    import math
-
     ordered_keys = sorted(node_keys, key=lambda key: (key[0], key[1]))[:50]
-    width = 860
-    height = 520
-    center_x = width / 2
-    center_y = height / 2
-    radius_x = 320
-    radius_y = 170
-    positions: dict[tuple[str, str], tuple[float, float]] = {}
-    if len(ordered_keys) == 1:
-        positions[ordered_keys[0]] = (center_x, center_y)
-    else:
-        for index, key in enumerate(ordered_keys):
-            angle = (2 * math.pi * index) / len(ordered_keys)
-            positions[key] = (center_x + math.cos(angle) * radius_x, center_y + math.sin(angle) * radius_y)
-    edges = []
-    for relation in relations:
-        from_key = (relation.from_entity_type, relation.from_record_id)
-        to_key = (relation.to_entity_type, relation.to_record_id)
-        if from_key not in positions or to_key not in positions:
-            continue
-        x1, y1 = positions[from_key]
-        x2, y2 = positions[to_key]
-        edges.append(
-            f"<line class=\"graph-edge\" x1=\"{x1:.1f}\" y1=\"{y1:.1f}\" x2=\"{x2:.1f}\" y2=\"{y2:.1f}\"></line>"
-            f"<text class=\"graph-edge-label\" x=\"{((x1 + x2) / 2):.1f}\" y=\"{((y1 + y2) / 2):.1f}\">{escape(relation.relation_type)}</text>"
-        )
-    nodes = []
+    selected = set(ordered_keys)
+    elements: list[dict[str, Any]] = []
     for key in ordered_keys:
         record = record_map[key]
-        x, y = positions[key]
-        short_label = record.title[:24] + ("..." if len(record.title) > 24 else "")
-        link = with_lang(f"/ui/records/{record.entity_type}/{record.record_id}", lang)
-        nodes.append(
-            f"<a href=\"{escape(link, quote=True)}\"><g class=\"graph-node graph-node-{escape(record.entity_type)}\">"
-            f"<circle cx=\"{x:.1f}\" cy=\"{y:.1f}\" r=\"25\"></circle>"
-            f"<text x=\"{x:.1f}\" y=\"{(y + 43):.1f}\">{escape(short_label)}</text>"
-            "</g></a>"
+        node_key = _graph_node_key(*key)
+        elements.append(
+            {
+                "group": "nodes",
+                "data": {
+                    "id": node_key,
+                    "label": record.title,
+                    "entityType": record.entity_type,
+                    "href": with_lang(f"/ui/records/{record.entity_type}/{record.record_id}", lang),
+                    "title": f"{record.entity_type}: {record.title}",
+                },
+            }
         )
-    return f"<div class=\"graph-canvas\"><svg viewBox=\"0 0 {width} {height}\" role=\"img\" aria-label=\"Relation graph\">{''.join(edges)}{''.join(nodes)}</svg></div>"
+    for index, relation in enumerate(relations):
+        from_key = (relation.from_entity_type, relation.from_record_id)
+        to_key = (relation.to_entity_type, relation.to_record_id)
+        if from_key not in selected or to_key not in selected:
+            continue
+        elements.append(
+            {
+                "group": "edges",
+                "data": {
+                    "id": f"edge-{index}",
+                    "source": _graph_node_key(*from_key),
+                    "target": _graph_node_key(*to_key),
+                    "label": relation.relation_type,
+                },
+            }
+        )
+    elements_json = json.dumps(elements, ensure_ascii=False).replace("</", "<\\/")
+    return (
+        '<div class="graph-canvas" data-graph-canvas>'
+        '<div class="graph-toolbar" aria-label="Graph controls">'
+        '<select class="graph-layout-select" data-graph-layout-select title="Graph layout" aria-label="Graph layout">'
+        '<option value="force">Force</option>'
+        '<option value="tree">Tree</option>'
+        '<option value="circle">Circle</option>'
+        '<option value="grid">Grid</option>'
+        '<option value="radial">Radial</option>'
+        "</select>"
+        '<button class="icon-button icon-button-secondary" type="button" data-graph-action="zoom-in" title="Zoom in" aria-label="Zoom in">+</button>'
+        '<button class="icon-button icon-button-secondary" type="button" data-graph-action="zoom-out" title="Zoom out" aria-label="Zoom out">-</button>'
+        '<button class="icon-button icon-button-secondary" type="button" data-graph-action="reset" title="Fit graph to view" aria-label="Fit graph to view">Fit</button>'
+        '<button class="icon-button icon-button-secondary" type="button" data-graph-action="fullscreen" title="Expand graph" aria-label="Expand graph">Full</button>'
+        "</div>"
+        '<div class="graph-cytoscape" data-graph-cytoscape role="img" aria-label="Relation graph"></div>'
+        f'<script type="application/json" data-graph-elements>{elements_json}</script>'
+        "</div>"
+    )
+
+
+def _graph_node_key(entity_type: str, record_id: str) -> str:
+    return f"{entity_type}:{record_id}"
 
 
 def _render_graph_nodes(record_map: dict[tuple[str, str], Record], node_keys: set[tuple[str, str]], lang: str) -> str:
@@ -437,6 +454,43 @@ def _relation_form(schema: ProjectSchema, lang: str) -> str:
     )
 
 
+def _relation_types_for_entity(schema: ProjectSchema, entity_type: str) -> list[Any]:
+    schema.entity(entity_type)
+    return [
+        relation
+        for relation in schema.relation_types
+        if _relation_endpoint_matches(relation.from_types, entity_type) or _relation_endpoint_matches(relation.to_types, entity_type)
+    ]
+
+
+def _relation_endpoint_matches(entity_types: list[str], entity_type: str) -> bool:
+    return "*" in entity_types or entity_type in entity_types
+
+
+def _relation_payload_matches_entity(relation: dict[str, Any], entity_type: str) -> bool:
+    from_types = [str(item) for item in relation.get("from", [])]
+    to_types = [str(item) for item in relation.get("to", [])]
+    return _relation_endpoint_matches(from_types, entity_type) or _relation_endpoint_matches(to_types, entity_type)
+
+
+def _relation_endpoint_label(entity_types: list[str]) -> str:
+    return "Any" if "*" in entity_types else ", ".join(entity_types)
+
+
+def _relation_type_rows_for_entity(schema: ProjectSchema, entity_type: str) -> list[list[str]]:
+    rows = []
+    for relation in _relation_types_for_entity(schema, entity_type):
+        rows.append(
+            [
+                f"{escape(relation.label)}<br><code>{escape(relation.name)}</code>",
+                escape(_relation_endpoint_label(relation.from_types)),
+                escape(_relation_endpoint_label(relation.to_types)),
+                "Yes" if relation.directed else "No",
+            ]
+        )
+    return rows
+
+
 def _entity_options(schema: ProjectSchema, selected: str, empty_label: str) -> str:
     options = [f'<option value=""{" selected" if not selected else ""}>{escape(empty_label)}</option>']
     for entity in schema.entity_types:
@@ -446,6 +500,8 @@ def _entity_options(schema: ProjectSchema, selected: str, empty_label: str) -> s
 
 
 def _record_detail_response(project: ProjectConfig, entity_type: str, record_id: str, raw_path: str, lang: str, workspace_page_html) -> tuple[HTTPStatus, str]:
+    schema = load_project_schema(project.schema_path)
+    entity = schema.entity(entity_type)
     with open_database(project.database_path) as database:
         record = RecordService(database, project).get_record(entity_type, record_id)
         if record is None:
@@ -464,19 +520,82 @@ def _record_detail_response(project: ProjectConfig, entity_type: str, record_id:
         f'<form method="post" action="{escape(with_lang(f"/ui/records/{record.entity_type}/{record.record_id}/archive", lang), quote=True)}"><button class="button button-secondary" type="submit">Archive</button></form>'
     )
     relation_rows = [[escape(item.relation_type), escape(item.from_record_id), escape(item.to_record_id)] for item in relations]
+    relation_type_rows = _relation_type_rows_for_entity(schema, record.entity_type)
     evidence_rows = [[escape(item.evidence_type), escape(item.description), escape(item.created_by), escape(item.created_at)] for item in evidence]
     header_actions = f'<div class="form-actions">{actions}</div>'
     body = (
         '<main class="workspace-shell">'
         + page_header(record.title, record.summary, meta_html=badge(record.entity_type, "accent"), actions_html=header_actions)
         + panel("Record", meta, class_name="record-summary-panel")
+        + panel("Record Fields", _render_record_field_values(entity, record), class_name="record-fields-panel")
         + panel("Relations", table(["Type", "From", "To"], relation_rows) if relation_rows else inner_empty_state("No relations yet", "Create relations through API or MCP."))
+        + panel(
+            "Relation Types",
+            table(["Type", "From", "To", "Directed"], relation_type_rows)
+            if relation_type_rows
+            else inner_empty_state("No relation types for this entity", "Update the schema to allow relations for this entity."),
+        )
         + panel("Evidence", table(["Type", "Description", "By", "At"], evidence_rows) if evidence_rows else inner_empty_state("No evidence yet", "Attach evidence from this page or through MCP."))
         + panel("Add Evidence", _evidence_form(record, lang))
         + panel("Payload", payload, class_name="payload-panel")
         + "</main>"
     )
     return HTTPStatus.OK, workspace_page_html(project, record.title, body, raw_path, lang)
+
+
+def _render_record_field_values(entity: Any, record: Record) -> str:
+    known_fields = {field.name for field in entity.fields}
+    cards = [_record_field_value_card(field, record.payload.get(field.name, None), field.name in record.payload) for field in entity.fields]
+    extra_payload = {key: value for key, value in record.payload.items() if key not in known_fields}
+    if extra_payload:
+        cards.append(
+            '<article class="record-field-card record-field-card-wide" data-field-name="__extra_payload">'
+            '<div class="record-field-card-head">'
+            '<span class="record-field-label">Additional Payload</span>'
+            '<span class="badge badge-neutral">json</span>'
+            "</div>"
+            f"{_record_value_html(extra_payload, 'json', True)}"
+            "</article>"
+        )
+    if not cards:
+        return inner_empty_state("No fields yet", "This entity has no schema fields.")
+    return f'<div class="record-field-values">{"".join(cards)}</div>'
+
+
+def _record_field_value_card(field: Any, value: Any, present: bool) -> str:
+    wide_class = " record-field-card-wide" if field.widget in {"textarea", "json", "tags"} else ""
+    return (
+        f'<article class="record-field-card{wide_class}" data-field-name="{escape(field.name, quote=True)}">'
+        '<div class="record-field-card-head">'
+        f'<span class="record-field-label">{escape(field.label)}</span>'
+        f'<span class="badge badge-neutral">{escape(field.widget)}</span>'
+        "</div>"
+        f"{_record_value_html(value, field.widget, present)}"
+        "</article>"
+    )
+
+
+def _record_value_html(value: Any, widget: str, present: bool) -> str:
+    if not present or value is None or value == "":
+        return '<span class="record-field-empty">Not set</span>'
+    if widget == "bool":
+        return f'<span class="record-field-value">{"Yes" if value is True else "No"}</span>'
+    if widget == "tags":
+        values = value if isinstance(value, list) else str(value).replace(",", "\n").splitlines()
+        tags = [str(item).strip() for item in values if str(item).strip()]
+        if not tags:
+            return '<span class="record-field-empty">Not set</span>'
+        return '<div class="record-field-tags">' + "".join(badge(tag, "neutral") for tag in tags) + "</div>"
+    if widget == "json" or isinstance(value, (dict, list)):
+        rendered = json.dumps(value, ensure_ascii=False, indent=2)
+        return f'<pre class="record-field-json"><code>{escape(rendered)}</code></pre>'
+    if widget == "url":
+        rendered = str(value)
+        if rendered.startswith(("http://", "https://")):
+            return f'<a class="record-field-link" href="{escape(rendered, quote=True)}">{escape(rendered)}</a>'
+    if widget == "path":
+        return f'<code class="record-field-code">{escape(str(value))}</code>'
+    return f'<div class="record-field-value">{escape(str(value))}</div>'
 
 
 def _record_edit_response(project: ProjectConfig, entity_type: str, record_id: str, raw_path: str, lang: str, workspace_page_html) -> tuple[HTTPStatus, str]:
@@ -708,7 +827,7 @@ def _render_entity_type_edit(project: ProjectConfig, entity_name: str, error: st
     widgets = ["text", "textarea", "number", "bool", "enum", "tags", "json", "datetime", "url", "path"]
     field_rows = "".join(_entity_edit_field_row(idx, entity, field, widgets, lang) for idx, field in enumerate(entity.fields))
     next_idx = len(entity.fields)
-    relation_rows = "".join(_entity_edit_relation_row(idx, relation, lang) for idx, relation in enumerate(schema.relation_types))
+    relation_rows = "".join(_entity_edit_relation_row(idx, relation, lang) for idx, relation in enumerate(_relation_types_for_entity(schema, entity.name)))
     next_rel_idx = len(schema.relation_types)
     gui_form = (
         f'{error_html}<form class="project-form entity-editor-form" method="post" action="{escape(with_lang(f"/ui/entities/{entity.name}/edit", lang), quote=True)}">'
@@ -815,7 +934,12 @@ def _submit_entity_type_edit(project: ProjectConfig, entity_name: str, form_data
         else:
             raise ValueError(f"unknown entity type: {entity_name}")
         if form_data.get("form_mode") != "raw" and any(key.startswith("rel_name_") for key in form_data):
-            payload["relation_types"] = _relation_payloads_from_editor_form(form_data)
+            edited_relations = _relation_payloads_from_editor_form(form_data)
+            payload["relation_types"] = [
+                relation
+                for relation in payload.get("relation_types", [])
+                if not _relation_payload_matches_entity(relation, entity_name)
+            ] + edited_relations
         update_project_schema(project, payload)
     except (ValueError, KeyError, json.JSONDecodeError) as exc:
         return {"status": HTTPStatus.BAD_REQUEST, "html": _render_entity_type_edit(project, entity_name, str(exc), lang)}

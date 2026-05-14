@@ -1,6 +1,6 @@
 # GUI Redesign Plan And Status
 
-Version: 1.0.0.
+Version: 1.0.2.
 
 This document records the current GUI direction. The original goal was to move away from the old Warm Lab look toward a calm Obsidian/Notion-like working interface without a heavy frontend stack.
 

@@ -376,6 +376,8 @@ class ApiServerTests(unittest.TestCase):
         audit_html = self._get_text("/ui/audit")
         css = self._get_text("/ui/assets/app.css")
         js = self._get_text("/ui/assets/ui.js")
+        cytoscape_js = self._get_text("/ui/assets/vendor/cytoscape.min.js")
+        cytoscape_license = self._get_text("/ui/assets/vendor/cytoscape.LICENSE.txt")
         with self.assertRaises(error.HTTPError) as missing_page_ctx:
             request.urlopen(self.base_url + "/ui/missing-page")
         not_found_html = missing_page_ctx.exception.read().decode("utf-8")
@@ -387,6 +389,10 @@ class ApiServerTests(unittest.TestCase):
         self.assertIn('class="app-sidebar"', dashboard_html)
         self.assertIn('class="sidebar-icon"', dashboard_html)
         self.assertIn('aria-label="Toggle sidebar"', dashboard_html)
+        self.assertIn('<a class="brand-mark" href="http://127.0.0.1:8764/?lang=en">Home</a>', dashboard_html)
+        self.assertIn('aria-label="Test Project"', dashboard_html)
+        self.assertIn('<span class="app-sidebar-label">Test Project</span>', dashboard_html)
+        self.assertNotIn('<span class="app-sidebar-label">Projects</span>', dashboard_html)
         self.assertNotIn(">Nav</button>", dashboard_html)
         self.assertIn('class="top-search"', dashboard_html)
         self.assertIn('href="#main-content"', dashboard_html)
@@ -434,6 +440,7 @@ class ApiServerTests(unittest.TestCase):
         self.assertIn("main_handler", search_html)
         self.assertNotIn("Warm Lab", search_html)
         self.assertIn("Relation Graph", graph_html)
+        self.assertIn('<script src="/ui/assets/vendor/cytoscape.min.js" defer></script>', graph_html)
         self.assertIn("Graph Filters", graph_html)
         self.assertIn("No graph links yet", graph_html)
         self.assertIn("Create Relation", graph_html)
@@ -513,6 +520,14 @@ class ApiServerTests(unittest.TestCase):
         self.assertIn(".sidebar-collapsed .app-sidebar", css)
         self.assertIn(".sidebar-section-title", css)
         self.assertIn(".graph-canvas", css)
+        self.assertIn(".graph-cytoscape", css)
+        self.assertIn(".graph-toolbar", css)
+        self.assertIn(".graph-layout-select", css)
+        self.assertIn(".graph-canvas.is-fullscreen", css)
+        self.assertIn("@keyframes graph-fullscreen-in", css)
+        self.assertIn(".graph-canvas.has-active-node", css)
+        self.assertIn("-webkit-user-select: none", css)
+        self.assertIn("-webkit-user-drag: none", css)
         self.assertIn(".workspace-back-link", css)
         self.assertIn(".empty-state-body", css)
         self.assertIn(".action-card-title", css)
@@ -520,6 +535,24 @@ class ApiServerTests(unittest.TestCase):
         self.assertIn(".record-form-grid", css)
         self.assertIn(".record-form .record-field-control", css)
         self.assertIn("mcp-memory-theme", js)
+        self.assertIn("initGraphCanvas", js)
+        self.assertIn("cytoscape", cytoscape_js)
+        self.assertIn("The Cytoscape Consortium", cytoscape_license)
+
+    def test_project_pages_show_gateway_mcp_endpoint_when_base_url_is_configured(self) -> None:
+        config = self.sandbox.registry.load()
+        config.base_url = "http://mcp-memory.local:8764"
+        self.sandbox.registry.save(config)
+
+        dashboard_html = self._get_text("/ui/")
+        settings_html = self._get_text("/ui/settings")
+
+        gateway_mcp = "http://mcp-memory.local:8764/test-project/mcp"
+        direct_mcp = "http://127.0.0.1:19876/mcp"
+        self.assertIn(gateway_mcp, dashboard_html)
+        self.assertIn(gateway_mcp, settings_html)
+        self.assertNotIn(direct_mcp, dashboard_html)
+        self.assertNotIn(direct_mcp, settings_html)
 
     def test_generic_ui_record_flow_and_schema_page(self) -> None:
         entities_html = self._get_text("/ui/entities")
@@ -558,6 +591,13 @@ class ApiServerTests(unittest.TestCase):
 
         detail = self._get_text("/ui/records/note/ui-note")
         self.assertIn("UI Note", detail)
+        self.assertIn("Record Fields", detail)
+        self.assertIn('class="record-field-values"', detail)
+        self.assertIn('data-field-name="summary"', detail)
+        self.assertIn("Created from GUI", detail)
+        self.assertIn('data-field-name="body"', detail)
+        self.assertIn("body text", detail)
+        self.assertIn('data-field-name="tags"', detail)
         self.assertIn("Payload", detail)
         self.assertIn("Add Evidence", detail)
 
@@ -886,7 +926,9 @@ class ApiServerTests(unittest.TestCase):
                 )
 
         graph_html = self._get_text("/ui/graph")
-        self.assertEqual(graph_html.count('class="graph-node graph-node-'), 50)
+        self.assertEqual(graph_html.count('"group": "nodes"'), 50)
+        self.assertIn("data-graph-layout-select", graph_html)
+        self.assertIn('data-graph-action="fullscreen"', graph_html)
         self.assertIn("Graph Note", graph_html)
 
     def test_ui_not_found_routes_return_404(self) -> None:

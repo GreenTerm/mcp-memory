@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mcp-memory"
-version = "1.0.0"
+version = "1.0.2"
 description = "Offline-first schema-driven knowledge base for people and agents."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -23,5 +23,5 @@ package-dir = {"" = "src"}
 where = ["src"]
 
 [tool.setuptools.package-data]
-"mcp_memory.gui" = ["assets/*.css", "assets/*.js", "templates/*.html"]
+"mcp_memory.gui" = ["assets/*.css", "assets/*.js", "assets/vendor/*.js", "assets/vendor/*.txt", "templates/*.html"]
 "mcp_memory.schemas" = ["*.schema.json"]
