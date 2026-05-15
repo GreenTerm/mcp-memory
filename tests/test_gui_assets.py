@@ -42,6 +42,9 @@ class GuiAssetTests(unittest.TestCase):
         self.assertIn('canvas.addEventListener("selectstart"', js)
         self.assertIn('canvas.addEventListener("dragstart"', js)
         self.assertIn("setActiveNode", js)
+        self.assertIn("normalizeGraphHref", js)
+        self.assertIn('window.location.pathname.indexOf("/ui/")', js)
+        self.assertIn("window.location.href = normalizeGraphHref(href)", js)
 
 
 if __name__ == "__main__":

@@ -137,6 +137,14 @@
     ];
     const layoutByKey = new Map(layoutOptions.map((layout) => [layout.key, layout]));
     const layoutSelect = canvas.querySelector("[data-graph-layout-select]");
+    const workspacePrefixIndex = window.location.pathname.indexOf("/ui/");
+    const workspacePrefix = workspacePrefixIndex > 0 ? window.location.pathname.slice(0, workspacePrefixIndex) : "";
+    const normalizeGraphHref = (href) => {
+      if (!href || !href.startsWith("/ui/") || !workspacePrefix || href.startsWith(`${workspacePrefix}/ui/`)) {
+        return href;
+      }
+      return `${workspacePrefix}${href}`;
+    };
     const clampScale = (value) => Math.min(2.8, Math.max(0.45, value));
     const updateViewportState = (cy) => {
       const pan = cy.pan();
@@ -387,7 +395,7 @@
       }
       const href = event.target.data("href");
       if (href) {
-        window.location.href = href;
+        window.location.href = normalizeGraphHref(href);
       }
     });
     cy.ready(() => {
