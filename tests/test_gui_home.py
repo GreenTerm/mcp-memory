@@ -33,10 +33,12 @@ from mcp_memory.gui.home import (
     serve_ui_home,
     set_app_base_url,
 )
+from mcp_memory.gui.generic import generic_workspace_post_action
 from mcp_memory.logging_utils import configure_logging, shutdown_logging
 from mcp_memory.mcp.server import build_handler as build_mcp_handler
 from mcp_memory.runtime import ProjectRuntimeInfo, ProjectRuntimeManager
 from mcp_memory.schema import load_project_schema
+from mcp_memory.services import RecordService, SearchQuery, SearchService, update_project_schema
 
 
 class _HealthHandler(BaseHTTPRequestHandler):
@@ -393,6 +395,73 @@ class GuiHomeTests(unittest.TestCase):
                 server.server_close()
             if thread is not None:
                 thread.join(timeout=5)
+            sandbox.cleanup()
+
+    def test_generic_record_json_field_round_trips_nested_values(self) -> None:
+        sandbox = ProjectSandbox()
+        try:
+            sandbox.project.write_mode = "auto"
+            payload = load_project_schema(sandbox.project.schema_path).to_dict()
+            note = payload["entity_types"][0]
+            note["fields"].append({"name": "metadata", "label": "Metadata", "widget": "json"})
+            note["search_fields"].append("metadata")
+            update_project_schema(sandbox.project, payload)
+
+            nested = {"outer": {"inner": [1, {"ok": True, "needle": "deep-value"}]}, "tags": ["a", "b"]}
+            response = generic_workspace_post_action(
+                sandbox.project,
+                sandbox.registry,
+                "/ui/records/note/new?lang=en",
+                {
+                    "slug": "json-note",
+                    "title": "JSON Note",
+                    "summary": "Nested JSON",
+                    "body": "Body",
+                    "tags": "alpha",
+                    "metadata": json.dumps(nested),
+                },
+            )
+
+            self.assertIn("/ui/records/note/", response["location"])
+            with sandbox.open_database() as database:
+                record = RecordService(database, sandbox.project).get_record("note", "json-note")
+                self.assertIsNotNone(record)
+                self.assertEqual(record.payload["metadata"], nested)
+                results = SearchService(database).search(
+                    SearchQuery(project_id=sandbox.project.project_id, query_text="deep-value")
+                )
+            self.assertEqual(len(results), 1)
+        finally:
+            sandbox.cleanup()
+
+    def test_generic_record_form_returns_invalid_json_with_entered_value(self) -> None:
+        sandbox = ProjectSandbox()
+        try:
+            sandbox.project.write_mode = "auto"
+            payload = load_project_schema(sandbox.project.schema_path).to_dict()
+            payload["entity_types"][0]["fields"].append({"name": "metadata", "label": "Metadata", "widget": "json"})
+            update_project_schema(sandbox.project, payload)
+
+            response = generic_workspace_post_action(
+                sandbox.project,
+                sandbox.registry,
+                "/ui/records/note/new?lang=en",
+                {
+                    "slug": "bad-json",
+                    "title": "Bad JSON",
+                    "summary": "",
+                    "body": "",
+                    "tags": "",
+                    "metadata": '{"outer":',
+                },
+            )
+
+            self.assertEqual(response["status"], 400)
+            self.assertIn("flash-warning", response["html"])
+            self.assertIn("Expecting value", response["html"])
+            self.assertIn("{&quot;outer&quot;:", response["html"])
+            self.assertIn('action="/ui/records/note/new?lang=en"', response["html"])
+        finally:
             sandbox.cleanup()
 
     def test_home_handler_renders_create_project_form(self) -> None:

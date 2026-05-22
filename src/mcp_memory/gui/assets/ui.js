@@ -23,6 +23,44 @@
     });
   };
 
+  const constructorRoleKey = (input) => {
+    const match = (input.getAttribute("name") || "").match(/^field_(title|summary|slug|search|tag)_/);
+    return match ? match[1] : "tag";
+  };
+
+  const updateConstructorRoleSummary = (menu) => {
+    if (!menu) {
+      return;
+    }
+    const summary = menu.querySelector("summary");
+    if (!summary) {
+      return;
+    }
+    const checkedInputs = Array.from(menu.querySelectorAll(".constructor-role-chip input:checked"));
+    if (!checkedInputs.length) {
+      const empty = document.createElement("span");
+      empty.className = "constructor-role-empty";
+      empty.textContent = "\u2014";
+      summary.replaceChildren(empty);
+      return;
+    }
+    const badges = checkedInputs.map((input) => {
+      const chipLabel = input.closest(".constructor-role-chip")?.querySelector("span");
+      const badge = document.createElement("span");
+      badge.className = `constructor-role-badge constructor-role-badge-${constructorRoleKey(input)}`;
+      badge.textContent = chipLabel ? chipLabel.textContent.trim() : input.name;
+      return badge;
+    });
+    summary.replaceChildren(...badges);
+  };
+
+  document.addEventListener("change", (event) => {
+    const input = event.target.closest(".constructor-role-chip input");
+    if (input) {
+      updateConstructorRoleSummary(input.closest(".constructor-role-menu"));
+    }
+  });
+
   document.addEventListener("click", async (event) => {
     const roleMenu = event.target.closest(".constructor-role-menu");
     closeConstructorRoleMenus(roleMenu);

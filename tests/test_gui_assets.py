@@ -16,6 +16,16 @@ class GuiAssetTests(unittest.TestCase):
         self.assertIn(".constructor-role-menu[open]", js)
         self.assertIn("menu.open = false", js)
 
+    def test_ui_js_updates_constructor_role_summary_without_closing_menu(self) -> None:
+        js = load_asset_text("ui.js")
+
+        self.assertIn("updateConstructorRoleSummary", js)
+        self.assertIn(".constructor-role-chip input:checked", js)
+        self.assertIn("constructor-role-badge-", js)
+        self.assertIn("summary.replaceChildren", js)
+        self.assertIn('document.addEventListener("change"', js)
+        self.assertNotIn("details.open=false", js)
+
     def test_ui_js_initializes_interactive_graph_canvas(self) -> None:
         js = load_asset_text("ui.js")
 
