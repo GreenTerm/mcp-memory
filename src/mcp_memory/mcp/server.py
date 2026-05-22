@@ -670,7 +670,7 @@ def _render_agent_workspace_guide(project: ProjectConfig, arguments: dict[str, s
     focus_entity = arguments.get("focus_entity", "").strip() or f"{entity_type}-example"
     return f"""{_prompt_context(project, arguments)}
 
-Use this server as a local offline-first schema-first knowledge base. The project schema defines which entity types exist and which payload fields are required.
+Use this server as a local light-weigth schema-first knowledge base. The project schema defines which entity types exist and which payload fields are required.
 
 {_schema_agent_reference(project)}
 

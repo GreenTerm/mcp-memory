@@ -1,6 +1,6 @@
 # Product Description
 
-`mcp-memory` is a local offline-first, schema-driven knowledge base for people and agents.
+`mcp-memory` is a local light-weigth, schema-driven knowledge base for people and agents.
 
 It stores project knowledge in isolated Windows-local workspaces backed by SQLite and plain files. Each project owns a portable `schema.json` that defines entity types, fields, search metadata, and relation types. The same project data is available through CLI commands, a JSON HTTP API, an MCP Streamable HTTP endpoint, and a server-rendered web UI.
 

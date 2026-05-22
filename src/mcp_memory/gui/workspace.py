@@ -345,7 +345,7 @@ def render_workspace_dashboard(project: ProjectConfig, registry: ProjectRegistry
             ("MCP Endpoint", mcp_endpoint),
         ]
     )
-    project_summary = "Local offline-first schema-backed knowledge base for people and agents."
+    project_summary = "Local light-weigth schema-backed knowledge base for people and agents."
     back_action = f'<a class="quick-link workspace-back-link" href="{escape(home_ui_href(lang), quote=True)}">Back to Projects</a>'
     project_panel = (
         '<div class="project-overview-layout">'

@@ -1,6 +1,6 @@
 # GUI Design Prompt
 
-Design a calm, practical web UI for a local offline-first schema-driven knowledge base. The UI is used daily by people and agents as a working tool, not as a marketing site.
+Design a calm, practical web UI for a local light-weigth schema-driven knowledge base. The UI is used daily by people and agents as a working tool, not as a marketing site.
 
 ## Product Context
 

@@ -1,4 +1,4 @@
-"""Core package for the offline-first schema-driven knowledge base."""
+"""Core package for the light-weigth schema-driven knowledge base."""
 
 __all__ = [
     "__version__",

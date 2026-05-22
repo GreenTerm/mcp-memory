@@ -6,7 +6,7 @@ Instructions for Codex in this repository. These notes should be treated as pers
 
 ## Project Context
 
-- This repository is for a local offline-first schema-driven knowledge base on Python, aimed at both people and agents.
+- This repository is for a local light-weigth schema-driven knowledge base on Python, aimed at both people and agents.
 - Prioritize simple local deployment on Windows over architectural purity.
 - Favor SQLite, stdlib, and a minimal offline-deployable dependency footprint.
 - Generic backend, MCP, server-rendered GUI, Home UI DNS/path gateway, schema templates, legacy import, and local backup/export flows are implemented; preserve the simple local architecture, but allow small offline-deployable dependencies when they clearly reduce maintenance cost.
