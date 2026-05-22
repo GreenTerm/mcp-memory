@@ -33,10 +33,14 @@ class ConfigAndCliTests(unittest.TestCase):
             exports_dir=Path("C:/tmp/project/exports"),
             backups_dir=Path("C:/tmp/project/backups"),
             logs_dir=Path("C:/tmp/project/logs"),
+            created_at="2026-05-22T12:00:00+00:00",
         )
         restored = ProjectConfig.from_dict(project.to_dict())
         self.assertEqual(restored.project_id, "p1")
         self.assertEqual(restored.project_root.name, "project")
+        self.assertEqual(restored.created_at, "2026-05-22T12:00:00+00:00")
+        restored_legacy = ProjectConfig.from_dict({key: value for key, value in project.to_dict().items() if key != "created_at"})
+        self.assertEqual(restored_legacy.created_at, "")
 
     def test_app_config_round_trip(self) -> None:
         project = ProjectConfig(
@@ -108,6 +112,15 @@ class ConfigAndCliTests(unittest.TestCase):
             service.create_project("p1", "Project One", Path(tmp) / "project-a", 10001, 10002)
             with self.assertRaisesRegex(ValueError, "project_id already exists"):
                 service.create_project("p1", "Project Again", Path(tmp) / "project-b", 10003, 10004)
+
+    def test_project_service_create_project_sets_created_at(self) -> None:
+        with TemporaryDirectory() as tmp:
+            registry = ProjectRegistry(Path(tmp) / "app" / "app_config.json")
+            service = ProjectService(registry)
+            service.initialize_app()
+            project = service.create_project("p1", "Project One", Path(tmp) / "project-a", 10001, 10002)
+            self.assertRegex(project.created_at, r"^\d{4}-\d{2}-\d{2}T")
+            self.assertEqual(registry.get_project("p1").created_at, project.created_at)
 
     def test_project_service_rejects_non_empty_project_root(self) -> None:
         with TemporaryDirectory() as tmp:

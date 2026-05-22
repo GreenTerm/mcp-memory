@@ -6,6 +6,7 @@ import logging
 import re
 
 from mcp_memory.config import AppConfig, ProjectConfig, ProjectRegistry
+from mcp_memory.domain.models import utc_now
 from mcp_memory.logging_utils import get_logger, log_event
 from mcp_memory.schema import copy_schema_payload, schema_payload_from_source
 from mcp_memory.storage import bootstrap_project_database, open_database
@@ -81,6 +82,7 @@ class ProjectService:
             http_port=http_port,
             mcp_port=mcp_port,
             write_mode=write_mode,
+            created_at=utc_now(),
         )
 
         database = open_database(config.database_path)

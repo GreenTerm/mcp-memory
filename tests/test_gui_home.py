@@ -12,7 +12,7 @@ from urllib import error, parse, request
 
 from tests.support import ProjectSandbox
 
-from mcp_memory.config import ProjectRegistry
+from mcp_memory.config import ProjectConfig, ProjectRegistry
 from mcp_memory.api.server import build_handler as build_api_handler
 from mcp_memory.gui.home import (
     build_home_handler,
@@ -71,6 +71,20 @@ class GuiHomeTests(unittest.TestCase):
     def tearDown(self) -> None:
         shutdown_logging()
 
+    def _project_config(self, tmp: str, project_id: str, display_name: str, created_at: str = "") -> ProjectConfig:
+        root = Path(tmp) / project_id
+        return ProjectConfig(
+            project_id=project_id,
+            display_name=display_name,
+            project_root=root,
+            database_path=root / "project.db",
+            attachments_dir=root / "attachments",
+            exports_dir=root / "exports",
+            backups_dir=root / "backups",
+            logs_dir=root / "logs",
+            created_at=created_at,
+        )
+
     def test_render_home_page_empty_registry(self) -> None:
         with TemporaryDirectory() as tmp:
             app_home = Path(tmp) / "app"
@@ -80,7 +94,9 @@ class GuiHomeTests(unittest.TestCase):
                 html = render_home_page(registry, app_home, ProjectRuntimeManager(app_home))
             finally:
                 shutdown_logging()
-        self.assertIn("Your project shelf is empty", html)
+        self.assertIn("No registered projects yet", html)
+        self.assertIn("Projects", html)
+        self.assertIn("DNS Gateway", html)
         self.assertIn("New Project", html)
         self.assertIn("Setup Guide", html)
         self.assertIn("/setup?lang=en", html)
@@ -129,7 +145,64 @@ class GuiHomeTests(unittest.TestCase):
         finally:
             sandbox.cleanup()
         self.assertIn(">Start<", html)
-        self.assertIn("launch both HTTP and MCP services", html)
+        self.assertNotIn("launch both HTTP and MCP services", html)
+
+    def test_render_home_page_sorts_projects_by_created_at_descending_then_missing_dates_by_name(self) -> None:
+        with TemporaryDirectory() as tmp:
+            app_home = Path(tmp) / "app"
+            registry = ProjectRegistry(app_home / "app_config.json")
+            projects = [
+                self._project_config(tmp, "undated-z", "Zulu"),
+                self._project_config(tmp, "older", "Older", "2026-05-20T10:00:00+00:00"),
+                self._project_config(tmp, "newer", "Newer", "2026-05-22T10:00:00+00:00"),
+                self._project_config(tmp, "undated-a", "Alpha"),
+            ]
+            for project in projects:
+                registry.upsert_project(project)
+            html = render_home_page(registry, app_home, ProjectRuntimeManager(app_home))
+
+        positions = [html.index(f'data-project-row="{project_id}"') for project_id in ("newer", "older", "undated-a", "undated-z")]
+        self.assertEqual(positions, sorted(positions))
+
+    def test_render_home_page_project_row_default_fields_and_two_actions(self) -> None:
+        sandbox = ProjectSandbox()
+        try:
+            runtime_manager = mock.Mock()
+            runtime_manager.get_project_runtime.return_value = ProjectRuntimeInfo("test-project", "running", "ok", True)
+            html = render_home_page(sandbox.registry, sandbox.app_home, runtime_manager)
+        finally:
+            sandbox.cleanup()
+
+        row_html = html.split('class="project-list-row"', 1)[1].split('class="project-expanded-panel"', 1)[0]
+        self.assertIn("Test Project", row_html)
+        self.assertIn("Running", row_html)
+        self.assertIn("test-project", row_html)
+        self.assertIn("data-project-toggle", row_html)
+        self.assertIn("Open Workspace", row_html)
+        self.assertNotIn("detail-action-edit", row_html)
+        self.assertNotIn("detail-action-delete", row_html)
+
+    def test_render_home_page_project_expanded_details(self) -> None:
+        sandbox = ProjectSandbox()
+        try:
+            runtime_manager = mock.Mock()
+            runtime_manager.get_project_runtime.return_value = ProjectRuntimeInfo("test-project", "running", "ok", True)
+            html = render_home_page(sandbox.registry, sandbox.app_home, runtime_manager, public_root="http://mcp-memory.local:8764")
+        finally:
+            sandbox.cleanup()
+
+        self.assertIn("Gateway UI", html)
+        self.assertIn("Gateway MCP", html)
+        self.assertIn("Local HTTP", html)
+        self.assertIn("Local MCP", html)
+        self.assertIn("Write Mode", html)
+        self.assertIn("DB Path", html)
+        self.assertIn("Project Root", html)
+        self.assertIn("MCP Config (for clients)", html)
+        self.assertIn("detail-action-edit", html)
+        self.assertIn("detail-action-restart", html)
+        self.assertIn("detail-action-stop", html)
+        self.assertIn("detail-action-delete", html)
 
     def test_home_http_handler_renders_project_and_assets(self) -> None:
         sandbox = ProjectSandbox()
@@ -160,31 +233,33 @@ class GuiHomeTests(unittest.TestCase):
                 with request.urlopen(base_url + "/assets/ui.js") as response:
                     js = response.read().decode("utf-8")
 
-                self.assertIn("Open a local knowledge workspace", html)
+                self.assertIn("<h1>Projects</h1>", html)
                 self.assertIn("home-topbar", html)
-                self.assertIn("project-shelf-section", html)
+                self.assertIn("project-list-shell", html)
                 self.assertIn('data-theme="dark"', html)
                 self.assertIn('<script src="/assets/ui.js" defer></script>', html)
                 self.assertIn("Test Project", html)
                 self.assertIn("DB Path", html)
-                self.assertIn("Local Runtime", html)
-                self.assertIn("project-card-section", html)
-                self.assertIn("Copy MCP config", html)
-                self.assertIn("mcp-config-test-project", html)
+                self.assertIn("Local HTTP", html)
+                self.assertIn("project-expanded-panel", html)
+                self.assertIn("MCP Config (for clients)", html)
+                self.assertIn("mcpMemory", html)
                 self.assertIn("Running", html)
                 self.assertIn(f"{base_url}/test-project/ui/", html)
                 self.assertIn(f"{base_url}/test-project/mcp", html)
-                self.assertIn("Gateway HTTP", html)
+                self.assertIn("Gateway UI", html)
                 self.assertIn("Gateway MCP", html)
                 self.assertIn("New Project", html)
                 self.assertNotIn("Warm Lab", html)
                 self.assertIn("lang=ru", russian_html)
-                self.assertIn("badge-success", russian_html)
+                self.assertIn("project-status-running", russian_html)
                 self.assertIn("/projects/new?lang=ru", russian_html)
                 self.assertIn("--paper", css)
                 self.assertIn("--bg", css)
                 self.assertIn("data-theme=\"light\"", css)
+                self.assertIn("project-list-row", css)
                 self.assertIn("mcp-memory-theme", js)
+                self.assertIn("data-project-toggle", js)
             finally:
                 health_server.shutdown()
                 health_server.server_close()
@@ -492,7 +567,7 @@ class GuiHomeTests(unittest.TestCase):
                 thread.join(timeout=5)
             sandbox.cleanup()
 
-    def test_home_handler_renders_project_card_menu_and_edit_form(self) -> None:
+    def test_home_handler_renders_project_detail_actions_and_edit_form(self) -> None:
         sandbox = ProjectSandbox()
         server = None
         thread = None
@@ -508,7 +583,9 @@ class GuiHomeTests(unittest.TestCase):
             with request.urlopen(base_url + "/projects/test-project/edit?lang=en") as response:
                 edit_html = response.read().decode("utf-8")
 
-            self.assertIn("project-card-menu", home_html)
+            self.assertIn("project-expanded-panel", home_html)
+            self.assertIn("detail-action-edit", home_html)
+            self.assertIn("detail-action-delete", home_html)
             self.assertIn("/projects/test-project/edit?lang=en", home_html)
             self.assertIn("/projects/test-project/delete?lang=en", home_html)
             self.assertIn("Edit Project", edit_html)

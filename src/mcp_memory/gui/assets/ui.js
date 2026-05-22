@@ -81,13 +81,32 @@
       return;
     }
 
+    const projectToggle = event.target.closest("[data-project-toggle]");
+    if (projectToggle) {
+      const target = document.getElementById(projectToggle.getAttribute("aria-controls"));
+      if (!target) {
+        return;
+      }
+      const expanded = projectToggle.getAttribute("aria-expanded") === "true";
+      target.hidden = expanded;
+      row.querySelectorAll("[data-project-toggle]").forEach((toggle) => {
+        toggle.setAttribute("aria-expanded", String(!expanded));
+        const chevron = toggle.querySelector(".project-row-chevron");
+        if (chevron) {
+          chevron.classList.toggle("project-row-chevron-up", !expanded);
+          chevron.classList.toggle("project-row-chevron-right", expanded);
+        }
+      });
+      return;
+    }
+
     const copyButton = event.target.closest("[data-copy-target]");
     if (!copyButton) {
       return;
     }
 
     const target = document.querySelector(copyButton.dataset.copyTarget);
-    const text = target ? target.textContent.trim() : copyButton.dataset.copyText || "";
+    const text = copyButton.dataset.copyText || (target ? target.textContent.trim() : "");
     if (!text || !navigator.clipboard) {
       return;
     }
