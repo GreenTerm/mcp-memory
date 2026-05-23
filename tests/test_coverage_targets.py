@@ -290,8 +290,14 @@ class CoverageTargetTests(unittest.TestCase):
         )
         self.assertEqual(edit_status, 200)
         self.assertIn("Record Form", edit_html)
-        with self.assertRaisesRegex(Exception, "title is required"):
-            generic_ui.generic_workspace_post_action(self.sandbox.project, self.sandbox.registry, f"/ui/records/note/{record.record_id}/edit", {"title": ""})
+        invalid_edit = generic_ui.generic_workspace_post_action(
+            self.sandbox.project,
+            self.sandbox.registry,
+            f"/ui/records/note/{record.record_id}/edit",
+            {"title": ""},
+        )
+        self.assertEqual(invalid_edit["status"], 400)
+        self.assertIn("title is required", invalid_edit["html"])
         self.assertEqual(
             generic_ui.generic_workspace_post_action(self.sandbox.project, self.sandbox.registry, "/ui/entities/note/delete", {})["status"],
             400,
