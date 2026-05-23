@@ -1,6 +1,7 @@
 (() => {
   const storage = window.localStorage;
   const root = document.documentElement;
+  const projectDetailsAnimationMs = 220;
 
   const applyTheme = (theme) => {
     const nextTheme = theme === "light" ? "light" : "dark";
@@ -23,6 +24,44 @@
     });
   };
 
+  const constructorRoleKey = (input) => {
+    const match = (input.getAttribute("name") || "").match(/^field_(title|summary|slug|search|tag)_/);
+    return match ? match[1] : "tag";
+  };
+
+  const updateConstructorRoleSummary = (menu) => {
+    if (!menu) {
+      return;
+    }
+    const summary = menu.querySelector("summary");
+    if (!summary) {
+      return;
+    }
+    const checkedInputs = Array.from(menu.querySelectorAll(".constructor-role-chip input:checked"));
+    if (!checkedInputs.length) {
+      const empty = document.createElement("span");
+      empty.className = "constructor-role-empty";
+      empty.textContent = "\u2014";
+      summary.replaceChildren(empty);
+      return;
+    }
+    const badges = checkedInputs.map((input) => {
+      const chipLabel = input.closest(".constructor-role-chip")?.querySelector("span");
+      const badge = document.createElement("span");
+      badge.className = `constructor-role-badge constructor-role-badge-${constructorRoleKey(input)}`;
+      badge.textContent = chipLabel ? chipLabel.textContent.trim() : input.name;
+      return badge;
+    });
+    summary.replaceChildren(...badges);
+  };
+
+  document.addEventListener("change", (event) => {
+    const input = event.target.closest(".constructor-role-chip input");
+    if (input) {
+      updateConstructorRoleSummary(input.closest(".constructor-role-menu"));
+    }
+  });
+
   document.addEventListener("click", async (event) => {
     const roleMenu = event.target.closest(".constructor-role-menu");
     closeConstructorRoleMenus(roleMenu);
@@ -43,13 +82,59 @@
       return;
     }
 
+    const projectToggle = event.target.closest("[data-project-toggle]");
+    if (projectToggle) {
+      const row = projectToggle.closest("[data-project-row]");
+      const target = document.getElementById(projectToggle.getAttribute("aria-controls"));
+      if (!row || !target) {
+        return;
+      }
+      const expanded = projectToggle.getAttribute("aria-expanded") === "true";
+      const nextExpanded = !expanded;
+      if (target.__projectDetailsTimer) {
+        window.clearTimeout(target.__projectDetailsTimer);
+      }
+      row.querySelectorAll("[data-project-toggle]").forEach((toggle) => {
+        toggle.setAttribute("aria-expanded", String(nextExpanded));
+        const chevron = toggle.querySelector(".project-row-chevron");
+        if (chevron) {
+          chevron.classList.toggle("project-row-chevron-up", nextExpanded);
+          chevron.classList.toggle("project-row-chevron-right", !nextExpanded);
+        }
+      });
+      if (nextExpanded) {
+        target.hidden = false;
+        target.style.maxHeight = "0px";
+        window.requestAnimationFrame(() => {
+          target.classList.toggle("is-open", nextExpanded);
+          target.style.maxHeight = `${target.scrollHeight}px`;
+        });
+        target.__projectDetailsTimer = window.setTimeout(() => {
+          target.style.maxHeight = "none";
+          target.__projectDetailsTimer = 0;
+        }, projectDetailsAnimationMs);
+      } else {
+        target.style.maxHeight = `${target.scrollHeight}px`;
+        target.getBoundingClientRect();
+        target.classList.toggle("is-open", nextExpanded);
+        target.style.maxHeight = "0px";
+        target.__projectDetailsTimer = window.setTimeout(() => {
+          target.hidden = true;
+          target.style.maxHeight = "";
+          target.classList.remove("is-open");
+          target.__projectDetailsTimer = 0;
+        }, projectDetailsAnimationMs);
+      }
+      return;
+    }
+
     const copyButton = event.target.closest("[data-copy-target]");
     if (!copyButton) {
       return;
     }
 
     const target = document.querySelector(copyButton.dataset.copyTarget);
-    const text = target ? target.textContent.trim() : copyButton.dataset.copyText || "";
+    const text = copyButton.dataset.copyText || (target ? target.textContent.trim() : "");
     if (!text || !navigator.clipboard) {
       return;
     }

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mcp-memory"
-version = "1.0.2"
+version = "1.0.3"
 description = "Offline-first schema-driven knowledge base for people and agents."
 readme = "README.md"
 requires-python = ">=3.10"

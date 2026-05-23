@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from html import escape
 import http.client
 import json
@@ -11,6 +12,7 @@ from pathlib import Path
 from urllib import error, request
 from urllib.parse import parse_qs, urlparse, urlsplit, urlunsplit
 
+from mcp_memory import __version__
 from mcp_memory.config import ProjectConfig, ProjectRegistry
 from mcp_memory.logging_utils import configure_logging, get_logger, log_event, start_request_log
 from mcp_memory.runtime import ProjectRuntimeInfo, ProjectRuntimeManager
@@ -19,7 +21,7 @@ from mcp_memory.services import ProjectService
 from mcp_memory.services.projects import validate_project_id
 
 from .i18n import language_switcher, localize_markup, resolve_language, translate_text
-from .render import badge, empty_state, html_page, key_value_grid, load_asset_text, mcp_config_block, shell_command
+from .render import badge, empty_state, html_page, icon_span, key_value_grid, load_asset_text, mcp_config_block, shell_command
 
 
 DEFAULT_HTTP_PORT = "8765"
@@ -523,6 +525,38 @@ def public_base_url(registry: ProjectRegistry, host_header: str) -> str:
     return f"http://{host_header.strip() or '127.0.0.1:8764'}".rstrip("/")
 
 
+def parse_project_created_at(project: ProjectConfig) -> datetime | None:
+    raw = project.created_at.strip()
+    if not raw:
+        return None
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
+def sort_home_projects(projects: list[ProjectConfig]) -> list[ProjectConfig]:
+    def sort_key(project: ProjectConfig) -> tuple[object, ...]:
+        created_at = parse_project_created_at(project)
+        name_key = (project.display_name or project.project_id).casefold()
+        id_key = project.project_id.casefold()
+        if created_at is None:
+            return (1, name_key, id_key)
+        return (0, -created_at.timestamp(), name_key, id_key)
+
+    return sorted(projects, key=sort_key)
+
+
+def format_project_created_at(project: ProjectConfig) -> str:
+    created_at = parse_project_created_at(project)
+    if created_at is None:
+        return "&mdash;"
+    return escape(created_at.astimezone().strftime("%Y-%m-%d %H:%M"))
+
+
 def project_gateway_url(public_root: str, project: ProjectConfig, path: str = "") -> str:
     clean_path = path if path.startswith("/") else f"/{path}" if path else ""
     return f"{public_root}/{project.project_id}{clean_path}"
@@ -720,7 +754,7 @@ def render_home_page(
     lang: str = "en",
     public_root: str = "http://127.0.0.1:8764",
 ) -> str:
-    projects = registry.list_projects()
+    projects = sort_home_projects(registry.list_projects())
     parsed = urlparse(current_url)
     query = parse_qs(parsed.query)
     flash = query.get("flash", [""])[0]
@@ -731,70 +765,286 @@ def render_home_page(
     topbar = render_home_topbar(current_url, lang, create_url, setup_url)
 
     if projects:
-        content = "".join(
-            render_project_card(
-                project,
-                app_home,
-                runtime_manager.get_project_runtime(project),
-                flash=flash if flash_project_id == project.project_id else "",
-                lang=lang,
-                public_root=public_root,
+        rows = []
+        for project in projects:
+            rows.append(
+                render_project_list_item(
+                    project,
+                    app_home,
+                    runtime_manager.get_project_runtime(project),
+                    flash=flash if flash_project_id == project.project_id else "",
+                    lang=lang,
+                    public_root=public_root,
+                    expanded=False,
+                )
             )
-            for project in projects
-        )
+        content = "".join(rows)
         body = (
-            "<main class=\"home-shell home-hub\">"
+            "<main class=\"home-shell home-hub home-projects-page\">"
             f"{topbar}"
-            "<section class=\"hero-card home-hero\">"
-            "<p class=\"eyebrow\">mcp-memory</p>"
-            f"<h1>{translate_text(lang, 'Open a local knowledge workspace.')}</h1>"
-            f"<p class=\"hero-copy\">{translate_text(lang, 'Projects stay local, schema-driven, searchable, and available through one DNS/path gateway for people and agents.')}</p>"
-            "<div class=\"hero-actions\">"
-            f"<a class=\"button button-primary\" href=\"{escape(create_url, quote=True)}\">{translate_text(lang, 'New Project')}</a>"
-            f"<a class=\"button button-secondary\" href=\"{escape(setup_url, quote=True)}\">{translate_text(lang, 'Setup Guide')}</a>"
-            "</div>"
+            "<section class=\"home-page-heading\">"
+            f"<h1>{translate_text(lang, 'Projects')}</h1>"
+            f"<p>{translate_text(lang, 'Local projects on this machine. Sorted by creation date (newest first).')}</p>"
             "</section>"
             f"{global_flash_html}"
-            f"{render_base_url_settings(registry, public_root, lang)}"
-            "<section class=\"panel-section project-shelf-section\">"
-            "<div class=\"section-heading\"><h2>Projects</h2><p class=\"section-subtitle\">Start, open, and route each local workspace from one place.</p></div>"
-            f"<div class=\"project-grid\">{content}</div>"
+            f"{render_dns_gateway_strip(projects, public_root, lang, setup_url)}"
+            "<section class=\"project-list-shell\" aria-label=\"Projects\">"
+            "<div class=\"project-list-header\" aria-hidden=\"true\">"
+            "<span></span><span>Project Name</span><span>Status</span><span>Project_ID</span><span>Created</span><span>Actions</span>"
+            "</div>"
+            f"<div class=\"project-list\">{content}</div>"
             "</section>"
+            f"{render_home_status_bar(app_home)}"
             "</main>"
         )
     else:
         body = (
-            "<main class=\"home-shell home-hub\">"
+            "<main class=\"home-shell home-hub home-projects-page\">"
             f"{topbar}"
-            "<section class=\"hero-card home-hero\">"
-            "<p class=\"eyebrow\">mcp-memory</p>"
-            f"<h1>{translate_text(lang, 'Your project shelf is empty.')}</h1>"
-            f"<p class=\"hero-copy\">{translate_text(lang, 'Create the first local schema-driven workspace, then open it through the Home gateway when you are ready.')}</p>"
-            "<div class=\"hero-actions\">"
-            f"<a class=\"button button-primary\" href=\"{escape(create_url, quote=True)}\">{translate_text(lang, 'New Project')}</a>"
-            f"<a class=\"button button-secondary\" href=\"{escape(setup_url, quote=True)}\">{translate_text(lang, 'Setup Guide')}</a>"
-            "</div>"
+            "<section class=\"home-page-heading\">"
+            f"<h1>{translate_text(lang, 'Projects')}</h1>"
+            f"<p>{translate_text(lang, 'Local projects on this machine. Sorted by creation date (newest first).')}</p>"
             "</section>"
             f"{global_flash_html}"
-            f"{render_base_url_settings(registry, public_root, lang)}"
+            f"{render_dns_gateway_strip(projects, public_root, lang, setup_url)}"
             f"{empty_state(translate_text(lang, 'No registered projects yet'), translate_text(lang, 'Once you create a project, it will appear here with a direct workspace link.'))}"
+            f"{render_home_status_bar(app_home)}"
             "</main>"
         )
-    html = html_page("mcp-memory Projects", body, "/assets/app.css", page_class="warm-lab", html_lang=lang)
+    html = html_page("mcp-memory Projects", body, "/assets/app.css", page_class="home-page", html_lang=lang)
     return localize_markup(html, lang)
 
 
 def render_home_topbar(current_url: str, lang: str, create_url: str, setup_url: str) -> str:
     return (
         "<header class=\"home-topbar\">"
-        "<a class=\"brand-mark\" href=\"/\">mcp-memory</a>"
+        "<a class=\"brand-mark\" href=\"/\">"
+        f"{icon_span('Brain', 'brand-mark-icon')}"
+        "<span>mcp-memory</span>"
+        "</a>"
         "<nav class=\"home-topbar-actions\" aria-label=\"Home actions\">"
-        f"<a class=\"button button-secondary\" href=\"{escape(setup_url, quote=True)}\">Setup Guide</a>"
-        f"<a class=\"button button-primary\" href=\"{escape(create_url, quote=True)}\">New Project</a>"
+        f"<a class=\"button button-secondary\" href=\"{escape(setup_url, quote=True)}\">{icon_span('Book', 'button-icon')}<span>Setup Guide</span></a>"
+        f"<a class=\"button button-primary\" href=\"{escape(create_url, quote=True)}\">{icon_span('Plus', 'button-icon')}<span>New Project</span></a>"
         f"{language_switcher(current_url, lang)}"
         "</nav>"
         "</header>"
     )
+
+
+def render_dns_gateway_strip(projects: list[ProjectConfig], public_root: str, lang: str, setup_url: str) -> str:
+    domain = public_root.removeprefix("https://").removeprefix("http://")
+    example_project = projects[0] if projects else None
+    example = project_gateway_url(public_root, example_project, "/ui/") if example_project else f"{public_root}/project_id/ui/"
+    return (
+        '<section class="dns-gateway-strip" aria-label="DNS Gateway">'
+        '<div class="dns-gateway-title">'
+        f"{icon_span('Globe', 'dns-gateway-icon')}"
+        "<div><h2>DNS Gateway</h2><p>Use the friendly domain to access any project.</p></div>"
+        "</div>"
+        '<div class="dns-gateway-cell">'
+        "<span>DNS Domain</span>"
+        f'<code>{escape(domain)}</code>'
+        "</div>"
+        '<div class="dns-gateway-cell dns-gateway-example">'
+        "<span>Example</span>"
+        f'<a href="{escape(example, quote=True)}">{escape(example)}</a>'
+        "</div>"
+        '<div class="dns-gateway-state"><span class="status-dot status-dot-running"></span><span>Gateway: Running</span></div>'
+        f'<a class="button button-secondary" href="{escape(setup_url, quote=True)}">Manage</a>'
+        "</section>"
+    )
+
+
+def render_home_status_bar(app_home: Path) -> str:
+    refreshed = datetime.now().strftime("%H:%M:%S")
+    return (
+        '<footer class="home-status-bar">'
+        '<div class="home-status-group">'
+        '<span><span class="status-dot status-dot-running"></span>Home UI: Running</span>'
+        f'<span>Version: {escape(__version__)}</span>'
+        f'<span>Data Root: {escape(str(app_home))}</span>'
+        "</div>"
+        '<div class="home-status-group">'
+        f"<span>{icon_span('Refresh', 'button-icon')}Last refreshed: {escape(refreshed)}</span>"
+        '<a class="button button-secondary" href="/">'
+        f"{icon_span('Refresh', 'button-icon')}<span>Refresh</span>"
+        "</a>"
+        "</div>"
+        "</footer>"
+    )
+
+
+def render_project_list_item(
+    project: ProjectConfig,
+    app_home: Path,
+    runtime: ProjectRuntimeInfo,
+    flash: str = "",
+    lang: str = "en",
+    public_root: str = "http://127.0.0.1:8764",
+    expanded: bool = False,
+) -> str:
+    details_id = f"project-details-{project.project_id}"
+    expanded_text = "true" if expanded else "false"
+    hidden_attr = "" if expanded else " hidden"
+    toggle_icon = "up" if expanded else "right"
+    status_label = "Running" if runtime.status == "running" else "Stopped"
+    status_class = "running" if runtime.status == "running" else "stopped"
+    hint = render_project_list_hint(project, app_home, runtime, flash)
+    return (
+        f'<article class="project-list-item" data-project-row="{escape(project.project_id, quote=True)}">'
+        '<div class="project-list-row">'
+        f'<button class="project-row-toggle" type="button" data-project-toggle aria-expanded="{expanded_text}" aria-controls="{escape(details_id, quote=True)}" title="Project details">'
+        f'<span class="project-row-chevron project-row-chevron-{toggle_icon}" aria-hidden="true"></span>'
+        "</button>"
+        f'<strong class="project-row-name">{escape(project.display_name)}</strong>'
+        f'<span class="project-status-badge project-status-{status_class}"><span class="status-dot status-dot-{status_class}"></span>{status_label}</span>'
+        f'<code class="project-row-id">{escape(project.project_id)}</code>'
+        f'<span class="project-row-created">{format_project_created_at(project)}</span>'
+        '<div class="project-row-actions">'
+        f"{render_project_primary_action(project, runtime, lang, public_root)}"
+        "</div>"
+        "</div>"
+        f'<div id="{escape(details_id, quote=True)}" class="project-expanded-panel" data-project-details{hidden_attr}>'
+        f"{render_project_expanded_details(project, runtime, lang, public_root)}"
+        f"{hint}"
+        "</div>"
+        "</article>"
+    )
+
+
+def render_project_list_hint(project: ProjectConfig, app_home: Path, runtime: ProjectRuntimeInfo, flash: str) -> str:
+    if flash or runtime.status in {"failed", "starting"}:
+        return render_project_hint(project, app_home, runtime, flash)
+    return ""
+
+
+def render_project_expanded_details(project: ProjectConfig, runtime: ProjectRuntimeInfo, lang: str, public_root: str) -> str:
+    gateway_http_url = project_gateway_url(public_root, project, "/ui/")
+    gateway_mcp_url = project_gateway_url(public_root, project, "/mcp")
+    http_url = f"http://{project.http_host}:{project.http_port}"
+    local_mcp_url = f"http://{project.mcp_host}:{project.mcp_port}/mcp"
+    return (
+        '<div class="project-expanded-grid">'
+        '<div class="project-detail-list">'
+        f"{render_project_detail_item('Globe', 'Gateway UI', gateway_http_url, gateway_http_url)}"
+        f"{render_project_detail_item('Graph', 'Gateway MCP', gateway_mcp_url, gateway_mcp_url)}"
+        f"{render_project_detail_item('Monitor', 'Local HTTP', http_url, http_url)}"
+        f"{render_project_detail_item('Graph', 'Local MCP', local_mcp_url, local_mcp_url)}"
+        "</div>"
+        '<div class="project-detail-list">'
+        f"{render_project_detail_item('Shield', 'Write Mode', badge(project.write_mode.title(), 'accent'), raw_html=True, item_class='project-detail-item-inline')}"
+        f"{render_project_detail_item('Database', 'DB Path', str(project.database_path), item_class='project-detail-item-inline project-detail-item-path')}"
+        f"{render_project_detail_item('Projects', 'Project Root', str(project.project_root), item_class='project-detail-item-inline project-detail-item-path')}"
+        "</div>"
+        '<div class="project-detail-config">'
+        f"{render_project_mcp_client_block(gateway_mcp_url)}"
+        f'<div class="project-detail-actions">{render_project_detail_actions(project, runtime, lang)}</div>'
+        "</div>"
+        "</div>"
+    )
+
+
+def render_project_detail_item(
+    icon_label: str,
+    label: str,
+    value_html: str,
+    href: str = "",
+    raw_html: bool = False,
+    item_class: str = "",
+) -> str:
+    if href:
+        value = f'<a href="{escape(href, quote=True)}">{escape(value_html)}</a>'
+    else:
+        value = value_html if raw_html else escape(value_html)
+    class_attr = "project-detail-item"
+    if item_class:
+        class_attr = f"{class_attr} {escape(item_class, quote=True)}"
+    return (
+        f'<div class="{class_attr}">'
+        f"{icon_span(icon_label, 'project-detail-icon')}"
+        f"<span>{escape(label)}</span>"
+        f"<div>{value}</div>"
+        "</div>"
+    )
+
+
+def render_project_mcp_client_block(endpoint: str) -> str:
+    config_id = "home-mcp-config-" + "".join(character if character.isalnum() else "-" for character in endpoint)
+    payload = json.dumps({"mcpServers": {"mcpMemory": {"url": endpoint}}}, ensure_ascii=False, indent=2)
+    lines = [
+        '<span class="home-mcp-token-punct">{</span>',
+        '<span class="home-mcp-token-key">"mcpServers"</span><span class="home-mcp-token-punct">: {</span>',
+        '<span class="home-mcp-token-key">"mcpMemory"</span><span class="home-mcp-token-punct">: {</span>',
+        f'<span class="home-mcp-token-key">"url"</span><span class="home-mcp-token-punct">: </span><span class="home-mcp-token-url">"{escape(endpoint)}"</span>',
+        '<span class="home-mcp-token-punct">}</span>',
+        '<span class="home-mcp-token-punct">}</span>',
+        '<span class="home-mcp-token-punct">}</span>',
+    ]
+    indents = [0, 2, 4, 6, 4, 2, 0]
+    line_html = "".join(
+        '<span class="home-mcp-code-line">'
+        f'<span class="home-mcp-code-number">{index}</span>'
+        f'<span class="home-mcp-code-text" style="--indent: {indents[index - 1]};">{line}</span>'
+        "</span>"
+        for index, line in enumerate(lines, start=1)
+    )
+    return (
+        '<div class="home-mcp-config-block">'
+        '<div class="home-mcp-config-head">'
+        "<span>MCP Config (for clients)</span>"
+        f'<button class="button button-secondary button-compact" type="button" data-copy-target="#{config_id}" data-copy-text="{escape(payload, quote=True)}" data-copied-label="Copied">'
+        f"{icon_span('Copy', 'button-icon')}<span>Copy</span>"
+        "</button>"
+        "</div>"
+        f'<pre id="{config_id}" class="shell-command home-mcp-code"><code>{line_html}</code></pre>'
+        "</div>"
+    )
+
+
+def render_project_primary_action(project: ProjectConfig, runtime: ProjectRuntimeInfo, lang: str, public_root: str) -> str:
+    workspace_url = project_gateway_url(public_root, project, "/ui/")
+    current_lang = f"?lang={lang}"
+    if runtime.status == "running":
+        return (
+            f'<a class="button button-primary project-row-action" href="{escape(workspace_url + current_lang, quote=True)}">'
+            "<span>Open Workspace</span>"
+            f"{icon_span('External Link', 'button-icon')}"
+            "</a>"
+        )
+    if runtime.status == "starting":
+        return '<span class="button button-disabled project-row-action">Starting</span>'
+    return (
+        f'<form method="post" action="/projects/{escape(project.project_id, quote=True)}/start?lang={escape(lang, quote=True)}">'
+        '<button class="button button-primary project-row-action project-row-action-start" type="submit">'
+        f"{icon_span('Play', 'button-icon')}<span>Start</span>"
+        "</button>"
+        "</form>"
+    )
+
+
+def render_project_detail_actions(project: ProjectConfig, runtime: ProjectRuntimeInfo, lang: str) -> str:
+    edit_url = f"/projects/{project.project_id}/edit?lang={lang}"
+    delete_action = f"/projects/{project.project_id}/delete?lang={lang}"
+    controls = [
+        f'<a class="button button-secondary detail-action-edit" href="{escape(edit_url, quote=True)}">{icon_span("Edit", "button-icon")}<span>Edit</span></a>',
+    ]
+    if runtime.status == "running" and runtime.managed:
+        controls.append(
+            f'<form method="post" action="/projects/{escape(project.project_id, quote=True)}/restart?lang={escape(lang, quote=True)}">'
+            f'<button class="button button-secondary detail-action-restart" type="submit">{icon_span("Refresh", "button-icon")}<span>Restart</span></button>'
+            "</form>"
+        )
+        controls.append(
+            f'<form method="post" action="/projects/{escape(project.project_id, quote=True)}/stop?lang={escape(lang, quote=True)}">'
+            '<button class="button button-secondary detail-action-stop" type="submit"><span class="button-stop-icon" aria-hidden="true"></span><span>Stop</span></button>'
+            "</form>"
+        )
+    controls.append(
+        f'<form method="post" action="{escape(delete_action, quote=True)}" onsubmit="return confirm(\'Delete this project from the shelf?\');">'
+        f'<button class="button button-secondary detail-action-delete" type="submit">{icon_span("Delete", "button-icon")}<span>Delete</span></button>'
+        "</form>"
+    )
+    return "".join(controls)
 
 
 def render_project_card(

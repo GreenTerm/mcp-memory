@@ -20,6 +20,7 @@ class ProjectConfig:
     mcp_host: str = "127.0.0.1"
     mcp_port: int = 9876
     write_mode: str = "confirm"
+    created_at: str = ""
 
     def to_dict(self) -> dict[str, object]:
         payload = asdict(self)
@@ -45,6 +46,7 @@ class ProjectConfig:
             mcp_host=str(payload.get("mcp_host", "127.0.0.1")),
             mcp_port=int(payload.get("mcp_port", 9876)),
             write_mode=str(payload.get("write_mode", "confirm")),
+            created_at=str(payload.get("created_at", "")),
         )
 
 

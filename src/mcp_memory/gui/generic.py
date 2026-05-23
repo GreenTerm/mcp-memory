@@ -606,10 +606,10 @@ def _record_edit_response(project: ProjectConfig, entity_type: str, record_id: s
     return HTTPStatus.OK, workspace_page_html(project, "Edit Record", _render_record_form(project, entity_type, record, None, lang), raw_path, lang)
 
 
-def _render_record_form(project: ProjectConfig, entity_type: str, record, error: str | None, lang: str) -> str:
+def _render_record_form(project: ProjectConfig, entity_type: str, record, error: str | None, lang: str, form_payload: dict[str, Any] | None = None) -> str:
     schema = load_project_schema(project.schema_path)
     entity = schema.entity(entity_type)
-    payload = {} if record is None else record.payload
+    payload = form_payload if form_payload is not None else ({} if record is None else record.payload)
     action = with_lang(f"/ui/records/{entity_type}/new" if record is None else f"/ui/records/{entity_type}/{record.record_id}/edit", lang)
     fields = []
     for field in entity.fields:
@@ -703,24 +703,35 @@ def _submit_record_form(project: ProjectConfig, entity_type: str, record_id: str
     schema = load_project_schema(project.schema_path)
     entity = schema.entity(entity_type)
     payload: dict[str, Any] = {}
-    for field in entity.fields:
-        raw = form_data.get(field.name, "")
-        if field.widget == "bool":
-            payload[field.name] = form_data.get(field.name) == "true"
-        elif field.widget == "number":
-            payload[field.name] = None if not raw.strip() else float(raw)
-        elif field.widget == "json":
-            payload[field.name] = None if not raw.strip() else json.loads(raw)
-        elif field.widget == "tags":
-            payload[field.name] = [line.strip() for line in raw.replace(",", "\n").splitlines() if line.strip()]
-        else:
-            payload[field.name] = raw.strip()
-    with open_database(project.database_path) as database:
-        result = GenericWorkflowService(database, project).apply_or_queue(
-            "upsert_record",
-            {"entity_type": entity_type, "record_id": record_id, "payload": payload, "source_origin": "ui", "created_by": "ui", "updated_by": "ui"},
-            created_by="ui",
-        )
+    try:
+        for field in entity.fields:
+            raw = form_data.get(field.name, "")
+            if field.widget == "bool":
+                payload[field.name] = form_data.get(field.name) == "true"
+            elif field.widget == "number":
+                payload[field.name] = None if not raw.strip() else float(raw)
+            elif field.widget == "json":
+                payload[field.name] = None if not raw.strip() else json.loads(raw)
+            elif field.widget == "tags":
+                payload[field.name] = [line.strip() for line in raw.replace(",", "\n").splitlines() if line.strip()]
+            else:
+                payload[field.name] = raw.strip()
+        with open_database(project.database_path) as database:
+            result = GenericWorkflowService(database, project).apply_or_queue(
+                "upsert_record",
+                {"entity_type": entity_type, "record_id": record_id, "payload": payload, "source_origin": "ui", "created_by": "ui", "updated_by": "ui"},
+                created_by="ui",
+            )
+    except (ValueError, json.JSONDecodeError) as exc:
+        form_payload = {field.name: form_data.get(field.name, "") for field in entity.fields}
+        record_for_form = None
+        if record_id is not None:
+            with open_database(project.database_path) as database:
+                record_for_form = RecordService(database, project).get_record(entity_type, record_id, include_archived=True)
+        return {
+            "status": HTTPStatus.BAD_REQUEST,
+            "html": _render_record_form(project, entity_type, record_for_form, str(exc), lang, form_payload=form_payload),
+        }
     if project.write_mode == "confirm":
         return {"location": with_lang("/ui/pending?flash=queued", lang)}
     record = result.data
@@ -1476,8 +1487,6 @@ def _custom_select_script() -> str:
         "input.value=value;label.textContent=btn.textContent.trim();root.querySelectorAll('.custom-select-option').forEach(function(option){option.classList.toggle('is-selected',option===btn);});"
         "root.classList.remove('is-open');root.querySelector('.custom-select-button').setAttribute('aria-expanded','false');toggleEnumOptions(input);}"
         "document.addEventListener('click',function(event){if(!event.target.closest('.custom-select'))closeCustomSelects(null);});"
-        "document.addEventListener('change',function(event){var input=event.target.closest('.constructor-role-chip input');"
-        "if(input){var details=input.closest('.constructor-role-menu');if(details){window.setTimeout(function(){details.open=false;},80);}}});"
         "document.addEventListener('keydown',function(event){if(event.key==='Escape'){closeCustomSelects(null);document.querySelectorAll('.constructor-role-menu[open]').forEach(function(el){el.open=false;});}});"
     )
 
