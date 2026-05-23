@@ -1,6 +1,7 @@
 (() => {
   const storage = window.localStorage;
   const root = document.documentElement;
+  const projectDetailsAnimationMs = 220;
 
   const applyTheme = (theme) => {
     const nextTheme = theme === "light" ? "light" : "dark";
@@ -83,20 +84,47 @@
 
     const projectToggle = event.target.closest("[data-project-toggle]");
     if (projectToggle) {
+      const row = projectToggle.closest("[data-project-row]");
       const target = document.getElementById(projectToggle.getAttribute("aria-controls"));
-      if (!target) {
+      if (!row || !target) {
         return;
       }
       const expanded = projectToggle.getAttribute("aria-expanded") === "true";
-      target.hidden = expanded;
+      const nextExpanded = !expanded;
+      if (target.__projectDetailsTimer) {
+        window.clearTimeout(target.__projectDetailsTimer);
+      }
       row.querySelectorAll("[data-project-toggle]").forEach((toggle) => {
-        toggle.setAttribute("aria-expanded", String(!expanded));
+        toggle.setAttribute("aria-expanded", String(nextExpanded));
         const chevron = toggle.querySelector(".project-row-chevron");
         if (chevron) {
-          chevron.classList.toggle("project-row-chevron-up", !expanded);
-          chevron.classList.toggle("project-row-chevron-right", expanded);
+          chevron.classList.toggle("project-row-chevron-up", nextExpanded);
+          chevron.classList.toggle("project-row-chevron-right", !nextExpanded);
         }
       });
+      if (nextExpanded) {
+        target.hidden = false;
+        target.style.maxHeight = "0px";
+        window.requestAnimationFrame(() => {
+          target.classList.toggle("is-open", nextExpanded);
+          target.style.maxHeight = `${target.scrollHeight}px`;
+        });
+        target.__projectDetailsTimer = window.setTimeout(() => {
+          target.style.maxHeight = "none";
+          target.__projectDetailsTimer = 0;
+        }, projectDetailsAnimationMs);
+      } else {
+        target.style.maxHeight = `${target.scrollHeight}px`;
+        target.getBoundingClientRect();
+        target.classList.toggle("is-open", nextExpanded);
+        target.style.maxHeight = "0px";
+        target.__projectDetailsTimer = window.setTimeout(() => {
+          target.hidden = true;
+          target.style.maxHeight = "";
+          target.classList.remove("is-open");
+          target.__projectDetailsTimer = 0;
+        }, projectDetailsAnimationMs);
+      }
       return;
     }
 

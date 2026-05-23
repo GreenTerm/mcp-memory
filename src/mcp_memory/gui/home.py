@@ -766,7 +766,7 @@ def render_home_page(
 
     if projects:
         rows = []
-        for index, project in enumerate(projects):
+        for project in projects:
             rows.append(
                 render_project_list_item(
                     project,
@@ -775,7 +775,7 @@ def render_home_page(
                     flash=flash if flash_project_id == project.project_id else "",
                     lang=lang,
                     public_root=public_root,
-                    expanded=index == 0,
+                    expanded=False,
                 )
             )
         content = "".join(rows)
@@ -901,9 +901,6 @@ def render_project_list_item(
         f'<code class="project-row-id">{escape(project.project_id)}</code>'
         f'<span class="project-row-created">{format_project_created_at(project)}</span>'
         '<div class="project-row-actions">'
-        f'<button class="project-row-toggle project-row-toggle-inline" type="button" data-project-toggle aria-expanded="{expanded_text}" aria-controls="{escape(details_id, quote=True)}" title="Project details">'
-        f'<span class="project-row-chevron project-row-chevron-{toggle_icon}" aria-hidden="true"></span>'
-        "</button>"
         f"{render_project_primary_action(project, runtime, lang, public_root)}"
         "</div>"
         "</div>"
@@ -935,9 +932,9 @@ def render_project_expanded_details(project: ProjectConfig, runtime: ProjectRunt
         f"{render_project_detail_item('Graph', 'Local MCP', local_mcp_url, local_mcp_url)}"
         "</div>"
         '<div class="project-detail-list">'
-        f"{render_project_detail_item('Shield', 'Write Mode', badge(project.write_mode.title(), 'accent'), raw_html=True)}"
-        f"{render_project_detail_item('Database', 'DB Path', str(project.database_path))}"
-        f"{render_project_detail_item('Projects', 'Project Root', str(project.project_root))}"
+        f"{render_project_detail_item('Shield', 'Write Mode', badge(project.write_mode.title(), 'accent'), raw_html=True, item_class='project-detail-item-inline')}"
+        f"{render_project_detail_item('Database', 'DB Path', str(project.database_path), item_class='project-detail-item-inline project-detail-item-path')}"
+        f"{render_project_detail_item('Projects', 'Project Root', str(project.project_root), item_class='project-detail-item-inline project-detail-item-path')}"
         "</div>"
         '<div class="project-detail-config">'
         f"{render_project_mcp_client_block(gateway_mcp_url)}"
@@ -947,13 +944,23 @@ def render_project_expanded_details(project: ProjectConfig, runtime: ProjectRunt
     )
 
 
-def render_project_detail_item(icon_label: str, label: str, value_html: str, href: str = "", raw_html: bool = False) -> str:
+def render_project_detail_item(
+    icon_label: str,
+    label: str,
+    value_html: str,
+    href: str = "",
+    raw_html: bool = False,
+    item_class: str = "",
+) -> str:
     if href:
         value = f'<a href="{escape(href, quote=True)}">{escape(value_html)}</a>'
     else:
         value = value_html if raw_html else escape(value_html)
+    class_attr = "project-detail-item"
+    if item_class:
+        class_attr = f"{class_attr} {escape(item_class, quote=True)}"
     return (
-        '<div class="project-detail-item">'
+        f'<div class="{class_attr}">'
         f"{icon_span(icon_label, 'project-detail-icon')}"
         f"<span>{escape(label)}</span>"
         f"<div>{value}</div>"

@@ -1,6 +1,6 @@
 # Release Roadmap And Backlog
 
-Version: 1.0.2.
+Version: 1.0.3.
 
 Status: post-1.0 roadmap and backlog. This file remains separate from stable release notes so planning can be edited freely without changing historical release notes.
 

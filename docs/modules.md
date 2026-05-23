@@ -1,6 +1,6 @@
 # Module Guide
 
-Version: 1.0.2.
+Version: 1.0.3.
 
 Short navigation for the current `mcp-memory` codebase. The project is now a schema-driven local knowledge base: old reverse-engineering services still exist for legacy compatibility/import paths, but the public 1.0.0 surface is generic records, typed relations, evidence, search, HTTP, MCP, CLI, and server-rendered GUI.
 

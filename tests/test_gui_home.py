@@ -164,7 +164,7 @@ class GuiHomeTests(unittest.TestCase):
         positions = [html.index(f'data-project-row="{project_id}"') for project_id in ("newer", "older", "undated-a", "undated-z")]
         self.assertEqual(positions, sorted(positions))
 
-    def test_render_home_page_project_row_default_fields_and_two_actions(self) -> None:
+    def test_render_home_page_project_row_default_fields_and_single_toggle(self) -> None:
         sandbox = ProjectSandbox()
         try:
             runtime_manager = mock.Mock()
@@ -178,7 +178,12 @@ class GuiHomeTests(unittest.TestCase):
         self.assertIn("Running", row_html)
         self.assertIn("test-project", row_html)
         self.assertIn("data-project-toggle", row_html)
+        self.assertEqual(row_html.count("data-project-toggle"), 1)
+        self.assertIn('aria-expanded="false"', row_html)
         self.assertIn("Open Workspace", row_html)
+        self.assertIn("data-project-details hidden", html)
+        self.assertNotIn('aria-expanded="true"', html)
+        self.assertNotIn("project-row-toggle-inline", html)
         self.assertNotIn("detail-action-edit", row_html)
         self.assertNotIn("detail-action-delete", row_html)
 
@@ -198,6 +203,8 @@ class GuiHomeTests(unittest.TestCase):
         self.assertIn("Write Mode", html)
         self.assertIn("DB Path", html)
         self.assertIn("Project Root", html)
+        self.assertGreaterEqual(html.count("project-detail-item project-detail-item-inline"), 3)
+        self.assertGreaterEqual(html.count("project-detail-item-path"), 2)
         self.assertIn("MCP Config (for clients)", html)
         self.assertIn("detail-action-edit", html)
         self.assertIn("detail-action-restart", html)

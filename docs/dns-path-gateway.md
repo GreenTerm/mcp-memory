@@ -1,6 +1,6 @@
 # DNS/Path Gateway
 
-Version: 1.0.2.
+Version: 1.0.3.
 
 The DNS/path gateway is the preferred public access pattern for Home UI, project UI/API routes, and project MCP endpoints.
 

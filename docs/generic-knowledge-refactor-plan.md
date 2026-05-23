@@ -4,7 +4,7 @@ Working plan for the big-bang refactor from a fixed reverse-engineering knowledg
 
 ## Current Status
 
-Status: v1.0.2 keeps the v1.0.0 generic implementation complete for schema, core, adapters, GUI, DNS/path gateway, MCP instructions, transfer, backup, legacy import, smoke checks, release checks, and unit tests. Old fixed-code surfaces are isolated as compatibility paths.
+Status: v1.0.3 keeps the v1.0.0 generic implementation complete for schema, core, adapters, GUI, DNS/path gateway, MCP instructions, transfer, backup, legacy import, smoke checks, release checks, and unit tests. Old fixed-code surfaces are isolated as compatibility paths.
 
 ## Status Snapshot
 
@@ -29,7 +29,7 @@ Status: v1.0.2 keeps the v1.0.0 generic implementation complete for schema, core
 - Selected `mcp-memory-main-0.2.0` GUI work has been integrated into the main implementation: `/ui/entities/new` entity type constructor, optional relation type creation from that form, constructor hints/translations/styles, generic-only workspace sidebar, and next-available port defaults in Home GUI project forms.
 - Legacy DB importer is implemented as `import-legacy-db` and maps current old RE state into `reverse_engineering.schema.json`.
 - Local smoke checks use bundled schemas and generic HTTP/MCP/GUI surfaces.
-- README/user docs describe the current 1.0.2 version, generic schemas, DNS/path gateway, API, MCP, legacy import, and offline dependency workflow.
+- README/user docs describe the current 1.0.3 version, generic schemas, DNS/path gateway, API, MCP, legacy import, and offline dependency workflow.
 - Full test suite passes: `python -X utf8 -m unittest discover -s tests -v` ran 155 tests successfully.
 - `scripts/run_local_checks.ps1` no longer repeats the full test suite once per phase file; it now runs unit tests once, then smoke, then coverage.
 

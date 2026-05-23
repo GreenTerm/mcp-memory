@@ -1,6 +1,6 @@
 # mcp-memory
 
-`mcp-memory` 1.0.2 is a local light-weigth schema-driven knowledge base for people and agents.
+`mcp-memory` 1.0.3 is a local light-weigth schema-driven knowledge base for people and agents.
 
 Projects are stored as isolated Windows-local workspaces with SQLite, files on disk, a JSON HTTP API, an MCP Streamable HTTP endpoint, and a server-rendered web UI. The current model is generic: each project has a portable `schema.json` that defines its entity types, fields, search metadata, and relation types.
 
