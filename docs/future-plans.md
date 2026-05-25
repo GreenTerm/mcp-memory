@@ -1,6 +1,6 @@
 # Future Plans
 
-Version: 1.0.3.
+Version: 1.0.4.
 
 This list tracks work that is still useful after the generic schema-first refactor, DNS/path gateway, and schema-aware MCP instructions.
 
