@@ -41,7 +41,7 @@ class GenericWorkflowService:
         return self._apply_operation(operation, payload, actor_type="system")
 
     def create_pending_change(self, operation: str, payload: dict[str, Any], created_by: str = "system") -> GenericPendingChangeRecord:
-        if operation not in {"upsert_record", "archive_record", "create_relation", "add_evidence"}:
+        if operation not in {"upsert_record", "archive_record", "delete_record", "create_relation", "add_evidence"}:
             raise GenericPendingValidationError(f"unsupported pending operation: {operation}")
         entity_type, entity_id = self._pending_subject(operation, payload)
         if not str(created_by).strip():
@@ -107,12 +107,19 @@ class GenericWorkflowService:
             raise GenericPendingValidationError("pending change is not in pending status")
         connection = self._database.transaction()
         try:
-            applied = self._apply_operation(record.operation, record.payload, actor_type=actor_type, commit=False)
+            applied = self._apply_operation(
+                record.operation,
+                record.payload,
+                actor_type=actor_type,
+                commit=False,
+                pending_change_id=pending_change_id,
+            )
             connection.execute(
                 "UPDATE pending_changes SET status = 'confirmed' WHERE project_id = ? AND pending_change_id = ?",
                 (self._project.project_id, pending_change_id),
             )
-            self._append_audit(record, "confirm_pending", confirmed_by)
+            if record.operation != "delete_record":
+                self._append_audit(record, "confirm_pending", confirmed_by)
             connection.commit()
         except Exception:
             connection.rollback()
@@ -144,11 +151,19 @@ class GenericWorkflowService:
         ).fetchone()
         return None if row is None else self._row_to_record(row)
 
-    def _apply_operation(self, operation: str, payload: dict[str, Any], actor_type: str, commit: bool = True) -> Any:
+    def _apply_operation(
+        self,
+        operation: str,
+        payload: dict[str, Any],
+        actor_type: str,
+        commit: bool = True,
+        pending_change_id: str | None = None,
+    ) -> Any:
         from mcp_memory.protocol import (
             AddEvidenceCommand,
             ArchiveRecordCommand,
             CreateRelationCommand,
+            DeleteRecordCommand,
             ProjectDispatcher,
             UpsertRecordCommand,
         )
@@ -175,6 +190,17 @@ class GenericWorkflowService:
                     archived_by=str(payload.get("archived_by", "pending")),
                     actor_type=actor_type,
                     commit=commit,
+                )
+            )
+        if operation == "delete_record":
+            return dispatcher.dispatch(
+                DeleteRecordCommand(
+                    entity_type=str(payload["entity_type"]),
+                    record_id_or_slug=str(payload["record_id_or_slug"]),
+                    deleted_by=str(payload.get("deleted_by", "pending")),
+                    actor_type=actor_type,
+                    commit=commit,
+                    preserve_pending_change_id=pending_change_id,
                 )
             )
         if operation == "create_relation":
@@ -214,6 +240,8 @@ class GenericWorkflowService:
         if operation == "upsert_record":
             return str(payload["entity_type"]), str(payload.get("record_id") or payload.get("payload", {}).get("slug") or "<new>")
         if operation == "archive_record":
+            return str(payload["entity_type"]), str(payload["record_id_or_slug"])
+        if operation == "delete_record":
             return str(payload["entity_type"]), str(payload["record_id_or_slug"])
         if operation == "create_relation":
             return "relation", f"{payload['from_entity_type']}:{payload['from_record_id']}->{payload['to_entity_type']}:{payload['to_record_id']}"

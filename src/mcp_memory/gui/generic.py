@@ -4,7 +4,7 @@ import json
 from html import escape
 from http import HTTPStatus
 from typing import Any
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, parse_qsl, urlencode, urlsplit, urlunsplit
 
 from mcp_memory.config import ProjectConfig, ProjectRegistry
 from mcp_memory.protocol import ListRecordsQuery, ProjectDispatcher, SearchRecordsQuery
@@ -33,9 +33,9 @@ def generic_workspace_response(project: ProjectConfig, registry: ProjectRegistry
         if len(parts) == 4 and parts[3] == "delete":
             return HTTPStatus.OK, workspace_page_html(project, "Delete Entity Type", _render_entity_type_delete(project, parts[2], None, lang), raw_path, lang)
     if path == "/ui/records":
-        return HTTPStatus.OK, workspace_page_html(project, "Records", _render_records(project, query, lang), raw_path, lang)
+        return HTTPStatus.OK, workspace_page_html(project, "Records", _render_records(project, query, raw_path, lang), raw_path, lang)
     if path == "/ui/search":
-        return HTTPStatus.OK, workspace_page_html(project, "Search", _render_search(project, query, lang), raw_path, lang)
+        return HTTPStatus.OK, workspace_page_html(project, "Search", _render_search(project, query, raw_path, lang), raw_path, lang)
     if path == "/ui/graph":
         return HTTPStatus.OK, workspace_page_html(project, "Graph", _render_graph(project, query, lang), raw_path, lang)
     if path == "/ui/evidence":
@@ -81,6 +81,8 @@ def generic_workspace_post_action(project: ProjectConfig, registry: ProjectRegis
                 )
             flash = "queued" if project.write_mode == "confirm" else "archived"
             return {"location": with_lang(f"/ui/records?entity_type={parts[2]}&flash={flash}", lang)}
+        if len(parts) == 5 and parts[4] == "delete":
+            return _submit_record_delete(project, parts[2], parts[3], form_data, lang)
     if path == "/ui/evidence":
         try:
             return _submit_evidence_form(project, form_data, lang)
@@ -190,19 +192,28 @@ def _entity_types_body(project: ProjectConfig, lang: str) -> str:
     return create_button + panel("Types", content, class_name="entity-types-panel")
 
 
-def _render_records(project: ProjectConfig, query: dict[str, list[str]], lang: str) -> str:
+def _render_records(project: ProjectConfig, query: dict[str, list[str]], raw_path: str, lang: str) -> str:
     entity_type = query.get("entity_type", [""])[0].strip() or None
     q = query.get("q", [""])[0].strip()
+    include_archived = _include_archived(query)
+    flash = query.get("flash", [""])[0].strip()
     with open_database(project.database_path) as database:
         dispatcher = ProjectDispatcher(database, project)
         if q:
-            data = dispatcher.dispatch(SearchRecordsQuery(q=q, entity_types=[entity_type] if entity_type else None, limit=50)).data["items"]
+            data = dispatcher.dispatch(_search_records_query(q=q, entity_types=[entity_type] if entity_type else None, limit=50, include_archived=include_archived)).data["items"]
             records = [
-                {"entity_type": item["entity_type"], "record_id": item["entity_id"], "title": item["title_text"], "summary": item["body_text"][:120], "slug": ""}
+                {
+                    "entity_type": item["entity_type"],
+                    "record_id": item["entity_id"],
+                    "title": item["title_text"],
+                    "summary": item["body_text"][:120],
+                    "slug": "",
+                    "status": item.get("status", "active"),
+                }
                 for item in data
             ]
         else:
-            records = dispatcher.dispatch(ListRecordsQuery(entity_type=entity_type, limit=100)).data["items"]
+            records = dispatcher.dispatch(ListRecordsQuery(entity_type=entity_type, include_archived=include_archived, limit=100)).data["items"]
     rows = []
     for record in records:
         entity = record["entity_type"] if isinstance(record, dict) else record.entity_type
@@ -210,19 +221,25 @@ def _render_records(project: ProjectConfig, query: dict[str, list[str]], lang: s
         title = record["title"] if isinstance(record, dict) else record.title
         slug = record.get("slug", "") if isinstance(record, dict) else record.slug or ""
         summary = record["summary"] if isinstance(record, dict) else record.summary
+        status = record.get("status", "active") if isinstance(record, dict) else record.status
+        title_html = f'<a href="{escape(_record_href(entity, record_id, lang, include_archived), quote=True)}">{escape(title)}</a>'
+        actions = _record_delete_form(entity, record_id, raw_path, lang) if status == "archived" else ""
         rows.append(
             [
-                badge(entity, "accent"),
-                f'<a href="{escape(with_lang(f"/ui/records/{entity}/{record_id}", lang), quote=True)}">{escape(title)}</a>',
+                badge(entity, "accent") + _archived_badge(status),
+                title_html,
                 escape(slug),
                 escape(summary),
+                actions,
             ]
         )
     create_link = ""
     if entity_type:
         create_link = f'<a class="button button-primary" href="{escape(with_lang(f"/ui/records/{entity_type}/new", lang), quote=True)}">New Record</a>'
-    records_content = table(["Type", "Title", "Slug", "Summary"], rows) if rows else inner_empty_state("No records yet", "Create the first record for this schema.")
-    content = f'<div class="section-stack">{create_link}{records_content}</div>'
+    flash_html = _records_flash(flash)
+    filter_form = _records_filter_form(load_project_schema(project.schema_path), q, entity_type or "", include_archived, lang)
+    records_content = table(["Type", "Title", "Slug", "Summary", "Actions"], rows) if rows else inner_empty_state("No records yet", "Create the first record for this schema.")
+    content = f'<div class="section-stack">{flash_html}{filter_form}{create_link}{records_content}</div>'
     return renderer.render(
         "generic_shell.html",
         header_html=page_header("Records", "Generic schema-backed records."),
@@ -230,18 +247,19 @@ def _render_records(project: ProjectConfig, query: dict[str, list[str]], lang: s
     )
 
 
-def _render_search(project: ProjectConfig, query: dict[str, list[str]], lang: str) -> str:
+def _render_search(project: ProjectConfig, query: dict[str, list[str]], raw_path: str, lang: str) -> str:
     q = query.get("q", [""])[0].strip()
     entity_type = query.get("entity_type", [""])[0].strip()
+    include_archived = _include_archived(query)
     schema = load_project_schema(project.schema_path)
     results_html = empty_state("Search generic records", "Use title, summary, body text, or tags from schema-configured fields.")
     if q or entity_type:
         with open_database(project.database_path) as database:
             dispatcher = ProjectDispatcher(database, project)
             if q:
-                items = dispatcher.dispatch(SearchRecordsQuery(q=q, entity_types=[entity_type] if entity_type else None, limit=50)).data["items"]
+                items = dispatcher.dispatch(_search_records_query(q=q, entity_types=[entity_type] if entity_type else None, limit=50, include_archived=include_archived)).data["items"]
             else:
-                records = dispatcher.dispatch(ListRecordsQuery(entity_type=entity_type, limit=50)).data["items"]
+                records = dispatcher.dispatch(ListRecordsQuery(entity_type=entity_type, include_archived=include_archived, limit=50)).data["items"]
                 items = [
                     {
                         "entity_type": record.entity_type,
@@ -249,15 +267,16 @@ def _render_search(project: ProjectConfig, query: dict[str, list[str]], lang: st
                         "title_text": record.title,
                         "body_text": record.summary,
                         "tag_text": " ".join(str(tag) for tag in record.payload.get("tags", []) if isinstance(record.payload.get("tags", []), list)),
+                        "status": record.status,
                     }
                     for record in records
                 ]
         if items:
-            cards = "".join(_render_search_result(item, lang) for item in items)
+            cards = "".join(_render_search_result(item, raw_path, include_archived, lang) for item in items)
             results_html = f"<div class=\"result-list\">{cards}</div>"
         else:
             results_html = empty_state("No matches yet", "Try a broader phrase or remove the entity type filter.")
-    form = _search_form(schema, q, entity_type, lang)
+    form = _search_form(schema, q, entity_type, include_archived, lang)
     return renderer.render(
         "generic_shell.html",
         header_html=page_header("Search", "Schema-backed FTS over generic records."),
@@ -265,32 +284,37 @@ def _render_search(project: ProjectConfig, query: dict[str, list[str]], lang: st
     )
 
 
-def _render_search_result(item: dict[str, Any], lang: str) -> str:
+def _render_search_result(item: dict[str, Any], raw_path: str, include_archived: bool, lang: str) -> str:
     entity_type = str(item["entity_type"])
     record_id = str(item["entity_id"])
     title = str(item.get("title_text", "")).strip() or record_id
     body = str(item.get("body_text", "")).strip()
+    status = str(item.get("status", "active"))
     tags = [tag for tag in str(item.get("tag_text", "")).split() if tag][:4]
-    badges = badge(entity_type, "accent") + "".join(badge(tag, "soft") for tag in tags)
-    href = with_lang(f"/ui/records/{entity_type}/{record_id}", lang)
+    badges = badge(entity_type, "accent") + _archived_badge(status) + "".join(badge(tag, "soft") for tag in tags)
+    href = _record_href(entity_type, record_id, lang, include_archived)
+    actions = f'<div class="form-actions">{_record_delete_form(entity_type, record_id, raw_path, lang)}</div>' if status == "archived" else ""
     return (
         "<article class=\"result-card\">"
         f"<div class=\"card-topline\">{badges}</div>"
         f"<h3><a href=\"{escape(href, quote=True)}\">{escape(title)}</a></h3>"
         f"<p class=\"result-subtitle\">{escape(record_id)}</p>"
         f"<p class=\"body-copy\">{escape(body[:220] or 'No summary available yet.')}</p>"
+        f"{actions}"
         "</article>"
     )
 
 
-def _search_form(schema: ProjectSchema, q: str, entity_type: str, lang: str) -> str:
+def _search_form(schema: ProjectSchema, q: str, entity_type: str, include_archived: bool, lang: str) -> str:
     options = _entity_options(schema, entity_type, "All entity types")
+    checked = " checked" if include_archived else ""
     return (
         "<form class=\"search-form\" method=\"get\" action=\"/ui/search\">"
         f"<input type=\"hidden\" name=\"lang\" value=\"{escape(lang, quote=True)}\">"
-        f"<input type=\"text\" name=\"q\" value=\"{escape(q, quote=True)}\" placeholder=\"Search records\">"
         "<div class=\"search-form-grid\">"
+        f"<input type=\"text\" name=\"q\" value=\"{escape(q, quote=True)}\" placeholder=\"Search records\">"
         f"<select name=\"entity_type\">{options}</select>"
+        f'<div class="filter-checkbox-block"><label class="checkbox-row filter-checkbox-row"><input type="checkbox" name="include_archived" value="true"{checked}> Show archived</label></div>'
         "</div>"
         "<div class=\"search-form-actions\">"
         "<button class=\"button button-primary\" type=\"submit\">Search Workspace</button>"
@@ -304,9 +328,10 @@ def _render_graph(project: ProjectConfig, query: dict[str, list[str]], lang: str
     focus_type = query.get("focus_type", [""])[0].strip()
     focus_id = query.get("focus_id", [""])[0].strip()
     entity_type = query.get("entity_type", [""])[0].strip()
+    include_archived = _include_archived(query)
     schema = load_project_schema(project.schema_path)
     with open_database(project.database_path) as database:
-        records = RecordService(database, project).list_records(entity_type or None, limit=100)
+        records = RecordService(database, project).list_records(entity_type or None, include_archived=include_archived, limit=100)
         relations = GenericRelationService(database, project).list_relations(focus_type or None, focus_id or None)
     record_map = {(record.entity_type, record.record_id): record for record in records}
     if focus_type and focus_id:
@@ -326,12 +351,12 @@ def _render_graph(project: ProjectConfig, query: dict[str, list[str]], lang: str
             for relation in relations
             for key in ((relation.from_entity_type, relation.from_record_id), (relation.to_entity_type, relation.to_record_id))
         }
-    graph_html = _render_generic_graph_svg(record_map, node_keys, relations, lang) if node_keys else empty_state("No graph links yet", "Create generic relations first.")
-    side_html = _render_graph_nodes(record_map, node_keys, lang)
+    graph_html = _render_generic_graph_svg(record_map, node_keys, relations, include_archived, lang) if node_keys else empty_state("No graph links yet", "Create generic relations first.")
+    side_html = _render_graph_nodes(record_map, node_keys, include_archived, lang)
     error_html = f'<div class="flash flash-warning">{escape(error)}</div>' if error else ""
     body = (
         error_html
-        + panel("Graph Filters", _graph_filter_form(schema, focus_type, focus_id, entity_type, lang), "Focus by record id or slug.")
+        + panel("Graph Filters", _graph_filter_form(schema, focus_type, focus_id, entity_type, include_archived, lang), "Focus by record id or slug.")
         + "<div class=\"detail-layout\">"
         + f"<section class=\"panel-section graph-panel\"><div class=\"section-heading\"><h2>Relation Graph</h2></div>{graph_html}</section>"
         + f"<aside class=\"detail-panel\"><h2>Graph Nodes</h2>{side_html}</aside>"
@@ -345,22 +370,23 @@ def _render_graph(project: ProjectConfig, query: dict[str, list[str]], lang: str
     )
 
 
-def _render_generic_graph_svg(record_map: dict[tuple[str, str], Record], node_keys: set[tuple[str, str]], relations: list[Any], lang: str) -> str:
+def _render_generic_graph_svg(record_map: dict[tuple[str, str], Record], node_keys: set[tuple[str, str]], relations: list[Any], include_archived: bool, lang: str) -> str:
     ordered_keys = sorted(node_keys, key=lambda key: (key[0], key[1]))[:50]
     selected = set(ordered_keys)
     elements: list[dict[str, Any]] = []
     for key in ordered_keys:
         record = record_map[key]
         node_key = _graph_node_key(*key)
+        label = f"{record.title} (archived)" if record.status == "archived" else record.title
         elements.append(
             {
                 "group": "nodes",
                 "data": {
                     "id": node_key,
-                    "label": record.title,
+                    "label": label,
                     "entityType": record.entity_type,
-                    "href": with_lang(f"/ui/records/{record.entity_type}/{record.record_id}", lang),
-                    "title": f"{record.entity_type}: {record.title}",
+                    "href": _record_href(record.entity_type, record.record_id, lang, include_archived),
+                    "title": f"{record.entity_type}: {label}",
                 },
             }
         )
@@ -406,7 +432,7 @@ def _graph_node_key(entity_type: str, record_id: str) -> str:
     return f"{entity_type}:{record_id}"
 
 
-def _render_graph_nodes(record_map: dict[tuple[str, str], Record], node_keys: set[tuple[str, str]], lang: str) -> str:
+def _render_graph_nodes(record_map: dict[tuple[str, str], Record], node_keys: set[tuple[str, str]], include_archived: bool, lang: str) -> str:
     if not node_keys:
         return empty_state("No nodes selected", "Adjust the graph filters or create a relation.")
     rows = []
@@ -414,15 +440,16 @@ def _render_graph_nodes(record_map: dict[tuple[str, str], Record], node_keys: se
         record = record_map[key]
         rows.append(
             [
-                badge(record.entity_type, "accent"),
-                f'<a href="{escape(with_lang(f"/ui/records/{record.entity_type}/{record.record_id}", lang), quote=True)}">{escape(record.title)}</a>',
+                badge(record.entity_type, "accent") + _archived_badge(record.status),
+                f'<a href="{escape(_record_href(record.entity_type, record.record_id, lang, include_archived), quote=True)}">{escape(record.title)}</a>',
                 escape(record.slug or record.record_id),
             ]
         )
     return table(["Type", "Title", "ID"], rows)
 
 
-def _graph_filter_form(schema: ProjectSchema, focus_type: str, focus_id: str, entity_type: str, lang: str) -> str:
+def _graph_filter_form(schema: ProjectSchema, focus_type: str, focus_id: str, entity_type: str, include_archived: bool, lang: str) -> str:
+    checked = " checked" if include_archived else ""
     return (
         "<form class=\"search-form\" method=\"get\" action=\"/ui/graph\">"
         f"<input type=\"hidden\" name=\"lang\" value=\"{escape(lang, quote=True)}\">"
@@ -430,6 +457,7 @@ def _graph_filter_form(schema: ProjectSchema, focus_type: str, focus_id: str, en
         f"<select name=\"focus_type\">{_entity_options(schema, focus_type, 'Any focus type')}</select>"
         f"<input type=\"text\" name=\"focus_id\" value=\"{escape(focus_id, quote=True)}\" placeholder=\"focus record id or slug\">"
         f"<select name=\"entity_type\">{_entity_options(schema, entity_type, 'Any entity type')}</select>"
+        f'<div class="filter-checkbox-block"><label class="checkbox-row filter-checkbox-row"><input type="checkbox" name="include_archived" value="true"{checked}> Show archived</label></div>'
         "</div>"
         "<div class=\"search-form-actions\">"
         "<button class=\"button button-primary\" type=\"submit\">Apply Filters</button>"
@@ -461,6 +489,87 @@ def _relation_types_for_entity(schema: ProjectSchema, entity_type: str) -> list[
         for relation in schema.relation_types
         if _relation_endpoint_matches(relation.from_types, entity_type) or _relation_endpoint_matches(relation.to_types, entity_type)
     ]
+
+
+def _include_archived(query: dict[str, list[str]]) -> bool:
+    return query.get("include_archived", [""])[0].strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _archived_badge(status: str) -> str:
+    return badge("archived", "warning") if status == "archived" else ""
+
+
+def _record_href(entity_type: str, record_id: str, lang: str, include_archived: bool) -> str:
+    href = with_lang(f"/ui/records/{entity_type}/{record_id}", lang)
+    if include_archived:
+        href = _set_query_param(href, "include_archived", "true")
+    return href
+
+
+def _set_query_param(url: str, name: str, value: str) -> str:
+    parts = urlsplit(url)
+    query_items = parse_qsl(parts.query, keep_blank_values=True)
+    query_items = [(key, item) for key, item in query_items if key != name]
+    query_items.append((name, value))
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query_items), parts.fragment))
+
+
+def _with_flash(url: str, flash: str, lang: str) -> str:
+    return _set_query_param(with_lang(url, lang), "flash", flash)
+
+
+def _safe_return_to(raw_return_to: str, fallback: str) -> str:
+    value = raw_return_to.strip()
+    parts = urlsplit(value)
+    if not value or parts.scheme or parts.netloc or not parts.path.startswith("/ui/") or parts.path.startswith("//"):
+        return fallback
+    return urlunsplit(("", "", parts.path, parts.query, ""))
+
+
+def _record_delete_form(entity_type: str, record_id: str, return_to: str, lang: str) -> str:
+    action = with_lang(f"/ui/records/{entity_type}/{record_id}/delete", lang)
+    safe_return = _safe_return_to(return_to, f"/ui/records?entity_type={entity_type}&include_archived=true")
+    return (
+        f'<form method="post" action="{escape(action, quote=True)}">'
+        f'<input type="hidden" name="return_to" value="{escape(safe_return, quote=True)}">'
+        '<button class="button button-secondary button-small button-danger" type="submit">Delete permanently</button>'
+        "</form>"
+    )
+
+
+def _records_flash(flash: str) -> str:
+    if flash == "deleted":
+        return '<div class="flash flash-success">Record permanently deleted.</div>'
+    if flash == "queued":
+        return '<div class="flash flash-info">Change queued for confirmation.</div>'
+    if flash == "archived":
+        return '<div class="flash flash-success">Record archived.</div>'
+    return ""
+
+
+def _records_filter_form(schema: ProjectSchema, q: str, entity_type: str, include_archived: bool, lang: str) -> str:
+    checked = " checked" if include_archived else ""
+    return (
+        '<form class="search-form" method="get" action="/ui/records">'
+        f'<input type="hidden" name="lang" value="{escape(lang, quote=True)}">'
+        '<div class="search-form-grid">'
+        f'<input type="text" name="q" value="{escape(q, quote=True)}" placeholder="Search records">'
+        f'<select name="entity_type">{_entity_options(schema, entity_type, "All entity types")}</select>'
+        f'<div class="filter-checkbox-block"><label class="checkbox-row filter-checkbox-row"><input type="checkbox" name="include_archived" value="true"{checked}> Show archived</label></div>'
+        "</div>"
+        '<div class="search-form-actions">'
+        '<button class="button button-primary" type="submit">Apply Filters</button>'
+        f'<a class="button button-secondary" href="{escape(with_lang("/ui/records", lang), quote=True)}">Reset</a>'
+        "</div>"
+        "</form>"
+    )
+
+
+def _search_records_query(q: str, entity_types: list[str] | None, limit: int, include_archived: bool):
+    try:
+        return SearchRecordsQuery(q=q, entity_types=entity_types, limit=limit, include_archived=include_archived)
+    except TypeError:
+        return SearchRecordsQuery(q=q, entity_types=entity_types, limit=limit)
 
 
 def _relation_endpoint_matches(entity_types: list[str], entity_type: str) -> bool:
@@ -503,7 +612,7 @@ def _record_detail_response(project: ProjectConfig, entity_type: str, record_id:
     schema = load_project_schema(project.schema_path)
     entity = schema.entity(entity_type)
     with open_database(project.database_path) as database:
-        record = RecordService(database, project).get_record(entity_type, record_id)
+        record = RecordService(database, project).get_record(entity_type, record_id, include_archived=True)
         if record is None:
             return HTTPStatus.NOT_FOUND, workspace_page_html(project, "Not Found", empty_state("Record not found", record_id), raw_path, lang)
         relations = GenericRelationService(database, project).list_relations(entity_type, record.record_id)
@@ -515,17 +624,20 @@ def _record_detail_response(project: ProjectConfig, entity_type: str, record_id:
         "</details>"
     ).format(escape(json.dumps(record.payload, ensure_ascii=False, indent=2)))
     meta = property_grid([("Type", record.entity_type), ("Record ID", record.record_id), ("Slug", record.slug or ""), ("Status", record.status)])
-    actions = (
-        f'<a class="button button-primary" href="{escape(with_lang(f"/ui/records/{record.entity_type}/{record.record_id}/edit", lang), quote=True)}">Edit</a>'
-        f'<form method="post" action="{escape(with_lang(f"/ui/records/{record.entity_type}/{record.record_id}/archive", lang), quote=True)}"><button class="button button-secondary" type="submit">Archive</button></form>'
-    )
+    if record.status == "archived":
+        actions = _record_delete_form(record.entity_type, record.record_id, f"/ui/records?entity_type={record.entity_type}&include_archived=true", lang)
+    else:
+        actions = (
+            f'<a class="button button-primary" href="{escape(with_lang(f"/ui/records/{record.entity_type}/{record.record_id}/edit", lang), quote=True)}">Edit</a>'
+            f'<form method="post" action="{escape(with_lang(f"/ui/records/{record.entity_type}/{record.record_id}/archive", lang), quote=True)}"><button class="button button-secondary" type="submit">Archive</button></form>'
+        )
     relation_rows = [[escape(item.relation_type), escape(item.from_record_id), escape(item.to_record_id)] for item in relations]
     relation_type_rows = _relation_type_rows_for_entity(schema, record.entity_type)
     evidence_rows = [[escape(item.evidence_type), escape(item.description), escape(item.created_by), escape(item.created_at)] for item in evidence]
     header_actions = f'<div class="form-actions">{actions}</div>'
     body = (
         '<main class="workspace-shell">'
-        + page_header(record.title, record.summary, meta_html=badge(record.entity_type, "accent"), actions_html=header_actions)
+        + page_header(record.title, record.summary, meta_html=badge(record.entity_type, "accent") + _archived_badge(record.status), actions_html=header_actions)
         + panel("Record", meta, class_name="record-summary-panel")
         + panel("Record Fields", _render_record_field_values(entity, record), class_name="record-fields-panel")
         + panel("Relations", table(["Type", "From", "To"], relation_rows) if relation_rows else inner_empty_state("No relations yet", "Create relations through API or MCP."))
@@ -536,7 +648,7 @@ def _record_detail_response(project: ProjectConfig, entity_type: str, record_id:
             else inner_empty_state("No relation types for this entity", "Update the schema to allow relations for this entity."),
         )
         + panel("Evidence", table(["Type", "Description", "By", "At"], evidence_rows) if evidence_rows else inner_empty_state("No evidence yet", "Attach evidence from this page or through MCP."))
-        + panel("Add Evidence", _evidence_form(record, lang))
+        + ("" if record.status == "archived" else panel("Add Evidence", _evidence_form(record, lang)))
         + panel("Payload", payload, class_name="payload-panel")
         + "</main>"
     )
@@ -603,6 +715,18 @@ def _record_edit_response(project: ProjectConfig, entity_type: str, record_id: s
         record = RecordService(database, project).get_record(entity_type, record_id, include_archived=True)
     if record is None:
         return HTTPStatus.NOT_FOUND, workspace_page_html(project, "Not Found", empty_state("Record not found", record_id), raw_path, lang)
+    if record.status == "archived":
+        body = (
+            '<main class="workspace-shell">'
+            + page_header(record.title, "Archived records are read-only.", meta_html=badge(record.entity_type, "accent") + _archived_badge(record.status))
+            + panel(
+                "Archived Record",
+                '<p class="body-copy">Archived records are read-only. Open the detail page to inspect payload, evidence, and relations, or delete it permanently.</p>'
+                f'<div class="form-actions"><a class="button button-secondary" href="{escape(with_lang(f"/ui/records/{record.entity_type}/{record.record_id}?include_archived=true", lang), quote=True)}">View Record</a></div>',
+            )
+            + "</main>"
+        )
+        return HTTPStatus.OK, workspace_page_html(project, "Archived Record", body, raw_path, lang)
     return HTTPStatus.OK, workspace_page_html(project, "Edit Record", _render_record_form(project, entity_type, record, None, lang), raw_path, lang)
 
 
@@ -736,6 +860,19 @@ def _submit_record_form(project: ProjectConfig, entity_type: str, record_id: str
         return {"location": with_lang("/ui/pending?flash=queued", lang)}
     record = result.data
     return {"location": with_lang(f"/ui/records/{record.entity_type}/{record.record_id}", lang)}
+
+
+def _submit_record_delete(project: ProjectConfig, entity_type: str, record_id: str, form_data: dict[str, str], lang: str) -> dict[str, Any]:
+    fallback = f"/ui/records?entity_type={entity_type}&include_archived=true"
+    return_to = _safe_return_to(form_data.get("return_to", ""), fallback)
+    with open_database(project.database_path) as database:
+        GenericWorkflowService(database, project).apply_or_queue(
+            "delete_record",
+            {"entity_type": entity_type, "record_id_or_slug": record_id, "deleted_by": "ui"},
+            created_by="ui",
+        )
+    flash = "queued" if project.write_mode == "confirm" else "deleted"
+    return {"location": _with_flash(return_to, flash, lang)}
 
 
 def _render_schema_builder(project: ProjectConfig, error: str | None, lang: str) -> str:

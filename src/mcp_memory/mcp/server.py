@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import traceback
 import uuid
 from dataclasses import asdict, dataclass, is_dataclass
@@ -83,11 +84,28 @@ def serve_project_mcp_api(
     port: int,
     log_level: str = "INFO",
 ) -> None:
+    transport = os.environ.get("MCP_MEMORY_MCP_TRANSPORT", "sdk").strip().lower()
+    if transport not in {"legacy", "stdlib"}:
+        from .sdk_server import serve_project_mcp_sdk_api
+
+        serve_project_mcp_sdk_api(project, registry, host, port, log_level=log_level)
+        return
+
+    _serve_project_mcp_legacy_api(project, registry, host, port, log_level=log_level)
+
+
+def _serve_project_mcp_legacy_api(
+    project: ProjectConfig,
+    registry: ProjectRegistry,
+    host: str,
+    port: int,
+    log_level: str = "INFO",
+) -> None:
     logger = configure_logging("mcp", log_level, project.logs_dir / "mcp.log")
     configure_logging("services", log_level, project.logs_dir / "mcp.log")
     handler = build_handler(project, registry, logger=logger)
     server = ThreadingHTTPServer((host, port), handler)
-    log_event(logger, logging.INFO, "server_start", project_id=project.project_id, host=host, port=port)
+    log_event(logger, logging.INFO, "server_start", project_id=project.project_id, host=host, port=port, transport="legacy")
     server.serve_forever()
 
 
@@ -559,6 +577,7 @@ def tool_example(tool_name: str, schema: ProjectSchema, project: ProjectConfig, 
             "updated_by": "agent",
         },
         "archive_record": {"entity_type": entity_type, "record_id": record_id, "archived_by": "agent"},
+        "delete_record": {"entity_type": entity_type, "record_id": record_id, "deleted_by": "agent"},
         "get_related": {"entity_type": entity_type, "record_id": record_id, "hops": 1},
         "add_evidence": {
             "entity_type": entity_type,
@@ -600,10 +619,11 @@ def _tool_usage_specs() -> dict[str, dict[str, list[str]]]:
         "get_project_config": {"required": [], "optional": []},
         "get_schema": {"required": [], "optional": []},
         "list_entity_types": {"required": [], "optional": []},
-        "search_records": {"required": [], "optional": ["q", "entity_types", "tag", "limit"]},
+        "search_records": {"required": [], "optional": ["q", "entity_types", "tag", "include_archived", "limit"]},
         "get_record": {"required": ["entity_type", "record_id"], "optional": ["include_archived"]},
         "upsert_record": {"required": ["entity_type", "payload"], "optional": ["record_id", "source_origin", "created_by", "updated_by"]},
         "archive_record": {"required": ["entity_type", "record_id"], "optional": ["archived_by"]},
+        "delete_record": {"required": ["entity_type", "record_id"], "optional": ["deleted_by"]},
         "get_related": {"required": ["entity_type", "record_id"], "optional": ["hops"]},
         "add_evidence": {
             "required": ["entity_type", "record_id", "evidence_type", "description"],
@@ -880,6 +900,7 @@ def _build_generic_tools() -> dict[str, ToolSpec]:
                     "q": {"type": "string"},
                     "entity_types": {"type": "array", "items": {"type": "string"}},
                     "tag": {"type": "string"},
+                    "include_archived": {"type": "boolean"},
                     "limit": {"type": "integer", "minimum": 0, "maximum": 1000},
                 },
                 "additionalProperties": False,
@@ -946,6 +967,24 @@ def _build_generic_tools() -> dict[str, ToolSpec]:
                 "additionalProperties": False,
             },
             handler=_tool_archive_record,
+        ),
+        "delete_record": ToolSpec(
+            name="delete_record",
+            description=(
+                "Permanently delete an archived generic record. Required top-level fields: entity_type, record_id. "
+                "Optional top-level fields: deleted_by. Active records are rejected; archive_record first."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "entity_type": {"type": "string"},
+                    "record_id": {"type": "string"},
+                    "deleted_by": {"type": "string"},
+                },
+                "required": ["entity_type", "record_id"],
+                "additionalProperties": False,
+            },
+            handler=_tool_delete_record,
         ),
         "get_related": ToolSpec(
             name="get_related",
@@ -1145,6 +1184,7 @@ def _tool_search_records(project: ProjectConfig, registry: ProjectRegistry, argu
                 q=str(arguments.get("q", "")).strip(),
                 entity_types=[str(item) for item in arguments.get("entity_types", [])] or None,
                 tag=None if arguments.get("tag") is None else str(arguments["tag"]),
+                include_archived=bool(arguments.get("include_archived", False)),
                 limit=int(arguments.get("limit", 10)),
             )
         )
@@ -1206,6 +1246,21 @@ def _tool_archive_record(project: ProjectConfig, registry: ProjectRegistry, argu
                 "archived_by": str(arguments.get("archived_by", "mcp")),
             },
             created_by=str(arguments.get("archived_by", "mcp")),
+        )
+    return result.data if hasattr(result, "data") else result
+
+
+def _tool_delete_record(project: ProjectConfig, registry: ProjectRegistry, arguments: dict[str, Any]) -> Any:
+    _ = registry
+    with open_database(project.database_path) as database:
+        result = GenericWorkflowService(database, project).apply_or_queue(
+            "delete_record",
+            {
+                "entity_type": str(arguments["entity_type"]),
+                "record_id_or_slug": str(arguments["record_id"]),
+                "deleted_by": str(arguments.get("deleted_by", "mcp")),
+            },
+            created_by=str(arguments.get("deleted_by", "mcp")),
         )
     return result.data if hasattr(result, "data") else result
 

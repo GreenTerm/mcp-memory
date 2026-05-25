@@ -170,6 +170,33 @@ class ApiServerTests(unittest.TestCase):
         self.assertEqual(archived["status"], "archived")
         self.assertEqual(self._get_status("/records/note/api-note"), 404)
 
+    def test_generic_http_search_and_delete_archived_records(self) -> None:
+        created = self._post_json(
+            "/records/note",
+            {
+                "payload": {
+                    "slug": "delete-note",
+                    "title": "Delete Note",
+                    "body": "purge searchable text",
+                },
+                "created_by": "tester",
+            },
+        )
+
+        self.assertEqual(self._delete_status("/records/note/delete-note"), 400)
+        self.assertEqual(len(self._post_json("/search", {"q": "purge", "include_archived": True})["items"]), 1)
+
+        self._post_json("/records/note/delete-note/archive", {"archived_by": "tester"})
+        self.assertEqual(len(self._post_json("/search", {"q": "purge"})["items"]), 0)
+        self.assertEqual(len(self._post_json("/search", {"q": "purge", "include_archived": True})["items"]), 1)
+
+        deleted = self._delete_json("/records/note/delete-note", {"deleted_by": "tester"})
+        self.assertEqual(deleted["record_id"], created["record_id"])
+        self.assertEqual(deleted["status"], "archived")
+        self.assertEqual(self._get_status("/records/note/delete-note?include_archived=true"), 404)
+        self.assertEqual(len(self._post_json("/search", {"q": "purge", "include_archived": True})["items"]), 0)
+        self.assertEqual(self._delete_status("/records/note/missing"), 404)
+
     def test_generic_http_put_and_bad_record_routes(self) -> None:
         schema = self._get_json("/schema")
         updated_schema = self._put_json("/schema", schema)
@@ -905,6 +932,70 @@ class ApiServerTests(unittest.TestCase):
         record_html = self._get_text("/ui/records/note/queued-ui-note")
         self.assertIn("Queued UI Note", record_html)
 
+    def test_generic_ui_archived_records_slice(self) -> None:
+        with self.sandbox.open_database() as database:
+            record_service = RecordService(database, self.sandbox.project)
+            record_service.upsert_record(RecordWrite("note", {"slug": "active-gui", "title": "Active GUI"}, created_by="tester"))
+            archived = record_service.upsert_record(RecordWrite("note", {"slug": "archived-gui", "title": "Archived GUI"}, created_by="tester"))
+            related = record_service.upsert_record(RecordWrite("note", {"slug": "related-gui", "title": "Related GUI"}, created_by="tester"))
+            GenericRelationService(database, self.sandbox.project).create_relation(
+                GenericRelationWrite(
+                    "note",
+                    archived.record_id,
+                    "note",
+                    related.record_id,
+                    "related_to",
+                    created_by="tester",
+                )
+            )
+            record_service.archive_record("note", archived.record_id, archived_by="tester")
+
+        default_records = self._get_text("/ui/records?entity_type=note")
+        archived_records = self._get_text("/ui/records?entity_type=note&include_archived=true")
+        search_html = self._get_text("/ui/search?entity_type=note&include_archived=true")
+        graph_html = self._get_text("/ui/graph?entity_type=note&include_archived=true")
+        dashboard_html = self._get_text("/ui/?include_archived=true")
+        detail_html = self._get_text(f"/ui/records/note/{archived.record_id}?include_archived=true")
+        edit_html = self._get_text(f"/ui/records/note/{archived.record_id}/edit")
+        css = self._get_text("/ui/assets/app.css")
+
+        self.assertIn("Active GUI", default_records)
+        self.assertNotIn("Archived GUI", default_records)
+        self.assertIn('name="include_archived" value="true" checked', archived_records)
+        self.assertIn('<div class="search-form-grid"><input type="text" name="q" value="" placeholder="Search records"><select name="entity_type">', archived_records)
+        self.assertIn("filter-checkbox-block", archived_records)
+        self.assertIn("filter-checkbox-row", archived_records)
+        self.assertIn('.search-form .checkbox-row input[type="checkbox"]', css)
+        self.assertIn(".section-stack > .search-form", css)
+        self.assertIn("Archived GUI", archived_records)
+        self.assertIn(">archived<", archived_records)
+        self.assertIn("Delete permanently", archived_records)
+        self.assertIn('name="return_to"', archived_records)
+        self.assertIn("Archived GUI", search_html)
+        self.assertIn(">archived<", search_html)
+        self.assertIn("Delete permanently", search_html)
+        self.assertIn("Archived GUI", graph_html)
+        self.assertIn(">archived<", graph_html)
+        self.assertIn("Archived GUI", dashboard_html)
+        self.assertIn(">archived<", dashboard_html)
+        self.assertIn("Archived GUI", detail_html)
+        self.assertIn(">archived<", detail_html)
+        self.assertNotIn(">Edit<", detail_html)
+        self.assertNotIn(">Archive<", detail_html)
+        self.assertNotIn("Add Evidence", detail_html)
+        self.assertIn("Delete permanently", detail_html)
+        self.assertIn("Archived records are read-only.", edit_html)
+        self.assertNotIn('class="project-form record-form"', edit_html)
+
+        deleted_html = self._post_form_text(
+            f"/ui/records/note/{archived.record_id}/delete",
+            {"return_to": "/ui/records?entity_type=note&include_archived=true"},
+        )
+        self.assertIn("Record permanently deleted.", deleted_html)
+        self.assertNotIn("Archived GUI", deleted_html)
+        with self.sandbox.open_database() as database:
+            self.assertIsNone(RecordService(database, self.sandbox.project).get_record("note", archived.record_id, include_archived=True))
+
     def test_ui_graph_caps_rendered_nodes_for_unfocused_view(self) -> None:
         with self.sandbox.open_database() as database:
             record_service = RecordService(database, self.sandbox.project)
@@ -1553,6 +1644,16 @@ class ApiServerTests(unittest.TestCase):
         with request.urlopen(req) as response:
             return json.loads(response.read().decode("utf-8"))
 
+    def _delete_json(self, path: str, payload: dict | None = None) -> dict:
+        req = request.Request(
+            self.base_url + path,
+            data=json.dumps(payload or {}).encode("utf-8"),
+            headers={"Content-Type": "application/json; charset=utf-8"},
+            method="DELETE",
+        )
+        with request.urlopen(req) as response:
+            return json.loads(response.read().decode("utf-8"))
+
     def _get_text(self, path: str) -> str:
         with request.urlopen(self.base_url + path) as response:
             return response.read().decode("utf-8")
@@ -1587,6 +1688,13 @@ class ApiServerTests(unittest.TestCase):
     def _put_status(self, path: str, payload: dict) -> int:
         try:
             self._put_json(path, payload)
+        except error.HTTPError as exc:
+            return exc.code
+        return 200
+
+    def _delete_status(self, path: str, payload: dict | None = None) -> int:
+        try:
+            self._delete_json(path, payload)
         except error.HTTPError as exc:
             return exc.code
         return 200

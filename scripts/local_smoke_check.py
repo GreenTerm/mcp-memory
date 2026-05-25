@@ -241,20 +241,40 @@ def main() -> int:
             raise RuntimeError("HTTP generic search returned no results")
         print(f"http_record={created['record_id']}")
 
-        tools = rpc(f"http://127.0.0.1:{mcp_port}/mcp", "tools/list", {})["result"]["tools"]
+        mcp_client = McpHttpClient(f"http://127.0.0.1:{mcp_port}/mcp")
+        mcp_client.initialize()
+        gateway_mcp_client = McpHttpClient(f"{gateway_base}/mcp")
+        gateway_mcp_client.initialize()
+
+        tools = mcp_client.rpc("tools/list", {})["result"]["tools"]
         tool_names = {item["name"] for item in tools}
         if {"get_schema", "upsert_record", "search_records"} - tool_names:
             raise RuntimeError("MCP generic tools are missing")
-        gateway_tools = rpc(f"{gateway_base}/mcp", "tools/list", {})["result"]["tools"]
+        gateway_tools = gateway_mcp_client.rpc("tools/list", {})["result"]["tools"]
         gateway_tool_names = {item["name"] for item in gateway_tools}
         if {"get_schema", "upsert_record", "search_records"} - gateway_tool_names:
             raise RuntimeError("Home gateway MCP proxy is missing generic tools")
-        mcp_created = call_tool(
-            f"http://127.0.0.1:{mcp_port}/mcp",
+        mcp_created = mcp_client.call_tool(
             "upsert_record",
             {"entity_type": "note", "payload": {"slug": "mcp-note", "title": "MCP Note", "body": "MCP body"}},
         )
         print(f"mcp_record={mcp_created['record_id']}")
+
+        long_body = "D" * 4096
+        mcp_long = mcp_client.call_tool(
+            "upsert_record",
+            {"entity_type": "note", "payload": {"slug": "mcp-long-direct", "title": "MCP Long Direct", "body": long_body}},
+        )
+        if mcp_long["payload"]["body"] != long_body:
+            raise RuntimeError("MCP direct 4KB payload did not round-trip")
+        gateway_body = "G" * 4096
+        gateway_long = gateway_mcp_client.call_tool(
+            "upsert_record",
+            {"entity_type": "note", "payload": {"slug": "mcp-long-gateway", "title": "MCP Long Gateway", "body": gateway_body}},
+        )
+        if gateway_long["payload"]["body"] != gateway_body:
+            raise RuntimeError("Home gateway MCP 4KB payload did not round-trip")
+        print("mcp_long_payloads=ok")
     finally:
         for proc in (http_proc, mcp_proc, ui_proc):
             proc.terminate()
@@ -305,15 +325,66 @@ def post_json(url: str, payload: dict) -> dict:
         return json.loads(response.read().decode("utf-8"))
 
 
-def rpc(url: str, method: str, params: dict) -> dict:
-    return post_json(url, {"jsonrpc": "2.0", "id": 1, "method": method, "params": params})
+class McpHttpClient:
+    def __init__(self, url: str) -> None:
+        self.url = url
+        self.session_id: str | None = None
+        self.next_id = 1
 
+    def initialize(self) -> None:
+        response = self.rpc(
+            "initialize",
+            {
+                "protocolVersion": "2025-03-26",
+                "capabilities": {},
+                "clientInfo": {"name": "mcp-memory-smoke", "version": "local"},
+            },
+            include_session=False,
+        )
+        self.session_id = response["_headers"].get("Mcp-Session-Id") or response["_headers"].get("mcp-session-id")
+        if not self.session_id:
+            raise RuntimeError("MCP initialize did not return a session id")
+        status, _, body = self._post({"jsonrpc": "2.0", "method": "notifications/initialized"})
+        if status != 202 or body:
+            raise RuntimeError(f"MCP initialized notification returned unexpected response: status={status} body={body!r}")
 
-def call_tool(url: str, name: str, arguments: dict) -> dict:
-    response = rpc(url, "tools/call", {"name": name, "arguments": arguments})
-    if "error" in response:
-        raise RuntimeError(response["error"])
-    return response["result"]["structuredContent"]
+    def rpc(self, method: str, params: dict, include_session: bool = True) -> dict:
+        request_id = self.next_id
+        self.next_id += 1
+        status, headers, body = self._post(
+            {"jsonrpc": "2.0", "id": request_id, "method": method, "params": params},
+            include_session=include_session,
+        )
+        if status != 200:
+            raise RuntimeError(f"MCP request failed: status={status} body={body!r}")
+        response = json.loads(body.decode("utf-8"))
+        response["_headers"] = headers
+        return response
+
+    def call_tool(self, name: str, arguments: dict) -> dict:
+        response = self.rpc("tools/call", {"name": name, "arguments": arguments})
+        if "error" in response:
+            raise RuntimeError(response["error"])
+        return response["result"]["structuredContent"]
+
+    def _post(self, payload: dict, include_session: bool = True) -> tuple[int, dict[str, str], bytes]:
+        headers = {
+            "Content-Type": "application/json; charset=utf-8",
+            "Accept": "application/json, text/event-stream",
+        }
+        if include_session and self.session_id:
+            headers["Mcp-Session-Id"] = self.session_id
+        req = request.Request(
+            self.url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers=headers,
+            method="POST",
+        )
+        try:
+            with request.urlopen(req, timeout=10) as response:
+                return response.status, dict(response.headers.items()), response.read()
+        except error.HTTPError as exc:
+            return exc.code, dict(exc.headers.items()), exc.read()
 
 
 if __name__ == "__main__":

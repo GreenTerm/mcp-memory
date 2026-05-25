@@ -3,12 +3,15 @@ from __future__ import annotations
 import json
 import socket
 import threading
+import time
 import unittest
-from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import mock
 from urllib import error, parse, request
+
+import uvicorn
 
 from tests.support import ProjectSandbox
 
@@ -23,6 +26,9 @@ from mcp_memory.gui.home import (
     parse_project_create_form,
     parse_project_edit_form,
     probe_project_http_health,
+    project_gateway_url,
+    rewrite_gateway_html,
+    rewrite_gateway_location,
     public_base_url,
     render_home_flash,
     render_home_page,
@@ -35,7 +41,7 @@ from mcp_memory.gui.home import (
 )
 from mcp_memory.gui.generic import generic_workspace_post_action
 from mcp_memory.logging_utils import configure_logging, shutdown_logging
-from mcp_memory.mcp.server import build_handler as build_mcp_handler
+from mcp_memory.mcp.sdk_server import build_sdk_app
 from mcp_memory.runtime import ProjectRuntimeInfo, ProjectRuntimeManager
 from mcp_memory.schema import load_project_schema
 from mcp_memory.services import RecordService, SearchQuery, SearchService, update_project_schema
@@ -65,6 +71,24 @@ def _allocate_port() -> int:
         return int(sock.getsockname()[1])
     finally:
         sock.close()
+
+
+def _start_sdk_mcp_server(sandbox: ProjectSandbox) -> tuple[uvicorn.Server, threading.Thread]:
+    app = build_sdk_app(sandbox.project, sandbox.registry, log_level="ERROR")
+    server = uvicorn.Server(
+        uvicorn.Config(app, host="127.0.0.1", port=sandbox.project.mcp_port, log_level="error", access_log=False)
+    )
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+    deadline = time.time() + 10
+    while time.time() < deadline:
+        try:
+            with request.urlopen(f"http://127.0.0.1:{sandbox.project.mcp_port}/health", timeout=1) as response:
+                if response.status == 200:
+                    return server, thread
+        except OSError:
+            time.sleep(0.05)
+    raise RuntimeError("SDK MCP server did not start")
 
 
 class GuiHomeTests(unittest.TestCase):
@@ -114,6 +138,77 @@ class GuiHomeTests(unittest.TestCase):
         self.assertIn('lang="ru"', html)
         self.assertIn("/projects/new?lang=ru", html)
         self.assertNotIn("Your project shelf is empty.", html)
+
+    def test_home_handler_basic_routes_and_missing_methods(self) -> None:
+        sandbox = ProjectSandbox()
+        server = None
+        thread = None
+        try:
+            handler = build_home_handler(sandbox.registry, sandbox.app_home, ProjectRuntimeManager(sandbox.app_home))
+            server = HTTPServer(("127.0.0.1", 0), handler)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base_url = f"http://127.0.0.1:{server.server_port}"
+
+            with request.urlopen(base_url + "/health") as response:
+                self.assertEqual(json.loads(response.read().decode("utf-8"))["service"], "home")
+            with request.urlopen(base_url + "/assets/ui.js") as response:
+                self.assertIn("text/javascript", response.headers.get("Content-Type", ""))
+            with self.assertRaises(error.HTTPError) as missing_ctx:
+                request.urlopen(base_url + "/missing")
+            self.assertEqual(missing_ctx.exception.code, 404)
+
+            for method in ("PUT", "PATCH", "DELETE"):
+                with self.subTest(method=method):
+                    with self.assertRaises(error.HTTPError) as ctx:
+                        request.urlopen(request.Request(base_url + "/missing", data=b"{}", method=method))
+                    self.assertEqual(ctx.exception.code, 404)
+        finally:
+            if server is not None:
+                server.shutdown()
+                server.server_close()
+            if thread is not None:
+                thread.join(timeout=5)
+            sandbox.cleanup()
+
+    def test_gateway_rewrite_helpers_handle_absolute_relative_and_html_links(self) -> None:
+        sandbox = ProjectSandbox()
+        try:
+            public_root = "http://mcp-memory.local:8764"
+            self.assertEqual(
+                rewrite_gateway_location(
+                    f"http://{sandbox.project.http_host}:{sandbox.project.http_port}/ui/?lang=en",
+                    sandbox.project,
+                    public_root,
+                    use_mcp=False,
+                ),
+                project_gateway_url(public_root, sandbox.project, "/ui/") + "?lang=en",
+            )
+            self.assertEqual(
+                rewrite_gateway_location(
+                    f"http://{sandbox.project.mcp_host}:{sandbox.project.mcp_port}/mcp",
+                    sandbox.project,
+                    public_root,
+                    use_mcp=True,
+                ),
+                project_gateway_url(public_root, sandbox.project, "/mcp"),
+            )
+            self.assertEqual(rewrite_gateway_location("http://example.test/mcp", sandbox.project, public_root, False), "http://example.test/mcp")
+            self.assertEqual(rewrite_gateway_location("/schema", sandbox.project, public_root, False), "/test-project/schema")
+            self.assertEqual(rewrite_gateway_location("records/note", sandbox.project, public_root, False), "records/note")
+
+            html = (
+                '<a href="/ui/">UI</a><script src="/ui/assets/ui.js"></script>'
+                f'<code>http://{sandbox.project.mcp_host}:{sandbox.project.mcp_port}/mcp</code>'
+                '<a href="http://127.0.0.1:8764/">Home</a>'
+            ).encode("utf-8")
+            rewritten = rewrite_gateway_html(html, sandbox.project, public_root).decode("utf-8")
+            self.assertIn('href="/test-project/ui/"', rewritten)
+            self.assertIn('src="/test-project/ui/assets/ui.js"', rewritten)
+            self.assertIn(project_gateway_url(public_root, sandbox.project, "/mcp"), rewritten)
+            self.assertIn(public_root + "/", rewritten)
+        finally:
+            sandbox.cleanup()
 
     def test_probe_project_http_health_running_and_offline(self) -> None:
         sandbox = ProjectSandbox()
@@ -372,9 +467,7 @@ class GuiHomeTests(unittest.TestCase):
             api_server = HTTPServer(("127.0.0.1", sandbox.project.http_port), build_api_handler(sandbox.project, sandbox.registry))
             api_thread = threading.Thread(target=api_server.serve_forever, daemon=True)
             api_thread.start()
-            mcp_server = ThreadingHTTPServer(("127.0.0.1", sandbox.project.mcp_port), build_mcp_handler(sandbox.project, sandbox.registry))
-            mcp_thread = threading.Thread(target=mcp_server.serve_forever, daemon=True)
-            mcp_thread.start()
+            mcp_server, mcp_thread = _start_sdk_mcp_server(sandbox)
 
             handler = build_home_handler(sandbox.registry, sandbox.app_home, ProjectRuntimeManager(sandbox.app_home))
             home_server = HTTPServer(("127.0.0.1", 0), handler)
@@ -400,7 +493,16 @@ class GuiHomeTests(unittest.TestCase):
             initialize_request = request.Request(
                 base_url + "/test-project/mcp",
                 data=json.dumps(
-                    {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-03-26"}}
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "method": "initialize",
+                        "params": {
+                            "protocolVersion": "2025-03-26",
+                            "capabilities": {},
+                            "clientInfo": {"name": "mcp-memory-tests", "version": "local"},
+                        },
+                    }
                 ).encode("utf-8"),
                 method="POST",
                 headers={"Content-Type": "application/json; charset=utf-8", "Accept": "application/json, text/event-stream"},
@@ -409,12 +511,53 @@ class GuiHomeTests(unittest.TestCase):
                 mcp_payload = json.loads(response.read().decode("utf-8"))
                 session_id = response.headers.get("Mcp-Session-Id")
 
+            initialized_request = request.Request(
+                base_url + "/test-project/mcp",
+                data=json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}).encode("utf-8"),
+                method="POST",
+                headers={
+                    "Content-Type": "application/json; charset=utf-8",
+                    "Accept": "application/json, text/event-stream",
+                    "Mcp-Session-Id": session_id,
+                },
+            )
+            with request.urlopen(initialized_request) as response:
+                self.assertEqual(response.status, 202)
+
+            long_body = "G" * 4096
+            long_record_request = request.Request(
+                base_url + "/test-project/mcp",
+                data=json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 2,
+                        "method": "tools/call",
+                        "params": {
+                            "name": "upsert_record",
+                            "arguments": {
+                                "entity_type": "note",
+                                "payload": {"slug": "via-gateway-long", "title": "Via Gateway Long", "body": long_body},
+                            },
+                        },
+                    }
+                ).encode("utf-8"),
+                method="POST",
+                headers={
+                    "Content-Type": "application/json; charset=utf-8",
+                    "Accept": "application/json, text/event-stream",
+                    "Mcp-Session-Id": session_id,
+                },
+            )
+            with request.urlopen(long_record_request) as response:
+                long_record_payload = json.loads(response.read().decode("utf-8"))
+
             self.assertIn('href="/test-project/ui/entities?lang=en"', dashboard_html)
             self.assertIn('src="/test-project/ui/assets/ui.js"', dashboard_html)
             self.assertIn("entity_types", schema_payload)
             self.assertEqual(record_payload["slug"], "via-gateway")
             self.assertEqual(mcp_payload["result"]["serverInfo"]["name"], "mcp-memory")
             self.assertTrue(session_id)
+            self.assertEqual(long_record_payload["result"]["structuredContent"]["payload"]["body"], long_body)
         finally:
             for server, thread in (
                 (home_server, home_thread),
@@ -422,8 +565,11 @@ class GuiHomeTests(unittest.TestCase):
                 (api_server, api_thread),
             ):
                 if server is not None:
-                    server.shutdown()
-                    server.server_close()
+                    if isinstance(server, uvicorn.Server):
+                        server.should_exit = True
+                    else:
+                        server.shutdown()
+                        server.server_close()
                 if thread is not None:
                     thread.join(timeout=5)
             sandbox.cleanup()

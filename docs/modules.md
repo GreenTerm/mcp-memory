@@ -23,7 +23,8 @@ src/mcp_memory/
 
 - `mcp_memory.cli.main`: CLI commands for app init, project creation, schema commands, API/MCP/Home servers, import/export, backup/restore, and pending changes.
 - `mcp_memory.api.server`: project HTTP API, generic routes, legacy-compatible routes, and `/ui/...` workspace rendering.
-- `mcp_memory.mcp.server`: MCP Streamable HTTP endpoint at `/mcp`, generic tools, schema-aware prompts, session handling, and empty resources compatibility.
+- `mcp_memory.mcp.sdk_server`: official SDK-backed MCP Streamable HTTP endpoint at `/mcp`, generic tools, schema-aware prompts, session handling, and empty resources compatibility.
+- `mcp_memory.mcp.server`: shared MCP tool/prompt definitions plus the legacy stdlib transport fallback selected with `MCP_MEMORY_MCP_TRANSPORT=legacy`.
 - `mcp_memory.gui.home`: Home UI on port `8764`, project shelf, start/stop/restart, Base URL setting, and DNS/path gateway proxy.
 - `mcp_memory.gui.workspace`: server-rendered project UI pages for dashboard, records, entities, search, graph, evidence, schema, pending, import/export, backups, audit, and settings.
 
@@ -60,6 +61,7 @@ Main suites:
 - `tests/test_generic_records.py`
 - `tests/test_api_server.py`
 - `tests/test_mcp_server.py`
+- `tests/test_mcp_sdk_server.py`
 - `tests/test_gui_home.py`
 - `tests/test_runtime_manager.py`
 - `tests/test_config_cli.py`

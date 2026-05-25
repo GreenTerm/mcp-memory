@@ -339,6 +339,7 @@ def build_handler(
                                 q=str(payload.get("q", "")).strip(),
                                 entity_types=[str(item) for item in payload.get("entity_types", [])] or None,
                                 tag=None if payload.get("tag") is None else str(payload["tag"]),
+                                include_archived=bool(payload.get("include_archived", False)),
                                 limit=int(payload.get("limit", 10)),
                             )
                         )
@@ -522,6 +523,55 @@ def build_handler(
         def log_message(self, format: str, *args: object) -> None:
             log_event(request_logger, logging.INFO, "server_message", project_id=project.project_id, message=format % args if args else format)
 
+        def do_DELETE(self) -> None:
+            request_log = start_request_log("DELETE", self.path)
+            self._response_status = HTTPStatus.OK
+            parsed = urlparse(self.path)
+            path = parsed.path
+            try:
+                payload = self._read_json_body()
+                if payload is None:
+                    return
+                if path.startswith("/records/"):
+                    parts = [segment for segment in path.split("/") if segment]
+                    if len(parts) != 3:
+                        self._send_error_json(HTTPStatus.NOT_FOUND, "not_found", "Unknown record route")
+                        return
+                    _, entity_type, record_id_or_slug = parts
+                    result = self._generic_workflow(
+                        "delete_record",
+                        {
+                            "entity_type": entity_type,
+                            "record_id_or_slug": record_id_or_slug,
+                            "deleted_by": str(payload.get("deleted_by", "api")),
+                        },
+                        created_by=str(payload.get("deleted_by", "api")),
+                    )
+                    if project.write_mode == "confirm":
+                        self._send_json(serialize(result), status=HTTPStatus.ACCEPTED)
+                    else:
+                        self._send_json(serialize(result))
+                    return
+                self._send_error_json(HTTPStatus.NOT_FOUND, "not_found", "Unknown route")
+            except RecordValidationError as exc:
+                status = HTTPStatus.NOT_FOUND if str(exc) == "record not found" else HTTPStatus.BAD_REQUEST
+                self._send_error_json(status, "not_found" if status == HTTPStatus.NOT_FOUND else "validation_error", str(exc))
+            except (GenericPendingValidationError, SchemaValidationError, KeyError, ValueError) as exc:
+                self._send_error_json(HTTPStatus.BAD_REQUEST, "validation_error", str(exc))
+            except Exception:
+                log_event(
+                    request_logger,
+                    logging.ERROR,
+                    "request_exception",
+                    project_id=project.project_id,
+                    method="DELETE",
+                    path=path,
+                    error=traceback.format_exc(),
+                )
+                self._send_error_json(HTTPStatus.INTERNAL_SERVER_ERROR, "internal_error", "Internal server error")
+            finally:
+                request_log.finish(request_logger, "request_complete", int(self._response_status), project_id=project.project_id)
+
         def do_PUT(self) -> None:
             request_log = start_request_log("PUT", self.path)
             self._response_status = HTTPStatus.OK
@@ -692,7 +742,7 @@ def _pending_change_id_from_path(path: str, action: str) -> str:
 def _confirm_pending_change(project: ProjectConfig, database: Any, pending_change_id: str, confirmed_by: str) -> Any:
     generic_workflow = GenericWorkflowService(database, project)
     pending = generic_workflow.get_pending_change(pending_change_id)
-    if pending is not None and pending.operation in {"upsert_record", "archive_record", "create_relation", "add_evidence"}:
+    if pending is not None and pending.operation in {"upsert_record", "archive_record", "delete_record", "create_relation", "add_evidence"}:
         return generic_workflow.confirm_change(pending_change_id, confirmed_by=confirmed_by, actor_type="user")
     return PendingChangeService(database).confirm_change(
         project.project_id,
@@ -705,7 +755,7 @@ def _confirm_pending_change(project: ProjectConfig, database: Any, pending_chang
 def _reject_pending_change(project: ProjectConfig, database: Any, pending_change_id: str, rejected_by: str) -> Any:
     generic_workflow = GenericWorkflowService(database, project)
     pending = generic_workflow.get_pending_change(pending_change_id)
-    if pending is not None and pending.operation in {"upsert_record", "archive_record", "create_relation", "add_evidence"}:
+    if pending is not None and pending.operation in {"upsert_record", "archive_record", "delete_record", "create_relation", "add_evidence"}:
         return generic_workflow.reject_change(pending_change_id, rejected_by=rejected_by)
     return PendingChangeService(database).reject_change(project.project_id, pending_change_id, rejected_by=rejected_by)
 
