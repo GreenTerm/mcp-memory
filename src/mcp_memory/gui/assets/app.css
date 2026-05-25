@@ -1845,6 +1845,10 @@ button.button-secondary:hover,
   justify-items: start;
 }
 
+.section-stack > .search-form {
+  width: 100%;
+}
+
 .panel-section > .empty-state,
 .section-stack > .empty-state {
   width: 100%;
@@ -1877,6 +1881,49 @@ button.button-secondary:hover,
 .search-form-grid {
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 12px;
+}
+
+.checkbox-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-soft);
+  font-size: 0.92rem;
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.filter-checkbox-block {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.search-form-grid .filter-checkbox-block {
+  align-self: center;
+}
+
+.filter-checkbox-row {
+  justify-content: flex-end;
+}
+
+.search-form .checkbox-row input[type="checkbox"],
+.project-form .checkbox-row input[type="checkbox"] {
+  width: 16px;
+  min-width: 16px;
+  height: 16px;
+  min-height: 16px;
+  flex: 0 0 16px;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--accent);
+  box-shadow: none;
+}
+
+.search-form .checkbox-row input[type="checkbox"]:focus,
+.project-form .checkbox-row input[type="checkbox"]:focus {
+  box-shadow: var(--focus);
 }
 
 .form-field {

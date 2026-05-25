@@ -66,6 +66,8 @@ class RecordService:
         now = utc_now()
 
         existing = self.get_record(entity.name, record_id, include_archived=True)
+        if existing is not None and existing.status == "archived":
+            raise RecordValidationError("archived records cannot be modified")
         if slug:
             slug_match = self.get_record(entity.name, slug, include_archived=True)
             if slug_match is not None and slug_match.record_id != record_id:
@@ -116,10 +118,7 @@ class RecordService:
         self._replace_tags(record, self._tag_values(entity, payload))
         self._append_version(record)
         self._append_audit(record, "upsert_record", actor_type, write.updated_by)
-        if record.status == "archived":
-            self._delete_search_document(record)
-        else:
-            self._upsert_search_document(record, entity)
+        self._upsert_search_document(record, entity)
         if commit:
             connection.commit()
         log_event(
@@ -202,10 +201,122 @@ class RecordService:
             raise RecordValidationError("record not found after archive")
         self._append_version(archived)
         self._append_audit(archived, "archive_record", actor_type, archived_by)
-        self._delete_search_document(archived)
+        self._upsert_search_document(archived, self._entity(archived.entity_type))
         if commit:
             connection.commit()
         return archived
+
+    def delete_record(
+        self,
+        entity_type: str,
+        record_id_or_slug: str,
+        deleted_by: str = "system",
+        actor_type: str = "system",
+        commit: bool = True,
+        preserve_pending_change_id: str | None = None,
+    ) -> Record:
+        _ = actor_type
+        record = self.get_record(entity_type, record_id_or_slug, include_archived=True)
+        if record is None:
+            raise RecordValidationError("record not found")
+        if record.status != "archived":
+            raise RecordValidationError("only archived records can be permanently deleted")
+
+        connection = self._database.transaction()
+        subject_ids = [record.record_id]
+        if record.slug:
+            subject_ids.append(record.slug)
+        subject_placeholders = ", ".join("?" for _ in subject_ids)
+        attachment_rows = connection.execute(
+            """
+            SELECT attachment_id
+            FROM evidence
+            WHERE project_id = ? AND entity_type = ? AND entity_id = ? AND attachment_id IS NOT NULL
+            """,
+            (record.project_id, record.entity_type, record.record_id),
+        ).fetchall()
+        attachment_ids = [str(row["attachment_id"]) for row in attachment_rows]
+
+        self._delete_search_document(record)
+        connection.execute(
+            "DELETE FROM entity_tags WHERE project_id = ? AND entity_type = ? AND entity_id = ?",
+            (record.project_id, record.entity_type, record.record_id),
+        )
+        connection.execute(
+            "DELETE FROM evidence WHERE project_id = ? AND entity_type = ? AND entity_id = ?",
+            (record.project_id, record.entity_type, record.record_id),
+        )
+        connection.execute(
+            """
+            DELETE FROM relations
+            WHERE project_id = ?
+              AND (
+                (from_entity_type = ? AND from_entity_id = ?)
+                OR (to_entity_type = ? AND to_entity_id = ?)
+              )
+            """,
+            (record.project_id, record.entity_type, record.record_id, record.entity_type, record.record_id),
+        )
+        connection.execute(
+            "DELETE FROM entity_facts WHERE project_id = ? AND entity_type = ? AND entity_id = ?",
+            (record.project_id, record.entity_type, record.record_id),
+        )
+        connection.execute(
+            "DELETE FROM hypotheses WHERE project_id = ? AND subject_entity_type = ? AND subject_entity_id = ?",
+            (record.project_id, record.entity_type, record.record_id),
+        )
+        connection.execute(
+            """
+            DELETE FROM duplicate_candidates
+            WHERE project_id = ? AND entity_type = ? AND (entity_id = ? OR duplicate_entity_id = ?)
+            """,
+            (record.project_id, record.entity_type, record.record_id, record.record_id),
+        )
+        connection.execute(
+            "DELETE FROM entity_versions WHERE project_id = ? AND entity_type = ? AND entity_id = ?",
+            (record.project_id, record.entity_type, record.record_id),
+        )
+        connection.execute(
+            f"DELETE FROM audit_log WHERE project_id = ? AND entity_type = ? AND entity_id IN ({subject_placeholders})",
+            (record.project_id, record.entity_type, *subject_ids),
+        )
+        if preserve_pending_change_id:
+            connection.execute(
+                f"""
+                DELETE FROM pending_changes
+                WHERE project_id = ? AND entity_type = ? AND entity_id IN ({subject_placeholders}) AND pending_change_id <> ?
+                """,
+                (record.project_id, record.entity_type, *subject_ids, preserve_pending_change_id),
+            )
+        else:
+            connection.execute(
+                f"DELETE FROM pending_changes WHERE project_id = ? AND entity_type = ? AND entity_id IN ({subject_placeholders})",
+                (record.project_id, record.entity_type, *subject_ids),
+            )
+        connection.execute(
+            "DELETE FROM records WHERE project_id = ? AND entity_type = ? AND record_id = ?",
+            (record.project_id, record.entity_type, record.record_id),
+        )
+        for attachment_id in attachment_ids:
+            connection.execute(
+                """
+                DELETE FROM attachments
+                WHERE project_id = ? AND attachment_id = ?
+                  AND NOT EXISTS (SELECT 1 FROM evidence e WHERE e.attachment_id = attachments.attachment_id)
+                """,
+                (record.project_id, attachment_id),
+            )
+        if commit:
+            connection.commit()
+        log_event(
+            self._logger,
+            logging.INFO,
+            "record_deleted",
+            project_id=record.project_id,
+            entity_type=record.entity_type,
+            record_id=record.record_id,
+        )
+        return record
 
     def _entity(self, entity_type: str) -> EntityTypeDefinition:
         try:

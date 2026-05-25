@@ -172,7 +172,7 @@ https://mcp-memory.example.test
 
 Keep the gateway mounted at the domain root. Path-prefix deployments such as `https://example.test/memory` are not supported by Base URL validation, because Base URL intentionally rejects paths.
 
-If the reverse proxy changes request bodies or strips headers, MCP clients may fail. Preserve method, path, query string, body, `Content-Type`, and `Accept` headers.
+If the reverse proxy changes request bodies or strips headers, MCP clients may fail. Preserve method, path, query string, body, `Content-Type`, `Accept`, `Mcp-Session-Id`, and `Mcp-Protocol-Version` headers.
 
 ## MCP Client URL
 

@@ -173,7 +173,7 @@ def render_workspace_response(project: ProjectConfig, registry: ProjectRegistry,
         return generic_response
 
     if path in ("/ui", "/ui/"):
-        return (HTTPStatus.OK, render_workspace_dashboard(project, registry, lang))
+        return (HTTPStatus.OK, render_workspace_dashboard(project, registry, query, lang))
     if path == "/ui/search":
         return (HTTPStatus.OK, render_search_page(project, query, raw_path, lang))
     if path == "/ui/graph":
@@ -254,7 +254,7 @@ def workspace_post_action(project: ProjectConfig, registry: ProjectRegistry, raw
         with open_database(project.database_path) as database:
             generic_workflow = GenericWorkflowService(database, project)
             generic_pending = generic_workflow.get_pending_change(pending_change_id)
-            if generic_pending is not None and generic_pending.operation in {"upsert_record", "archive_record", "create_relation", "add_evidence"}:
+            if generic_pending is not None and generic_pending.operation in {"upsert_record", "archive_record", "delete_record", "create_relation", "add_evidence"}:
                 generic_workflow.confirm_change(pending_change_id, confirmed_by=form_data.get("confirmed_by", "ui"), actor_type="user")
             else:
                 PendingChangeService(database).confirm_change(
@@ -271,7 +271,7 @@ def workspace_post_action(project: ProjectConfig, registry: ProjectRegistry, raw
         with open_database(project.database_path) as database:
             generic_workflow = GenericWorkflowService(database, project)
             generic_pending = generic_workflow.get_pending_change(pending_change_id)
-            if generic_pending is not None and generic_pending.operation in {"upsert_record", "archive_record", "create_relation", "add_evidence"}:
+            if generic_pending is not None and generic_pending.operation in {"upsert_record", "archive_record", "delete_record", "create_relation", "add_evidence"}:
                 generic_workflow.reject_change(pending_change_id, rejected_by=form_data.get("rejected_by", "ui"))
             else:
                 PendingChangeService(database).reject_change(
@@ -318,12 +318,13 @@ def workspace_post_action(project: ProjectConfig, registry: ProjectRegistry, raw
     return None
 
 
-def render_workspace_dashboard(project: ProjectConfig, registry: ProjectRegistry, lang: str) -> str:
+def render_workspace_dashboard(project: ProjectConfig, registry: ProjectRegistry, query: dict[str, list[str]], lang: str) -> str:
+    include_archived = query.get("include_archived", [""])[0].strip().lower() in {"1", "true", "yes", "on"}
     with open_database(project.database_path) as database:
         record_service = RecordService(database, project)
         schema = load_project_schema(project.schema_path)
         records = record_service.list_records(limit=1000)
-        recent_records = record_service.list_records(limit=5)
+        recent_records = record_service.list_records(limit=5, include_archived=include_archived)
         archived_count = database.connection.execute(
             "SELECT COUNT(*) AS count FROM records WHERE project_id = ? AND status = 'archived'",
             (project.project_id,),
@@ -364,7 +365,7 @@ def render_workspace_dashboard(project: ProjectConfig, registry: ProjectRegistry
         f"{panel('Project Stats', generic_metric_grid(len(schema.entity_types), len(records), int(archived_count), int(relation_count), pending_count), 'The current shape of this generic workspace.', 'stats-panel')}"
         f"{panel('Quick Entries', overview_quick_entries(schema), 'Open the working surface you need next.', 'quick-entries-panel')}"
         f"{panel('Storage Paths', overview_storage_paths(project), 'Everything stays local to this project workspace.', 'paths-panel')}"
-        f"{panel('Recent Updates', render_recent_records(recent_records, lang), 'Latest generic records from this project.', 'recent-panel')}"
+        f"{panel('Recent Updates', recent_records_filter(include_archived, lang) + render_recent_records(recent_records, lang), 'Latest generic records from this project.', 'recent-panel')}"
         "</main>"
     )
     return workspace_page_html(project, "Project Overview", body, "/ui/", lang, title_suffix=f"{project.display_name} Workspace")
@@ -1433,10 +1434,21 @@ def render_recent_records(items: list[Record], lang: str) -> str:
             "<article class=\"data-list-row recent-record-row\">"
             f"<div class=\"data-list-main\"><h3><a href=\"{escape(href, quote=True)}\">{escape(item.title)}</a></h3>"
             f"<p>{escape(preview or 'No summary available yet.')}</p></div>"
-            f"<div class=\"data-list-meta\">{badge(item.entity_type, 'accent')}<span>{escape(identity)}</span><span>{escape(item.updated_at)}</span></div>"
+            f"<div class=\"data-list-meta\">{badge(item.entity_type, 'accent')}{badge('archived', 'warning') if item.status == 'archived' else ''}<span>{escape(identity)}</span><span>{escape(item.updated_at)}</span></div>"
             "</article>"
         )
     return f"<div class=\"data-list recent-record-list\">{''.join(cards)}</div>"
+
+
+def recent_records_filter(include_archived: bool, lang: str) -> str:
+    checked = " checked" if include_archived else ""
+    return (
+        '<form class="search-form" method="get" action="/ui/">'
+        f'<input type="hidden" name="lang" value="{escape(lang, quote=True)}">'
+        f'<div class="filter-checkbox-block"><label class="checkbox-row filter-checkbox-row"><input type="checkbox" name="include_archived" value="true"{checked}> Show archived</label></div>'
+        '<div class="search-form-actions"><button class="button button-primary" type="submit">Apply Filters</button></div>'
+        "</form>"
+    )
 
 
 def search_form(q: str, entity_type: str, binary_id: str, tag: str, lang: str) -> str:

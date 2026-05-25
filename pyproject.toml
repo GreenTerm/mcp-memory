@@ -8,7 +8,10 @@ version = "1.0.3"
 description = "Offline-first schema-driven knowledge base for people and agents."
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = ["Jinja2>=3.1,<4"]
+dependencies = [
+    "Jinja2>=3.1,<4",
+    "mcp==1.27.1",
+]
 
 [project.optional-dependencies]
 dev = ["coverage>=7,<8"]

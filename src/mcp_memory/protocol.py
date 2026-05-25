@@ -39,6 +39,7 @@ class SearchRecordsQuery:
     q: str = ""
     entity_types: list[str] | None = None
     tag: str | None = None
+    include_archived: bool = False
     limit: int = 10
 
 
@@ -75,6 +76,16 @@ class ArchiveRecordCommand:
     archived_by: str = "system"
     actor_type: str = "system"
     commit: bool = True
+
+
+@dataclass(slots=True)
+class DeleteRecordCommand:
+    entity_type: str
+    record_id_or_slug: str
+    deleted_by: str = "system"
+    actor_type: str = "system"
+    commit: bool = True
+    preserve_pending_change_id: str | None = None
 
 
 @dataclass(slots=True)
@@ -121,6 +132,7 @@ ProtocolMessage = (
     | ListRecordsQuery
     | UpsertRecordCommand
     | ArchiveRecordCommand
+    | DeleteRecordCommand
     | CreateRelationCommand
     | GetRelatedQuery
     | AddEvidenceCommand
@@ -144,6 +156,7 @@ class ProjectDispatcher:
                     query_text=message.q,
                     entity_types=message.entity_types,
                     tag=message.tag,
+                    include_archived=message.include_archived,
                     limit=message.limit,
                 )
             )
@@ -183,6 +196,16 @@ class ProjectDispatcher:
                 archived_by=message.archived_by,
                 actor_type=message.actor_type,
                 commit=message.commit,
+            )
+            return ProtocolResult("ok", record)
+        if isinstance(message, DeleteRecordCommand):
+            record = RecordService(self._database, self._project).delete_record(
+                message.entity_type,
+                message.record_id_or_slug,
+                deleted_by=message.deleted_by,
+                actor_type=message.actor_type,
+                commit=message.commit,
+                preserve_pending_change_id=message.preserve_pending_change_id,
             )
             return ProtocolResult("ok", record)
         if isinstance(message, CreateRelationCommand):

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import socket
 import threading
 import unittest
@@ -253,6 +254,7 @@ class McpServerTests(unittest.TestCase):
             "get_record",
             "upsert_record",
             "archive_record",
+            "delete_record",
             "get_related",
             "add_evidence",
             "create_relation",
@@ -266,7 +268,7 @@ class McpServerTests(unittest.TestCase):
         ):
             self.assertIn(f"tool: {tool_name}", text)
         self.assertIn("required top-level fields: <none>", text)
-        self.assertIn("optional top-level fields: q, entity_types, tag, limit", text)
+        self.assertIn("optional top-level fields: q, entity_types, tag, include_archived, limit", text)
         self.assertIn("required top-level fields: entity_type, payload", text)
         self.assertIn('"title": "Note example"', text)
         self.assertIn('"relation_type": "related_to"', text)
@@ -317,6 +319,7 @@ class McpServerTests(unittest.TestCase):
         self.assertIn("search_records", tool_names)
         self.assertIn("upsert_record", tool_names)
         self.assertIn("archive_record", tool_names)
+        self.assertIn("delete_record", tool_names)
         self.assertNotIn("create_function", tool_names)
         self.assertIn("export_json", tool_names)
         self.assertIn("backup_project", tool_names)
@@ -400,6 +403,30 @@ class McpServerTests(unittest.TestCase):
         )
         self.assertEqual(restored["result"]["structuredContent"]["project_id"], "restored-project")
 
+    def test_delete_record_tool_requires_archived_record_and_purges_it(self) -> None:
+        created = self._call_tool(
+            "upsert_record",
+            {"entity_type": "note", "payload": {"slug": "mcp-delete", "title": "MCP Delete", "body": "delete searchable"}},
+        )["result"]["structuredContent"]
+
+        active_delete = self._call_tool("delete_record", {"entity_type": "note", "record_id": "mcp-delete", "deleted_by": "tester"})
+        self.assertEqual(active_delete["error"]["code"], -32602)
+        self.assertIn("archived", active_delete["error"]["message"])
+
+        self._call_tool("archive_record", {"entity_type": "note", "record_id": "mcp-delete", "archived_by": "tester"})
+        default_search = self._call_tool("search_records", {"q": "delete"})
+        self.assertEqual(len(default_search["result"]["structuredContent"]["items"]), 0)
+        archived_search = self._call_tool("search_records", {"q": "delete", "include_archived": True})
+        self.assertEqual(len(archived_search["result"]["structuredContent"]["items"]), 1)
+
+        deleted = self._call_tool("delete_record", {"entity_type": "note", "record_id": "mcp-delete", "deleted_by": "tester"})
+        self.assertEqual(deleted["result"]["structuredContent"]["record_id"], created["record_id"])
+        self.assertEqual(deleted["result"]["structuredContent"]["status"], "archived")
+
+        missing = self._call_tool("get_record", {"entity_type": "note", "record_id": "mcp-delete", "include_archived": True})
+        self.assertEqual(missing["error"]["code"], -32602)
+        self.assertEqual(len(self._call_tool("search_records", {"q": "delete", "include_archived": True})["result"]["structuredContent"]["items"]), 0)
+
     def test_confirm_mode_tools_queue_and_apply_pending_changes(self) -> None:
         self.sandbox.project.write_mode = "confirm"
         created = self._call_tool(
@@ -436,6 +463,27 @@ class McpServerTests(unittest.TestCase):
         )
         rejected = self._call_tool("reject_change", {"pending_change_id": pending_relation["result"]["structuredContent"]["pending_change_id"]})
         self.assertEqual(rejected["result"]["structuredContent"]["status"], "rejected")
+
+    def test_confirm_mode_delete_record_tool_queues_and_applies_pending_change(self) -> None:
+        self.sandbox.project.write_mode = "auto"
+        self._call_tool(
+            "upsert_record",
+            {"entity_type": "note", "payload": {"slug": "pending-delete", "title": "Pending Delete"}},
+        )
+        self._call_tool("archive_record", {"entity_type": "note", "record_id": "pending-delete", "archived_by": "tester"})
+
+        self.sandbox.project.write_mode = "confirm"
+        pending = self._call_tool("delete_record", {"entity_type": "note", "record_id": "pending-delete", "deleted_by": "tester"})
+        pending_body = pending["result"]["structuredContent"]
+        self.assertEqual(pending_body["status"], "pending")
+        self.assertEqual(pending_body["operation"], "delete_record")
+
+        confirmed = self._call_tool("confirm_change", {"pending_change_id": pending_body["pending_change_id"], "confirmed_by": "tester"})
+        self.assertEqual(confirmed["result"]["structuredContent"]["pending_change"]["status"], "confirmed")
+        self.assertEqual(confirmed["result"]["structuredContent"]["applied"]["status"], "archived")
+
+        missing = self._call_tool("get_record", {"entity_type": "note", "record_id": "pending-delete", "include_archived": True})
+        self.assertEqual(missing["error"]["code"], -32602)
 
     def test_invalid_requests_return_rpc_errors(self) -> None:
         invalid_json = request.Request(
@@ -578,10 +626,17 @@ class McpServerTests(unittest.TestCase):
 
     def test_serve_project_mcp_api_constructs_server(self) -> None:
         fake_server = mock.Mock()
-        with mock.patch("mcp_memory.mcp.server.ThreadingHTTPServer", return_value=fake_server) as server_cls:
-            serve_project_mcp_api(self.sandbox.project, self.sandbox.registry, "127.0.0.1", 9998)
+        with mock.patch.dict(os.environ, {"MCP_MEMORY_MCP_TRANSPORT": "legacy"}):
+            with mock.patch("mcp_memory.mcp.server.ThreadingHTTPServer", return_value=fake_server) as server_cls:
+                serve_project_mcp_api(self.sandbox.project, self.sandbox.registry, "127.0.0.1", 9998)
         server_cls.assert_called_once()
         fake_server.serve_forever.assert_called_once()
+
+    def test_serve_project_mcp_api_uses_sdk_transport_by_default(self) -> None:
+        with mock.patch.dict(os.environ, {"MCP_MEMORY_MCP_TRANSPORT": "sdk"}):
+            with mock.patch("mcp_memory.mcp.sdk_server.serve_project_mcp_sdk_api") as serve_sdk:
+                serve_project_mcp_api(self.sandbox.project, self.sandbox.registry, "127.0.0.1", 9998)
+        serve_sdk.assert_called_once_with(self.sandbox.project, self.sandbox.registry, "127.0.0.1", 9998, log_level="INFO")
 
     def test_runtime_logs_are_written_for_mcp_activity(self) -> None:
         self._rpc("ping", {}, request_id=12)

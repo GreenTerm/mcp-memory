@@ -73,7 +73,7 @@ Then copy `wheelhouse` and install offline:
 python -m pip install --no-index --find-links .\wheelhouse mcp-memory
 ```
 
-The GUI uses Jinja2. It is a normal pip-installable wheel and does not require a service or network access at runtime.
+The GUI uses Jinja2. The MCP endpoint uses the official Python `mcp` SDK and its local Streamable HTTP runtime. These are normal pip-installable wheels and do not require a service or network access at runtime.
 
 ## Quick Start
 
@@ -138,6 +138,8 @@ Manual project servers:
 mcp-memory run-http-api sample
 mcp-memory run-mcp sample
 ```
+
+`run-mcp` uses the official MCP Streamable HTTP SDK transport by default. For an emergency rollback to the old stdlib transport, set `MCP_MEMORY_MCP_TRANSPORT=legacy` before starting the project MCP process.
 
 ## Schema Commands
 

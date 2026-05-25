@@ -27,6 +27,7 @@ from mcp_memory.services.schema_updates import validate_record_payload
 from mcp_memory.schema import ProjectSchema, SchemaValidationError, load_project_schema
 from mcp_memory.protocol import (
     ArchiveRecordCommand,
+    DeleteRecordCommand,
     GetRecordQuery,
     ListEntityTypesQuery,
     ProjectDispatcher,
@@ -113,21 +114,155 @@ class GenericRecordTests(unittest.TestCase):
             self.assertEqual(len(service.list_records("note")), 0)
             self.assertEqual(len(service.list_records("note", include_archived=True)), 1)
             self.assertEqual(SearchService(database).search(SearchQuery(project_id=self.sandbox.project.project_id, query_text="Searchable")), [])
+            self.assertEqual(
+                len(
+                    SearchService(database).search(
+                        SearchQuery(project_id=self.sandbox.project.project_id, query_text="Searchable", include_archived=True)
+                    )
+                ),
+                1,
+            )
 
-            service.upsert_record(
+            with self.assertRaisesRegex(RecordValidationError, "archived records cannot be modified"):
+                service.upsert_record(
+                    RecordWrite(
+                        entity_type="note",
+                        record_id=created.record_id,
+                        payload={
+                            "slug": "first-note",
+                            "title": "Updated Archived Note",
+                            "summary": "Updated archived summary",
+                            "body": "Searchable body text",
+                        },
+                        updated_by="tester",
+                    )
+                )
+            self.assertEqual(SearchService(database).search(SearchQuery(project_id=self.sandbox.project.project_id, query_text="Searchable")), [])
+
+    def test_record_service_permanently_deletes_archived_record_and_owned_metadata(self) -> None:
+        with self.sandbox.open_database() as database:
+            records = RecordService(database, self.sandbox.project)
+            first = records.upsert_record(
                 RecordWrite(
                     entity_type="note",
-                    record_id=created.record_id,
                     payload={
-                        "slug": "first-note",
-                        "title": "Updated Archived Note",
-                        "summary": "Updated archived summary",
-                        "body": "Searchable body text",
+                        "slug": "delete-me",
+                        "title": "Delete Me",
+                        "summary": "Purge summary",
+                        "body": "Purge searchable body",
+                        "tags": ["purge"],
                     },
+                    created_by="tester",
                     updated_by="tester",
                 )
             )
-            self.assertEqual(SearchService(database).search(SearchQuery(project_id=self.sandbox.project.project_id, query_text="Searchable")), [])
+            second = records.upsert_record(RecordWrite(entity_type="note", payload={"slug": "keep-me", "title": "Keep Me"}))
+            GenericRelationService(database, self.sandbox.project).create_relation(
+                GenericRelationWrite("note", first.record_id, "note", second.record_id, "related_to")
+            )
+            GenericEvidenceService(database, self.sandbox.project).create_evidence(
+                GenericEvidenceWrite(
+                    entity_type="note",
+                    record_id=first.record_id,
+                    evidence_type="excerpt",
+                    description="Delete evidence",
+                    attachment_path="attachments/delete.txt",
+                    media_type="text/plain",
+                    size_bytes=12,
+                    created_by="tester",
+                )
+            )
+            database.connection.execute(
+                """
+                INSERT INTO entity_facts (
+                  fact_id, project_id, entity_type, entity_id, fact_text,
+                  source_origin, created_at, created_by
+                ) VALUES (?, ?, ?, ?, ?, 'test', 'now', 'tester')
+                """,
+                ("delete-fact", self.sandbox.project.project_id, "note", first.record_id, "delete fact"),
+            )
+            database.connection.execute(
+                """
+                INSERT INTO hypotheses (
+                  hypothesis_id, project_id, subject_entity_type, subject_entity_id, statement,
+                  status, confidence, source_origin, created_at, updated_at, created_by, updated_by
+                ) VALUES (?, ?, ?, ?, ?, 'open', 0.5, 'test', 'now', 'now', 'tester', 'tester')
+                """,
+                ("delete-hypothesis", self.sandbox.project.project_id, "note", first.record_id, "delete hypothesis"),
+            )
+            database.connection.execute(
+                """
+                INSERT INTO duplicate_candidates (
+                  candidate_id, project_id, entity_type, entity_id, duplicate_entity_id, reason, created_at
+                ) VALUES (?, ?, ?, ?, ?, 'same', 'now')
+                """,
+                ("delete-duplicate", self.sandbox.project.project_id, "note", first.record_id, second.record_id),
+            )
+            database.connection.commit()
+
+            with self.assertRaisesRegex(RecordValidationError, "only archived records can be permanently deleted"):
+                records.delete_record("note", "delete-me", deleted_by="tester")
+
+            records.archive_record("note", "delete-me", archived_by="tester")
+            deleted = records.delete_record("note", "delete-me", deleted_by="tester")
+            self.assertEqual(deleted.status, "archived")
+            self.assertIsNone(records.get_record("note", "delete-me", include_archived=True))
+            self.assertEqual(
+                SearchService(database).search(
+                    SearchQuery(project_id=self.sandbox.project.project_id, query_text="Purge", include_archived=True)
+                ),
+                [],
+            )
+            for table, column in [
+                ("entity_tags", "entity_id"),
+                ("evidence", "entity_id"),
+                ("relations", "from_entity_id"),
+                ("entity_facts", "entity_id"),
+                ("hypotheses", "subject_entity_id"),
+                ("entity_versions", "entity_id"),
+                ("audit_log", "entity_id"),
+                ("pending_changes", "entity_id"),
+            ]:
+                row = database.connection.execute(
+                    f"SELECT COUNT(*) AS count FROM {table} WHERE project_id = ? AND {column} = ?",
+                    (self.sandbox.project.project_id, first.record_id),
+                ).fetchone()
+                self.assertEqual(int(row["count"]), 0, table)
+            row = database.connection.execute(
+                "SELECT COUNT(*) AS count FROM attachments WHERE project_id = ?",
+                (self.sandbox.project.project_id,),
+            ).fetchone()
+            self.assertEqual(int(row["count"]), 0)
+
+    def test_search_repairs_archived_records_missing_search_documents(self) -> None:
+        with self.sandbox.open_database() as database:
+            records = RecordService(database, self.sandbox.project)
+            record = records.upsert_record(
+                RecordWrite(
+                    entity_type="note",
+                    payload={"slug": "old-archive", "title": "Old Archive", "body": "Recovered archived search text"},
+                )
+            )
+            records.archive_record("note", "old-archive", archived_by="tester")
+            database.connection.execute(
+                "DELETE FROM search_documents_fts WHERE document_id = ?",
+                (f"{self.sandbox.project.project_id}:note:{record.record_id}",),
+            )
+            database.connection.execute(
+                "DELETE FROM search_documents WHERE document_id = ?",
+                (f"{self.sandbox.project.project_id}:note:{record.record_id}",),
+            )
+            database.connection.commit()
+
+            default_results = SearchService(database).search(
+                SearchQuery(project_id=self.sandbox.project.project_id, query_text="Recovered")
+            )
+            archived_results = SearchService(database).search(
+                SearchQuery(project_id=self.sandbox.project.project_id, query_text="Recovered", include_archived=True)
+            )
+            self.assertEqual(default_results, [])
+            self.assertEqual(len(archived_results), 1)
+            self.assertEqual(archived_results[0]["status"], "archived")
 
     def test_record_service_validates_required_fields_and_slug_uniqueness(self) -> None:
         with self.sandbox.open_database() as database:
@@ -237,6 +372,9 @@ class GenericRecordTests(unittest.TestCase):
 
             archived = dispatcher.dispatch(ArchiveRecordCommand("note", "dispatch-note", archived_by="tester"))
             self.assertEqual(archived.data.status, "archived")
+            deleted = dispatcher.dispatch(DeleteRecordCommand("note", "dispatch-note", deleted_by="tester"))
+            self.assertEqual(deleted.data.status, "archived")
+            self.assertIsNone(dispatcher.dispatch(GetRecordQuery("note", "dispatch-note", include_archived=True)).data)
 
     def test_generic_workflow_queues_confirms_and_rejects_changes(self) -> None:
         with self.sandbox.open_database() as database:
@@ -271,6 +409,20 @@ class GenericRecordTests(unittest.TestCase):
 
             with self.assertRaisesRegex(GenericPendingValidationError, "pending change is not in pending status"):
                 workflow.confirm_change(rejected_pending.pending_change_id)
+
+            delete_source = RecordService(database, self.sandbox.project).upsert_record(
+                RecordWrite("note", {"slug": "queued-delete", "title": "Queued Delete"})
+            )
+            RecordService(database, self.sandbox.project).archive_record("note", delete_source.record_id, archived_by="tester")
+            delete_pending = workflow.create_pending_change(
+                "delete_record",
+                {"entity_type": "note", "record_id_or_slug": delete_source.record_id, "deleted_by": "tester"},
+                created_by="tester",
+            )
+            delete_confirmed = workflow.confirm_change(delete_pending.pending_change_id, confirmed_by="tester")
+            self.assertEqual(delete_confirmed["pending_change"].status, "confirmed")
+            self.assertEqual(delete_confirmed["applied"].status, "archived")
+            self.assertIsNone(RecordService(database, self.sandbox.project).get_record("note", delete_source.record_id, include_archived=True))
 
     def test_generic_pending_confirm_rolls_back_apply_when_audit_fails(self) -> None:
         with self.sandbox.open_database() as database:
